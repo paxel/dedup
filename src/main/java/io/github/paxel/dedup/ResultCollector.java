@@ -5,9 +5,13 @@
  */
 package io.github.paxel.dedup;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import paxel.lintstone.api.LintStoneActor;
 import paxel.lintstone.api.LintStoneMessageEventContext;
 
@@ -21,6 +25,9 @@ public class ResultCollector implements LintStoneActor {
     CountDownLatch countDownLatch = new CountDownLatch(1);
     private Integer countDown;
     private int readonly;
+    private int deletedSuccessfully;
+    private int deletionFailed;
+    private Throwable lastException;
     private int readwrite;
     private final DedupConfig config;
     private Consumer<FileCollector.FileMessage> statistics = f -> {
@@ -51,14 +58,21 @@ public class ResultCollector implements LintStoneActor {
         }
         if ("PRINT".equalsIgnoreCase(config.getAction())) {
             action = f -> {
-                if (f.isReadOnly()) {
+                if (!f.isReadOnly()) {
                     System.out.println(f.getPath());
                 }
             };
         } else if ("DELETE".equalsIgnoreCase(config.getAction())) {
             action = f -> {
-                if (f.isReadOnly()) {
-                    System.out.println("rm " + f.getPath());
+                if (!f.isReadOnly()) {
+                    try {
+                        if (Files.deleteIfExists(f.getPath())) {
+                            deletedSuccessfully++;
+                        }
+                    } catch (IOException ex) {
+                        lastException = ex;
+                        deletionFailed++;
+                    }
                 }
             };
         }
@@ -92,10 +106,16 @@ public class ResultCollector implements LintStoneActor {
             if (config.isRealVerbose() || config.isVerbose()) {
                 System.out.println(
                         "Finished processing:\n"
-                        + "   in * " + Duration.ofMillis(System.currentTimeMillis() - start).toSeconds() + " seconds\n"
-                        + " with * " + readonly + " read only duplicate files\n"
-                        + "  and * " + readwrite + " read/write duplicate files\n"
+                        + "         * " + readonly + " read only duplicate files\n"
+                        + "         * " + readwrite + " read/write duplicate files\n"
+                        + "      in * " + Duration.ofMillis(System.currentTimeMillis() - start).toSeconds() + " seconds\n"
+                        + " deleted * " + deletedSuccessfully + " deleted\n"
+                        + "  failed * " + deletionFailed + " failed\n"
                 );
+
+                if (lastException != null) {
+                    lastException.printStackTrace();
+                }
             }
             // we're done
             m.unregister();
