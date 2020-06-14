@@ -1,0 +1,10 @@
+io/github/paxel/dedup/FileCollector$DirMessage.class
+io/github/paxel/dedup/Node.class
+io/github/paxel/dedup/FileCollector$FileMessage.class
+io/github/paxel/dedup/FileCollector.class
+io/github/paxel/dedup/DedupConfig.class
+io/github/paxel/dedup/FileCollector$EndMessage.class
+io/github/paxel/dedup/ResultCollector.class
+io/github/paxel/dedup/FileHasher.class
+io/github/paxel/dedup/Dedup.class
+io/github/paxel/dedup/FileComparator.class
