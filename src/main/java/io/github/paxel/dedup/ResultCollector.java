@@ -108,7 +108,7 @@ public class ResultCollector implements LintStoneActor {
                         "Finished processing:\n"
                         + "         * " + readonly + " read only duplicate files\n"
                         + "         * " + readwrite + " read/write duplicate files\n"
-                        + "      in * " + Duration.ofMillis(System.currentTimeMillis() - start).toSeconds() + " seconds\n"
+                        + "      in * " + ((System.currentTimeMillis() - start)/1000) + " seconds\n"
                         + " deleted * " + deletedSuccessfully + " deleted\n"
                         + "  failed * " + deletionFailed + " failed\n"
                 );
