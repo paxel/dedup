@@ -1,3 +1,5 @@
 target/*
 /.idea/
 dedup.iml
+
+dependency-reduced-pom.xml

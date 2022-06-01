@@ -47,7 +47,7 @@ public class Dedup {
 
     private void run(DedupConfig cfg) throws InterruptedException {
 
-        LintStoneSystem system = LintStoneSystemFactory.create(Executors.newWorkStealingPool());
+        LintStoneSystem system = LintStoneSystemFactory.create(Executors.newCachedThreadPool());
         // all files are processed by this actor
         LintStoneActorAccess fileCollector = system.registerActor("fileCollector", () -> new FileCollector(cfg), Optional.empty());
 
