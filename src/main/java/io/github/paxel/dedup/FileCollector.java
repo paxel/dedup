@@ -12,6 +12,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+
+import io.github.paxel.dedup.comparison.StagedComparisonFactory;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.ToString;
+import paxel.lintstone.api.ActorSettings;
 import paxel.lintstone.api.LintStoneActor;
 import paxel.lintstone.api.LintStoneActorAccess;
 import paxel.lintstone.api.LintStoneMessageEventContext;
@@ -26,6 +32,7 @@ import paxel.lintstone.api.LintStoneMessageEventContext;
 public class FileCollector implements LintStoneActor {
 
     private static final EndMessage END = new EndMessage();
+    public static final StagedComparisonFactory STAGED_COMPARISON_FACTORY = new StagedComparisonFactory();
     private final Map<Long, LintStoneActorAccess> actors = new HashMap<>();
     private final DedupConfig cfg;
 
@@ -122,6 +129,7 @@ public class FileCollector implements LintStoneActor {
     static DirMessage dirMessage(Path root, boolean readOnly) {
         return new DirMessage(readOnly, root);
     }
+
     private int zero;
 
     @Override
@@ -158,7 +166,7 @@ public class FileCollector implements LintStoneActor {
         } else {
             fileData += length;
             final LintStoneActorAccess actor = actors.computeIfAbsent(length, k -> {
-                return m.registerActor("counter-" + length, () -> new FileComparator(length), Optional.empty());
+                return m.registerActor("FileComparator_" + length, () -> new FileComparator(length, STAGED_COMPARISON_FACTORY), Optional.empty(), ActorSettings.DEFAULT);
             });
             actor.send(fileMessage(f, readOnly));
         }
@@ -224,57 +232,31 @@ public class FileCollector implements LintStoneActor {
         }
     }
 
+    @ToString
     public static class EndMessage {
 
-        @Override
-        public String toString() {
-            return "EndMessage";
-        }
 
     }
 
+    @ToString
+    @Getter
+    @AllArgsConstructor
     public static class FileMessage {
 
         private final boolean readOnly;
         private final Path path;
 
-        public FileMessage(boolean readOnly, Path path) {
-            this.readOnly = readOnly;
-            this.path = path;
-        }
-
-        public boolean isReadOnly() {
-            return readOnly;
-        }
-
-        public Path getPath() {
-            return path;
-        }
 
     }
 
+    @ToString
+    @Getter
+    @AllArgsConstructor
     public static class DirMessage {
 
         private final boolean readOnly;
         private final Path path;
 
-        public DirMessage(boolean readOnly, Path path) {
-            this.readOnly = readOnly;
-            this.path = path;
-        }
-
-        public boolean isReadOnly() {
-            return readOnly;
-        }
-
-        public Path getPath() {
-            return path;
-        }
-
-        @Override
-        public String toString() {
-            return "Dir " + path + " " + (readOnly ? "ro" : "rw");
-        }
 
     }
 }

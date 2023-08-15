@@ -9,7 +9,17 @@
         <dependency>
             <groupId>io.github.paxel</groupId>
             <artifactId>lintstone</artifactId>
-            <version>0.9.9</version>
+            <version>0.10.2-SNAPSHOT</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.github.paxel</groupId>
+                    <artifactId>group-executor</artifactId>
+                </exclusion></exclusions>
+        </dependency>
+        <dependency>
+            <groupId>io.github.paxel</groupId>
+            <artifactId>group-executor</artifactId>
+            <version>0.10.7</version>
         </dependency>
         <dependency>
             <groupId>com.beust</groupId>
@@ -17,9 +27,34 @@
             <version>1.82</version>
         </dependency>
         <dependency>
-            <groupId>javax.xml.bind</groupId>
-            <artifactId>jaxb-api</artifactId>
-            <version>2.4.0-b180830.0359</version>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.28</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.hamcrest</groupId>
+            <artifactId>hamcrest</artifactId>
+            <version>2.2</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- https://mvnrepository.com/artifact/org.openjdk.jmh/jmh-core -->
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-core</artifactId>
+            <version>1.37</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.openjdk.jmh</groupId>
+            <artifactId>jmh-generator-annprocess</artifactId>
+            <version>1.37</version>
+            <scope>test</scope>
         </dependency>
 
     </dependencies>

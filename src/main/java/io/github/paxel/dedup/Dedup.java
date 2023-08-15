@@ -1,6 +1,7 @@
 package io.github.paxel.dedup;
 
 import com.beust.jcommander.JCommander;
+
 import java.io.IOException;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
@@ -11,10 +12,9 @@ import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import paxel.lintstone.api.LintStoneActorAccess;
-import paxel.lintstone.api.LintStoneSystem;
-import paxel.lintstone.api.LintStoneSystemFactory;
-import paxel.lintstone.api.UnregisteredRecipientException;
+
+import paxel.bulkexecutor.ErrorHandler;
+import paxel.lintstone.api.*;
 
 /**
  *
@@ -49,12 +49,23 @@ public class Dedup {
 
         LintStoneSystem system = LintStoneSystemFactory.create(Executors.newCachedThreadPool());
         // all files are processed by this actor
-        LintStoneActorAccess fileCollector = system.registerActor("fileCollector", () -> new FileCollector(cfg), Optional.empty());
+        ActorSettings fileCollectorSettings = ActorSettings.create()
+                .setMulti(false)
+                .setBlocking(true)
+                .setLimit(1000)
+                .setBatch(1)
+                .build();
+        LintStoneActorAccess fileCollector = system.registerActor("fileCollector", () -> new FileCollector(cfg), Optional.empty(), fileCollectorSettings);
 
         // This actor collects all the results of the system
         ResultCollector resultCollector = new ResultCollector(cfg);
-
-        system.registerActor(ResultCollector.NAME, () -> resultCollector, Optional.empty());
+        ActorSettings resultCollectorSettings = ActorSettings.create()
+                .setMulti(true)
+                .setBlocking(true)
+                .setLimit(1000000)
+                .setBatch(1000)
+                .build();
+        system.registerActor(ResultCollector.NAME, () -> resultCollector, Optional.empty(), resultCollectorSettings);
 
         // verify that no paths are overlapping, because that would lead to duplicates and worst case deleted safe files
         checkSafeUnsafeOverlapping(cfg);
