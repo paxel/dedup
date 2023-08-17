@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -56,6 +57,8 @@ public class FileCollector implements LintStoneActor {
     private int readOnlyDirs;
     private long fileData;
     private Throwable lastError;
+    private List<FileMessage> files = new ArrayList<>();
+    private final List<CompletableFuture<Void>> resultCollector = new ArrayList<>();
 
     public FileCollector(DedupConfig cfg) {
         this.cfg = cfg;
@@ -174,31 +177,31 @@ public class FileCollector implements LintStoneActor {
 
     private void end(EndMessage end, LintStoneMessageEventContext m) {
         printVerbose();
-        m.send(ResultCollector.NAME, actors.size());
-
         for (LintStoneActorAccess actor : this.actors.values()) {
-            actor.send(end);
+            CompletableFuture<Void> future = new CompletableFuture<>();
+            resultCollector.add(future);
+            actor.ask(end, f -> f.inCase(UniqueFiles.class, (files1, mec) -> addFiles(files1, mec, future)));
         }
-        // we're done
-        m.unregister();
+        CompletableFuture<Void> allAnswersReceived = CompletableFuture.allOf(resultCollector.toArray(new CompletableFuture[resultCollector.size()]));
+        allAnswersReceived.thenAccept(a -> {
+            m.reply(new UniqueFiles(files));
+            // we're done
+            m.unregister();
+        });
+    }
+
+    private void addFiles(UniqueFiles uniqueFiles, LintStoneMessageEventContext lintStoneMessageEventContext, CompletableFuture<Void> future) {
+        this.files.addAll(uniqueFiles.getResult());
+        if (cfg.isRealVerbose())
+            System.out.println("Unique Files: " + this.files.size());
+        future.complete(null);
     }
 
     private void printVerbose() {
         if (cfg.isRealVerbose()) {
             final int deniedCount = this.accessDenied != null ? accessDenied.size() : 0;
             final int errCount = this.errors != null ? errors.size() : 0;
-            System.out.println("File scan completed:\n"
-                    + "     Scanned * " + this.readOnlyDirs + " ro directories\n"
-                    + "             * " + this.readWrite + " rw directories\n"
-                    + "             * " + readOnlyFiles + " ro files\n"
-                    + "             * " + readWriteFiles + " rw files\n"
-                    + " Encountered * " + deniedCount + " access rejections\n"
-                    + "             * " + errCount + " errors\n"
-                    + "   Processed * " + this.fileData + " bytes\n"
-                    + "        With * " + this.zero + " times 0 byte files\n"
-                    + "         and * " + this.actors.size() + " different file sizes\n"
-                    + "          in * " + Duration.ofMillis(System.currentTimeMillis() - start).getSeconds() + " seconds\n"
-            );
+            System.out.println("File scan completed:\n" + "     Scanned * " + this.readOnlyDirs + " ro directories\n" + "             * " + this.readWrite + " rw directories\n" + "             * " + readOnlyFiles + " ro files\n" + "             * " + readWriteFiles + " rw files\n" + " Encountered * " + deniedCount + " access rejections\n" + "             * " + errCount + " errors\n" + "   Processed * " + this.fileData + " bytes\n" + "        With * " + this.zero + " times 0 byte files\n" + "         and * " + this.actors.size() + " different file sizes\n" + "          in * " + Duration.ofMillis(System.currentTimeMillis() - start).getSeconds() + " seconds\n");
             if (errCount > 0) {
                 System.out.println("Failed:\n");
                 for (Path error : errors) {
@@ -217,18 +220,7 @@ public class FileCollector implements LintStoneActor {
             }
 
         } else if (cfg.isVerbose()) {
-            System.out.println("File scan completed:\n"
-                    + "     Scanned * " + this.readOnlyDirs + " ro directories\n"
-                    + "             * " + this.readWrite + " rw directories\n"
-                    + "             * " + readOnlyFiles + " ro files\n"
-                    + "             * " + readWriteFiles + " rw files\n"
-                    + " Encountered * " + this.denied + " access rejections\n"
-                    + "             * " + this.failed + " errors\n"
-                    + "   Processed * " + this.fileData + " bytes\n"
-                    + "        With * " + this.zero + " times 0 byte files\n"
-                    + "         and * " + this.actors.size() + " different file sizes\n"
-                    + "          in * " + Duration.ofMillis(System.currentTimeMillis() - start).getSeconds() + " seconds\n"
-            );
+            System.out.println("File scan completed:\n" + "     Scanned * " + this.readOnlyDirs + " ro directories\n" + "             * " + this.readWrite + " rw directories\n" + "             * " + readOnlyFiles + " ro files\n" + "             * " + readWriteFiles + " rw files\n" + " Encountered * " + this.denied + " access rejections\n" + "             * " + this.failed + " errors\n" + "   Processed * " + this.fileData + " bytes\n" + "        With * " + this.zero + " times 0 byte files\n" + "         and * " + this.actors.size() + " different file sizes\n" + "          in * " + Duration.ofMillis(System.currentTimeMillis() - start).getSeconds() + " seconds\n");
         }
     }
 

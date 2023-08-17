@@ -46,27 +46,40 @@ public class FileComparator implements LintStoneActor {
             } else {
                 try {
                     // if the new file is a duplicate the add will call handleDuplicate
-                    Result<FileMessage, ComparisonError> duplicate = root.add(f);
-                    if (duplicate.hasFailed())
-                        if (duplicate != null) {
-                            m.send(ResultCollector.NAME, duplicate);
+                    Result<Duplicate, ComparisonError> duplicate = root.add(f);
+                    if (duplicate.isSuccess()) {
+                        if (duplicate.getValue() != null) {
+                            System.out.println("found duplicate "
+                                    + duplicate.getValue().getOriginal().getPath()
+                                    + " = "
+                                    + duplicate.getValue().getDuplicate().getPath());
+                            m.send(ResultCollector.NAME, duplicate.getValue());
                         }
+                    } else
+                        System.err.println(duplicate.getError());
 
                 } catch (IOException ex) {
                     // todo
                 }
             }
 
-        } catch (Exception e) {
+        } catch (
+                Exception e) {
             e.printStackTrace();
         }
+
     }
 
     private void end(FileCollector.EndMessage end, LintStoneMessageEventContext m) {
         // we're done
-        m.send(ResultCollector.NAME, end);
+        m.reply(uniqueFiles());
         // we're done
         m.unregister();
+    }
+
+    private UniqueFiles uniqueFiles() {
+        UniqueFiles uniqueFiles = new UniqueFiles(root.getFiles());
+        return uniqueFiles;
     }
 
 }

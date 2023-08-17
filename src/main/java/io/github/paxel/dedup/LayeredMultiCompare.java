@@ -9,16 +9,11 @@ import lombok.NonNull;
 import paxel.lib.Result;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
-/**
- * Files are compared on different layers depending on the differences.
- * Simple Diffs are in lower layers >0
- * The file hasher defines the number of layers.
- * On Max layer only one file is stored and the ones deemed equal are
- */
+
 class LayeredMultiCompare {
 
     private final int layer;
@@ -33,7 +28,7 @@ class LayeredMultiCompare {
         this.stagedComparison = stagedComparison;
     }
 
-    @NonNull Result<FileMessage, ComparisonError> add(FileMessage newFile) throws IOException {
+    @NonNull Result<Duplicate, ComparisonError> add(FileMessage newFile) throws IOException {
         /**
          * another file with the same size needs to be compared
          */
@@ -83,8 +78,17 @@ class LayeredMultiCompare {
                 newFile = file;
                 file = tmp;
             }
+            return Result.ok(new Duplicate(file, newFile));
         }
-        return Result.ok(newFile);
     }
 
+    public List<FileMessage> getFiles() {
+        if (file != null)
+            return Collections.singletonList(file);
+        else
+            return children.entrySet().stream()
+                    .map(Map.Entry::getValue)
+                    .flatMap(f -> f.getFiles().stream())
+                    .collect(Collectors.toList());
+    }
 }

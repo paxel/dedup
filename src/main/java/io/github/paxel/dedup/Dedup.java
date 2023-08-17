@@ -7,9 +7,13 @@ import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -20,6 +24,8 @@ import paxel.lintstone.api.*;
  *
  */
 public class Dedup {
+
+    private final Instant start = Instant.now();
 
     public static void main(String[] args) {
 
@@ -65,7 +71,7 @@ public class Dedup {
                 .setLimit(1000000)
                 .setBatch(1000)
                 .build();
-        system.registerActor(ResultCollector.NAME, () -> resultCollector, Optional.empty(), resultCollectorSettings);
+        LintStoneActorAccess lintStoneActorAccess = system.registerActor(ResultCollector.NAME, () -> resultCollector, Optional.empty(), resultCollectorSettings);
 
         // verify that no paths are overlapping, because that would lead to duplicates and worst case deleted safe files
         checkSafeUnsafeOverlapping(cfg);
@@ -76,16 +82,47 @@ public class Dedup {
         // put all unsafe files in
         processParameter(false, fileCollector, cfg.getUnsafe());
 
-        // declare input finished
-        fileCollector.send(FileCollector.endMessage());
+        final CountDownLatch uniqueCollected = new CountDownLatch(1);
+        AtomicReference<UniqueFiles> files = new AtomicReference<>();
+        // request unique Files from Collector
+        fileCollector.ask(FileCollector.endMessage(), f -> f.inCase(UniqueFiles.class, (uniqueFiles, eventContext) -> {
+            files.set(uniqueFiles);
+            uniqueCollected.countDown();
+        }));
 
+        uniqueCollected.await();
+        final CountDownLatch statsCollected = new CountDownLatch(1);
+        lintStoneActorAccess.ask(FileCollector.endMessage(), f -> f.inCase(Stats.class, (stats, mec) -> {
+            printStats(stats, cfg);
+            statsCollected.countDown();
+        }));
+
+        statsCollected.await();
         // wait for the result
-        resultCollector.awaitResult();
         system.shutDownAndWait();
         if (cfg.isVerbose() || cfg.isRealVerbose()) {
             System.out.println("Finished");
         }
 
+    }
+
+    private void printStats(Stats stats, DedupConfig config) {
+
+        if (config.isRealVerbose() || config.isVerbose()) {
+            System.out.println(
+                    "Finished processing:\n"
+                            + "         * " + stats.getReadonly() + " read only duplicate files\n"
+                            + "         * " + stats.getReadwrite() + " read/write duplicate files\n"
+                            + "      in * " + Duration.between(start, Instant.now()) + "\n"
+                            + " deleted * " + stats.getDeletedSuccessfully() + " deleted\n"
+                            + "  failed * " + stats.getDeletionFailed() + " failed\n"
+            );
+
+            if (stats.getLastException() != null) {
+                stats.getLastException().printStackTrace();
+            }
+
+        }
     }
 
     private void checkOverlapping(final String type, List<String> paths) throws UnregisteredRecipientException {
@@ -117,7 +154,8 @@ public class Dedup {
         }
     }
 
-    private void processParameter(boolean readOnly, LintStoneActorAccess fileCollector, List<String> list) throws UnregisteredRecipientException {
+    private void processParameter(boolean readOnly, LintStoneActorAccess fileCollector, List<String> list) throws
+            UnregisteredRecipientException {
         for (String string : list) {
             Path root = Paths.get(string);
             if (Files.isDirectory(root)) {
