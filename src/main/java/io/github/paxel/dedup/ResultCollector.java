@@ -10,6 +10,8 @@ import paxel.lintstone.api.LintStoneMessageEventContext;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.function.Consumer;
 
 /**
@@ -28,7 +30,7 @@ public class ResultCollector implements LintStoneActor {
     private Consumer<FileCollector.FileMessage> action = f -> {
     };
 
-    public ResultCollector(DedupConfig config) {
+    public ResultCollector(DedupConfig config) throws IOException {
         if (config.isRealVerbose()) {
             statistics = f -> {
                 System.out.println("Duplicate found: " + f.getPath() + " (" + (f.isReadOnly() ? "RO)" : "RW)"));
@@ -47,20 +49,42 @@ public class ResultCollector implements LintStoneActor {
                 }
             };
         }
-        if ("PRINT".equalsIgnoreCase(config.getAction())) {
+        if (config.getAction() == Action.PRINT) {
             action = f -> {
-                if (!f.isReadOnly()) {
-                    System.out.println(f.getPath());
-                }
+                String prefix = f.isReadOnly() ? "[RO]" : "[RW]";
+                System.out.println(prefix + f.getPath());
             };
-        } else if ("DELETE".equalsIgnoreCase(config.getAction())) {
+        }
+        if (config.getAction() == Action.MOVE) {
+            if (config.getTargetDir() != null) {
+                Path path = Paths.get(config.getTargetDir());
+                if (!Files.exists(path)) {
+                    Files.createDirectories(path);
+                }
+                action = f -> {
+                    if (!f.isReadOnly()) {
+                        try {
+                            Files.move(f.getPath(), path.resolve(f.getPath().getFileName()));
+                            System.out.println("Moved " + f.getPath());
+                        } catch (IOException e) {
+                            System.err.println("Could not move " + f.getPath() + " to " + path);
+                            e.printStackTrace();
+                        }
+                    }
+                };
+            }
+        } else if (config.getAction() == Action.DELETE) {
             action = f -> {
                 if (!f.isReadOnly()) {
                     try {
                         if (Files.deleteIfExists(f.getPath())) {
+                            System.out.println("deleted " + f.getPath());
                             deletedSuccessfully++;
+                        } else {
+                            System.out.println("not deleted " + f.getPath());
                         }
                     } catch (IOException ex) {
+                        System.out.println("failed to deleted " + f.getPath());
                         lastException = ex;
                         deletionFailed++;
                     }
@@ -74,8 +98,8 @@ public class ResultCollector implements LintStoneActor {
         mec.inCase(FileCollector.FileMessage.class, this::addFile)
                 .inCase(FileCollector.EndMessage.class, this::end)
                 .otherwise((a, b) -> {
-            System.out.println("" + a);
-        });
+                    System.out.println("Result Collector: unknown message: " + a);
+                });
     }
 
 

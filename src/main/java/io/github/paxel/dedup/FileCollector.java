@@ -18,10 +18,7 @@ import io.github.paxel.dedup.comparison.StagedComparisonFactory;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.ToString;
-import paxel.lintstone.api.ActorSettings;
-import paxel.lintstone.api.LintStoneActor;
-import paxel.lintstone.api.LintStoneActorAccess;
-import paxel.lintstone.api.LintStoneMessageEventContext;
+import paxel.lintstone.api.*;
 
 /**
  * This actor receives all files and directories and processes them by sending
@@ -59,6 +56,7 @@ public class FileCollector implements LintStoneActor {
     private Throwable lastError;
     private List<FileMessage> files = new ArrayList<>();
     private final List<CompletableFuture<Void>> resultCollector = new ArrayList<>();
+    private int i;
 
     public FileCollector(DedupConfig cfg) {
         this.cfg = cfg;
@@ -178,23 +176,28 @@ public class FileCollector implements LintStoneActor {
     private void end(EndMessage end, LintStoneMessageEventContext m) {
         printVerbose();
         for (LintStoneActorAccess actor : this.actors.values()) {
-            CompletableFuture<Void> future = new CompletableFuture<>();
-            resultCollector.add(future);
-            actor.ask(end, f -> f.inCase(UniqueFiles.class, (files1, mec) -> addFiles(files1, mec, future)));
+            // broken?
+            resultCollector.add(actor.<UniqueFiles>ask(end)
+                    .thenApply(this::addFiles));
         }
         CompletableFuture<Void> allAnswersReceived = CompletableFuture.allOf(resultCollector.toArray(new CompletableFuture[resultCollector.size()]));
         allAnswersReceived.thenAccept(a -> {
-            m.reply(new UniqueFiles(files));
-            // we're done
-            m.unregister();
+            try {
+                System.out.println("reply result");
+                m.reply(new UniqueFiles(files));
+                // we're done. BUG: if we unregister here, the actor
+                m.unregister();
+                System.out.println("unregistered");
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         });
     }
 
-    private void addFiles(UniqueFiles uniqueFiles, LintStoneMessageEventContext lintStoneMessageEventContext, CompletableFuture<Void> future) {
+    private Void addFiles(UniqueFiles uniqueFiles) {
         this.files.addAll(uniqueFiles.getResult());
-        if (cfg.isRealVerbose())
-            System.out.println("Unique Files: " + this.files.size());
-        future.complete(null);
+//        System.out.println(++i);
+        return null;
     }
 
     private void printVerbose() {

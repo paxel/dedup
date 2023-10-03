@@ -9,7 +9,7 @@
         <dependency>
             <groupId>io.github.paxel</groupId>
             <artifactId>lintstone</artifactId>
-            <version>0.10.2-SNAPSHOT</version>
+            <version>0.11.1-SNAPSHOT</version>
             <exclusions>
                 <exclusion>
                     <groupId>io.github.paxel</groupId>
@@ -19,7 +19,7 @@
         <dependency>
             <groupId>io.github.paxel</groupId>
             <artifactId>group-executor</artifactId>
-            <version>0.10.7</version>
+            <version>0.11.3-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.beust</groupId>

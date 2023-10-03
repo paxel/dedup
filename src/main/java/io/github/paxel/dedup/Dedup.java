@@ -11,7 +11,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
@@ -46,19 +48,17 @@ public class Dedup {
         }
         try {
             dedup.run(cfg);
-        } catch (InterruptedException ex) {
+        } catch (InterruptedException | ExecutionException | IOException ex) {
             Logger.getLogger(Dedup.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
 
-    private void run(DedupConfig cfg) throws InterruptedException {
+    private void run(DedupConfig cfg) throws InterruptedException, ExecutionException, IOException {
 
-        LintStoneSystem system = LintStoneSystemFactory.create(Executors.newCachedThreadPool());
+        int parallelism = Math.max(Runtime.getRuntime().availableProcessors() - 1, 1);
+        LintStoneSystem system = LintStoneSystemFactory.create(Executors.newWorkStealingPool(parallelism));
         // all files are processed by this actor
         ActorSettings fileCollectorSettings = ActorSettings.create()
-                .setMulti(false)
-                .setBlocking(true)
-                .setLimit(1000)
                 .setBatch(1)
                 .build();
         LintStoneActorAccess fileCollector = system.registerActor("fileCollector", () -> new FileCollector(cfg), Optional.empty(), fileCollectorSettings);
@@ -66,12 +66,9 @@ public class Dedup {
         // This actor collects all the results of the system
         ResultCollector resultCollector = new ResultCollector(cfg);
         ActorSettings resultCollectorSettings = ActorSettings.create()
-                .setMulti(true)
-                .setBlocking(true)
-                .setLimit(1000000)
                 .setBatch(1000)
                 .build();
-        LintStoneActorAccess lintStoneActorAccess = system.registerActor(ResultCollector.NAME, () -> resultCollector, Optional.empty(), resultCollectorSettings);
+        LintStoneActorAccess statsActor = system.registerActor(ResultCollector.NAME, () -> resultCollector, Optional.empty(), resultCollectorSettings);
 
         // verify that no paths are overlapping, because that would lead to duplicates and worst case deleted safe files
         checkSafeUnsafeOverlapping(cfg);
@@ -81,29 +78,18 @@ public class Dedup {
         processParameter(true, fileCollector, cfg.getSafe());
         // put all unsafe files in
         processParameter(false, fileCollector, cfg.getUnsafe());
-
-        final CountDownLatch uniqueCollected = new CountDownLatch(1);
-        AtomicReference<UniqueFiles> files = new AtomicReference<>();
         // request unique Files from Collector
-        fileCollector.ask(FileCollector.endMessage(), f -> f.inCase(UniqueFiles.class, (uniqueFiles, eventContext) -> {
-            files.set(uniqueFiles);
-            uniqueCollected.countDown();
-        }));
+        System.out.println("Asking");
+        CompletableFuture<UniqueFiles> ask = fileCollector.ask(FileCollector.endMessage());
+        System.out.println("Asked");
 
-        uniqueCollected.await();
-        final CountDownLatch statsCollected = new CountDownLatch(1);
-        lintStoneActorAccess.ask(FileCollector.endMessage(), f -> f.inCase(Stats.class, (stats, mec) -> {
-            printStats(stats, cfg);
-            statsCollected.countDown();
-        }));
+        UniqueFiles files = ask.get();
+        System.out.println("Response");
 
-        statsCollected.await();
+        CompletableFuture<Stats> stats = statsActor.ask(FileCollector.endMessage());
+        printStats(stats.get(), cfg);
         // wait for the result
         system.shutDownAndWait();
-        if (cfg.isVerbose() || cfg.isRealVerbose()) {
-            System.out.println("Finished");
-        }
-
     }
 
     private void printStats(Stats stats, DedupConfig config) {

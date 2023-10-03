@@ -11,10 +11,13 @@ import lombok.NonNull;
 import paxel.lib.Result;
 import paxel.lintstone.api.LintStoneActor;
 import paxel.lintstone.api.LintStoneMessageEventContext;
+import paxel.lintstone.api.NoSenderException;
+import paxel.lintstone.api.UnregisteredRecipientException;
 
 /**
  *
  */
+
 public class FileComparator implements LintStoneActor {
 
     private final long length;
@@ -36,7 +39,8 @@ public class FileComparator implements LintStoneActor {
     @Override
     public void newMessageEvent(LintStoneMessageEventContext mec) {
         mec.inCase(FileCollector.FileMessage.class, this::addFile)
-                .inCase(FileCollector.EndMessage.class, this::end);
+                .inCase(FileCollector.EndMessage.class, this::end)
+                .otherwise((o, m) -> System.out.println("FileComparator unknown message: " + o.getClass() + " " + o));
     }
 
     private void addFile(FileCollector.FileMessage f, LintStoneMessageEventContext m) {
@@ -49,11 +53,7 @@ public class FileComparator implements LintStoneActor {
                     Result<Duplicate, ComparisonError> duplicate = root.add(f);
                     if (duplicate.isSuccess()) {
                         if (duplicate.getValue() != null) {
-                            System.out.println("found duplicate "
-                                    + duplicate.getValue().getOriginal().getPath()
-                                    + " = "
-                                    + duplicate.getValue().getDuplicate().getPath());
-                            m.send(ResultCollector.NAME, duplicate.getValue());
+                            m.send(ResultCollector.NAME, duplicate.getValue().getDuplicate());
                         }
                     } else
                         System.err.println(duplicate.getError());
@@ -71,15 +71,20 @@ public class FileComparator implements LintStoneActor {
     }
 
     private void end(FileCollector.EndMessage end, LintStoneMessageEventContext m) {
-        // we're done
-        m.reply(uniqueFiles());
-        // we're done
-        m.unregister();
+        try {
+            // we're done
+            UniqueFiles result = uniqueFiles();
+            m.reply(result);
+
+            // we're done
+            m.unregister();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private UniqueFiles uniqueFiles() {
-        UniqueFiles uniqueFiles = new UniqueFiles(root.getFiles());
-        return uniqueFiles;
+        return new UniqueFiles(root.getFiles());
     }
 
 }
