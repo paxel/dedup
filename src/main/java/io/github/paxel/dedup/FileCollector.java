@@ -1,27 +1,20 @@
 package io.github.paxel.dedup;
 
+import io.github.paxel.dedup.comparison.StagedComparisonFactory;
+import paxel.lintstone.api.ActorSettings;
+import paxel.lintstone.api.LintStoneActor;
+import paxel.lintstone.api.LintStoneActorAccessor;
+import paxel.lintstone.api.LintStoneMessageEventContext;
+
 import java.io.IOException;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
-
-import io.github.paxel.dedup.comparison.StagedComparisonFactory;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.ToString;
-import paxel.lintstone.api.ActorSettings;
-import paxel.lintstone.api.LintStoneActor;
-import paxel.lintstone.api.LintStoneActorAccess;
-import paxel.lintstone.api.LintStoneMessageEventContext;
 
 /**
  * This actor receives all files and directories and processes them by sending
@@ -34,7 +27,7 @@ public class FileCollector implements LintStoneActor {
 
     private static final EndMessage END = new EndMessage();
     public static final StagedComparisonFactory STAGED_COMPARISON_FACTORY = new StagedComparisonFactory();
-    private final Map<Long, LintStoneActorAccess> actors = new HashMap<>();
+    private final Map<Long, LintStoneActorAccessor> actors = new HashMap<>();
     private final DedupConfig cfg;
 
     List<Path> accessDenied;
@@ -57,8 +50,9 @@ public class FileCollector implements LintStoneActor {
     private int readOnlyDirs;
     private long fileData;
     private Throwable lastError;
-    private List<FileMessage> files = new ArrayList<>();
+    private final List<FileMessage> files = new ArrayList<>();
     private final List<CompletableFuture<Void>> resultCollector = new ArrayList<>();
+    private int i;
 
     public FileCollector(DedupConfig cfg) {
         this.cfg = cfg;
@@ -68,14 +62,14 @@ public class FileCollector implements LintStoneActor {
                 if (accessDenied == null) {
                     accessDenied = new ArrayList<>();
                 }
-                accessDenied.add(d.getPath());
+                accessDenied.add(d.path());
             };
             errorConsumer = (d, t) -> {
                 // store all failed dirs
                 if (errors == null) {
                     errors = new ArrayList<>();
                 }
-                errors.add(d.getPath());
+                errors.add(d.path());
                 this.lastError = t;
             };
             fileConsumer = (f, b) -> {
@@ -96,12 +90,8 @@ public class FileCollector implements LintStoneActor {
 
         } else if (cfg.isVerbose()) {
             // count all denied dirs
-            deniedConsumer = (d, t) -> {
-                denied++;
-            };
-            errorConsumer = (d, t) -> {
-                failed++;
-            };
+            deniedConsumer = (d, t) -> denied++;
+            errorConsumer = (d, t) -> failed++;
             fileConsumer = (f, b) -> {
                 if (b) {
                     readOnlyFiles++;
@@ -151,9 +141,7 @@ public class FileCollector implements LintStoneActor {
     private void scanDir(DirMessage dir, LintStoneMessageEventContext m) {
         try {
             dirConsumer.accept(dir);
-            Files.list(dir.getPath()).filter(Files::isRegularFile).forEach(f -> {
-                addFile(f, dir.readOnly, m);
-            });
+            Files.list(dir.path()).filter(Files::isRegularFile).forEach(f -> addFile(f, dir.readOnly, m));
         } catch (AccessDeniedException ex) {
             deniedConsumer.accept(dir, ex);
         } catch (IOException ex) {
@@ -168,33 +156,36 @@ public class FileCollector implements LintStoneActor {
             this.zero++;
         } else {
             fileData += length;
-            final LintStoneActorAccess actor = actors.computeIfAbsent(length, k -> {
-                return m.registerActor("FileComparator_" + length, () -> new FileComparator(length, STAGED_COMPARISON_FACTORY), Optional.empty(), ActorSettings.DEFAULT);
-            });
-            actor.send(fileMessage(f, readOnly));
+            final LintStoneActorAccessor actor = actors.computeIfAbsent(length, k -> m.registerActor("FileComparator_" + length, () -> new FileComparator(length),  ActorSettings.DEFAULT));
+            actor.tell(fileMessage(f, readOnly));
         }
     }
 
     private void end(EndMessage end, LintStoneMessageEventContext m) {
         printVerbose();
-        for (LintStoneActorAccess actor : this.actors.values()) {
-            CompletableFuture<Void> future = new CompletableFuture<>();
-            resultCollector.add(future);
-            actor.ask(end, f -> f.inCase(UniqueFiles.class, (files1, mec) -> addFiles(files1, mec, future)));
+        for (LintStoneActorAccessor actor : this.actors.values()) {
+            // broken?
+            resultCollector.add(actor.<UniqueFiles>ask(end)
+                    .thenApply(this::addFiles));
         }
-        CompletableFuture<Void> allAnswersReceived = CompletableFuture.allOf(resultCollector.toArray(new CompletableFuture[resultCollector.size()]));
+        CompletableFuture<Void> allAnswersReceived = CompletableFuture.allOf(resultCollector.toArray(new CompletableFuture[0]));
         allAnswersReceived.thenAccept(a -> {
-            m.reply(new UniqueFiles(files));
-            // we're done
-            m.unregister();
+            try {
+                System.out.println("reply result");
+                m.reply(new UniqueFiles(files));
+                // we're done. BUG: if we unregister here, the actor
+                m.unregister();
+                System.out.println("unregistered");
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         });
     }
 
-    private void addFiles(UniqueFiles uniqueFiles, LintStoneMessageEventContext lintStoneMessageEventContext, CompletableFuture<Void> future) {
-        this.files.addAll(uniqueFiles.getResult());
-        if (cfg.isRealVerbose())
-            System.out.println("Unique Files: " + this.files.size());
-        future.complete(null);
+    private Void addFiles(UniqueFiles uniqueFiles) {
+        this.files.addAll(uniqueFiles.result());
+//        System.out.println(++i);
+        return null;
     }
 
     private void printVerbose() {
@@ -224,31 +215,12 @@ public class FileCollector implements LintStoneActor {
         }
     }
 
-    @ToString
-    public static class EndMessage {
-
-
+    public record EndMessage() {
     }
 
-    @ToString
-    @Getter
-    @AllArgsConstructor
-    public static class FileMessage {
-
-        private final boolean readOnly;
-        private final Path path;
-
-
+    public record FileMessage(boolean readOnly, Path path) {
     }
 
-    @ToString
-    @Getter
-    @AllArgsConstructor
-    public static class DirMessage {
-
-        private final boolean readOnly;
-        private final Path path;
-
-
+    public record DirMessage(boolean readOnly, Path path) {
     }
 }

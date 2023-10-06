@@ -1,12 +1,9 @@
 package io.github.paxel.dedup.comparison;
 
-import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import paxel.lib.Result;
 
 import java.nio.file.Path;
 
-@RequiredArgsConstructor
 public class RawByteComparisonStage implements Stage {
 
     private final long offset;
@@ -15,8 +12,14 @@ public class RawByteComparisonStage implements Stage {
 
     private final Hasher hasher = new Hasher();
 
+    public RawByteComparisonStage(long offset, long size, String algorithm) {
+        this.offset = offset;
+        this.size = size;
+        this.algorithm = algorithm;
+    }
+
     @Override
-    public @NonNull Result<Comparison, ComparisonError> create(@NonNull Path p) {
+    public Result<Comparison, ComparisonError> create(Path p) {
         Result<String, Hasher.HashError> calc = hasher.calc(p, offset, size, algorithm);
         return calc.map(Comparison::new, ComparisonError::hashFailed);
     }

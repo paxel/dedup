@@ -1,13 +1,7 @@
 package io.github.paxel.dedup;
 
-import io.github.paxel.dedup.FileCollector.FileMessage;
-
-import java.io.IOException;
-
 import io.github.paxel.dedup.comparison.ComparisonError;
 import io.github.paxel.dedup.comparison.StagedComparison;
-import io.github.paxel.dedup.comparison.StagedComparisonFactory;
-import lombok.NonNull;
 import paxel.lib.Result;
 import paxel.lintstone.api.LintStoneActor;
 import paxel.lintstone.api.LintStoneMessageEventContext;
@@ -15,16 +9,15 @@ import paxel.lintstone.api.LintStoneMessageEventContext;
 /**
  *
  */
+
 public class FileComparator implements LintStoneActor {
 
-    private final long length;
-    private @NonNull StagedComparison stagedComparison;
+    private final StagedComparison stagedComparison;
     private LayeredMultiCompare root = null;
     int lvl = 0;
 
-    FileComparator(long length, StagedComparisonFactory stagedComparisonFactory) {
-        this.length = length;
-        this.stagedComparison = stagedComparisonFactory.createRaw(length);
+    FileComparator(long length) {
+        this.stagedComparison = FileCollector.STAGED_COMPARISON_FACTORY.createRaw(length);
     }
 
     /**
@@ -35,8 +28,7 @@ public class FileComparator implements LintStoneActor {
      */
     @Override
     public void newMessageEvent(LintStoneMessageEventContext mec) {
-        mec.inCase(FileCollector.FileMessage.class, this::addFile)
-                .inCase(FileCollector.EndMessage.class, this::end);
+        mec.inCase(FileCollector.FileMessage.class, this::addFile).inCase(FileCollector.EndMessage.class, this::end).otherwise((o, m) -> System.out.println("FileComparator unknown message: " + o.getClass() + " " + o));
     }
 
     private void addFile(FileCollector.FileMessage f, LintStoneMessageEventContext m) {
@@ -44,23 +36,16 @@ public class FileComparator implements LintStoneActor {
             if (root == null) {
                 root = new LayeredMultiCompare(0, f, stagedComparison);
             } else {
-                try {
-                    // if the new file is a duplicate the add will call handleDuplicate
-                    Result<Duplicate, ComparisonError> duplicate = root.add(f);
-                    if (duplicate.isSuccess()) {
-                        if (duplicate.getValue() != null) {
-                            System.out.println("found duplicate "
-                                    + duplicate.getValue().getOriginal().getPath()
-                                    + " = "
-                                    + duplicate.getValue().getDuplicate().getPath());
-                            m.send(ResultCollector.NAME, duplicate.getValue());
-                        }
-                    } else
-                        System.err.println(duplicate.getError());
+                // if the new file is a duplicate the add will call handleDuplicate
+                Result<Duplicate, ComparisonError> duplicate = root.add(f);
+                if (duplicate.isSuccess()) {
+                    if (duplicate.value() != null) {
+                        m.tell(ResultCollector.NAME, duplicate.value().duplicate());
+                    }
+                } else
+                    System.err.println(duplicate.error());
 
-                } catch (IOException ex) {
-                    // todo
-                }
+
             }
 
         } catch (
@@ -71,15 +56,20 @@ public class FileComparator implements LintStoneActor {
     }
 
     private void end(FileCollector.EndMessage end, LintStoneMessageEventContext m) {
-        // we're done
-        m.reply(uniqueFiles());
-        // we're done
-        m.unregister();
+        try {
+            // we're done
+            UniqueFiles result = uniqueFiles();
+            m.reply(result);
+
+            // we're done
+            m.unregister();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private UniqueFiles uniqueFiles() {
-        UniqueFiles uniqueFiles = new UniqueFiles(root.getFiles());
-        return uniqueFiles;
+        return new UniqueFiles(root.getFiles());
     }
 
 }

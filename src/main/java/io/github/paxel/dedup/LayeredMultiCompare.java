@@ -5,11 +5,13 @@ import io.github.paxel.dedup.comparison.Comparison;
 import io.github.paxel.dedup.comparison.ComparisonError;
 import io.github.paxel.dedup.comparison.Stage;
 import io.github.paxel.dedup.comparison.StagedComparison;
-import lombok.NonNull;
 import paxel.lib.Result;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -28,7 +30,7 @@ class LayeredMultiCompare {
         this.stagedComparison = stagedComparison;
     }
 
-    @NonNull Result<Duplicate, ComparisonError> add(FileMessage newFile) throws IOException {
+    Result<Duplicate, ComparisonError> add(FileMessage newFile) {
         /**
          * another file with the same size needs to be compared
          */
@@ -38,21 +40,21 @@ class LayeredMultiCompare {
             if (children == null) {
                 // the second file with the same size has arrived
                 // we need to prepare the comparison and do it for the first file now
-                @NonNull Result<Comparison, ComparisonError> result = stage.create(file.getPath());
+                Result<Comparison, ComparisonError> result = stage.create(file.path());
                 if (result.hasFailed()) {
                     return result.mapError(Function.identity());
                 }
                 children = new HashMap<>();
-                children.put(result.getValue(), new LayeredMultiCompare(layer + 1, file, stagedComparison));
+                children.put(result.value(), new LayeredMultiCompare(layer + 1, file, stagedComparison));
                 file = null;
 
             }
             // calculate the hash for the new file and check if we have a match already
-            @NonNull Result<Comparison, ComparisonError> result = stage.create(newFile.getPath());
+            Result<Comparison, ComparisonError> result = stage.create(newFile.path());
             if (result.hasFailed()) {
                 return result.mapError(Function.identity());
             }
-            Comparison comparison = result.getValue();
+            Comparison comparison = result.value();
             LayeredMultiCompare match = children.get(comparison);
             if (match != null) {
                 // next level comparison
@@ -65,14 +67,14 @@ class LayeredMultiCompare {
 
         } else {
             // comparison finished. they are equal
-            if (!file.isReadOnly() && newFile.isReadOnly()) {
+            if (!file.readOnly() && newFile.readOnly()) {
                 //swap files, to keep the ro in the node
                 FileMessage tmp = newFile;
                 newFile = file;
                 file = tmp;
-            } else if (file.isReadOnly() && !newFile.isReadOnly()) {
+            } else if (file.readOnly() && !newFile.readOnly()) {
                 // not allowed to swap
-            } else if (file.getPath().toString().toLowerCase().contains("copy") && newFile.getPath().toString().toLowerCase().contains("copy")) {
+            } else if (file.path().toString().toLowerCase().contains("copy") && newFile.path().toString().toLowerCase().contains("copy")) {
                 //swap files, to mark the copy as duplicate
                 FileMessage tmp = newFile;
                 newFile = file;
@@ -86,8 +88,7 @@ class LayeredMultiCompare {
         if (file != null)
             return Collections.singletonList(file);
         else
-            return children.entrySet().stream()
-                    .map(Map.Entry::getValue)
+            return children.values().stream()
                     .flatMap(f -> f.getFiles().stream())
                     .collect(Collectors.toList());
     }

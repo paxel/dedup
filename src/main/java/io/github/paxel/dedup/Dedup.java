@@ -1,6 +1,7 @@
 package io.github.paxel.dedup;
 
 import com.beust.jcommander.JCommander;
+import paxel.lintstone.api.*;
 
 import java.io.IOException;
 import java.nio.file.AccessDeniedException;
@@ -10,15 +11,10 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import paxel.bulkexecutor.ErrorHandler;
-import paxel.lintstone.api.*;
 
 /**
  *
@@ -46,32 +42,25 @@ public class Dedup {
         }
         try {
             dedup.run(cfg);
-        } catch (InterruptedException ex) {
+        } catch (InterruptedException | ExecutionException | IOException ex) {
             Logger.getLogger(Dedup.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
 
-    private void run(DedupConfig cfg) throws InterruptedException {
+    private void run(DedupConfig cfg) throws InterruptedException, ExecutionException, IOException {
 
-        LintStoneSystem system = LintStoneSystemFactory.create(Executors.newCachedThreadPool());
+        int parallelism = Math.max(Runtime.getRuntime().availableProcessors() - 1, 1);
+        LintStoneSystem system = LintStoneSystemFactory.create();
         // all files are processed by this actor
         ActorSettings fileCollectorSettings = ActorSettings.create()
-                .setMulti(false)
-                .setBlocking(true)
-                .setLimit(1000)
-                .setBatch(1)
                 .build();
-        LintStoneActorAccess fileCollector = system.registerActor("fileCollector", () -> new FileCollector(cfg), Optional.empty(), fileCollectorSettings);
+        LintStoneActorAccessor fileCollector = system.registerActor("fileCollector", () -> new FileCollector(cfg), fileCollectorSettings);
 
         // This actor collects all the results of the system
         ResultCollector resultCollector = new ResultCollector(cfg);
         ActorSettings resultCollectorSettings = ActorSettings.create()
-                .setMulti(true)
-                .setBlocking(true)
-                .setLimit(1000000)
-                .setBatch(1000)
                 .build();
-        LintStoneActorAccess lintStoneActorAccess = system.registerActor(ResultCollector.NAME, () -> resultCollector, Optional.empty(), resultCollectorSettings);
+        LintStoneActorAccessor statsActor = system.registerActor(ResultCollector.NAME, () -> resultCollector, resultCollectorSettings);
 
         // verify that no paths are overlapping, because that would lead to duplicates and worst case deleted safe files
         checkSafeUnsafeOverlapping(cfg);
@@ -81,29 +70,18 @@ public class Dedup {
         processParameter(true, fileCollector, cfg.getSafe());
         // put all unsafe files in
         processParameter(false, fileCollector, cfg.getUnsafe());
-
-        final CountDownLatch uniqueCollected = new CountDownLatch(1);
-        AtomicReference<UniqueFiles> files = new AtomicReference<>();
         // request unique Files from Collector
-        fileCollector.ask(FileCollector.endMessage(), f -> f.inCase(UniqueFiles.class, (uniqueFiles, eventContext) -> {
-            files.set(uniqueFiles);
-            uniqueCollected.countDown();
-        }));
+        System.out.println("Asking");
+        CompletableFuture<UniqueFiles> ask = fileCollector.ask(FileCollector.endMessage());
+        System.out.println("Asked");
 
-        uniqueCollected.await();
-        final CountDownLatch statsCollected = new CountDownLatch(1);
-        lintStoneActorAccess.ask(FileCollector.endMessage(), f -> f.inCase(Stats.class, (stats, mec) -> {
-            printStats(stats, cfg);
-            statsCollected.countDown();
-        }));
+        UniqueFiles files = ask.get();
+        System.out.println("Response");
 
-        statsCollected.await();
+        CompletableFuture<Stats> stats = statsActor.ask(FileCollector.endMessage());
+        printStats(stats.get(), cfg);
         // wait for the result
         system.shutDownAndWait();
-        if (cfg.isVerbose() || cfg.isRealVerbose()) {
-            System.out.println("Finished");
-        }
-
     }
 
     private void printStats(Stats stats, DedupConfig config) {
@@ -111,15 +89,15 @@ public class Dedup {
         if (config.isRealVerbose() || config.isVerbose()) {
             System.out.println(
                     "Finished processing:\n"
-                            + "         * " + stats.getReadonly() + " read only duplicate files\n"
-                            + "         * " + stats.getReadwrite() + " read/write duplicate files\n"
+                            + "         * " + stats.readonly() + " read only duplicate files\n"
+                            + "         * " + stats.readwrite() + " read/write duplicate files\n"
                             + "      in * " + Duration.between(start, Instant.now()) + "\n"
-                            + " deleted * " + stats.getDeletedSuccessfully() + " deleted\n"
-                            + "  failed * " + stats.getDeletionFailed() + " failed\n"
+                            + " deleted * " + stats.deletedSuccessfully() + " deleted\n"
+                            + "  failed * " + stats.deletionFailed() + " failed\n"
             );
 
-            if (stats.getLastException() != null) {
-                stats.getLastException().printStackTrace();
+            if (stats.lastException() != null) {
+                stats.lastException().printStackTrace();
             }
 
         }
@@ -154,7 +132,7 @@ public class Dedup {
         }
     }
 
-    private void processParameter(boolean readOnly, LintStoneActorAccess fileCollector, List<String> list) throws
+    private void processParameter(boolean readOnly, LintStoneActorAccessor fileCollector, List<String> list) throws
             UnregisteredRecipientException {
         for (String string : list) {
             Path root = Paths.get(string);
@@ -163,17 +141,17 @@ public class Dedup {
                 recurse(fileCollector, root, readOnly);
             } else {
                 // send one file to the filer
-                fileCollector.send(FileCollector.fileMessage(root, readOnly));
+                fileCollector.tell(FileCollector.fileMessage(root, readOnly));
             }
         }
     }
 
-    private void recurse(LintStoneActorAccess fileCollector, Path root, boolean readOnly) {
+    private void recurse(LintStoneActorAccessor fileCollector, Path root, boolean readOnly) {
         try {
             Files.list(root)
                     .filter(Files::isDirectory)
                     .forEach(f -> recurse(fileCollector, f, readOnly));
-            fileCollector.send(FileCollector.dirMessage(root, readOnly));
+            fileCollector.tell(FileCollector.dirMessage(root, readOnly));
         } catch (AccessDeniedException ex) {
             System.err.println(root + ": access denied");
         } catch (IOException ex) {

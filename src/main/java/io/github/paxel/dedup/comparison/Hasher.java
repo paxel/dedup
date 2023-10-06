@@ -1,8 +1,5 @@
 package io.github.paxel.dedup.comparison;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NonNull;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -13,10 +10,6 @@ import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
-/**
- *
- */
-@AllArgsConstructor
 public class Hasher {
 
     public static final int BUFFER_SIZE = 8046;
@@ -26,7 +19,10 @@ public class Hasher {
     public static final String SHA1 = "sha1";
     public static final String SHA256 = "sha256";
 
-    public Result<String, HashError> calc(@NonNull Path path, long offset, long size, String algorithm) {
+    public Hasher() {
+    }
+
+    public Result<String, HashError> calc(Path path, long offset, long size, String algorithm) {
         if (size < 0)
             return Result.err(new HashError("Size must be > 0, was " + size));
 
@@ -46,7 +42,7 @@ public class Hasher {
 
             long hashed = 0;
             byte[] buffer = new byte[(int) Math.min(size, BUFFER_SIZE)];
-            for (; ; ) {
+            do {
                 int read = in.read(buffer);
                 if (read <= 0)
                     return Result.err(new HashError("Reached end of " + path + ": hashed " + hashed + " of " + size + " size bytes."));
@@ -56,10 +52,7 @@ public class Hasher {
                 messageDigest.update(buffer, 0, hashable);
 
                 hashed += read;
-                if (hashed >= size) {
-                    break;
-                }
-            }
+            } while (hashed < size);
             return Result.ok(hexFormat.asString(messageDigest.digest()));
         } catch (IOException | NoSuchAlgorithmException e) {
             return Result.err(new HashError(e, "Exception while hashing " + path));
@@ -67,14 +60,25 @@ public class Hasher {
     }
 
 
-    @Getter
-    @AllArgsConstructor
     public static class HashError {
         private Exception e;
-        private String description;
+        private final String description;
 
         public HashError(String description) {
             this.description = description;
+        }
+
+        public HashError(Exception e, String description) {
+            this.e = e;
+            this.description = description;
+        }
+
+        public Exception getE() {
+            return this.e;
+        }
+
+        public String getDescription() {
+            return this.description;
         }
     }
 

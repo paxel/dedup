@@ -1,6 +1,5 @@
 package io.github.paxel.dedup.comparison;
 
-import lombok.NonNull;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -10,7 +9,7 @@ import java.util.Collections;
 
 public class StagedComparisonFactory {
 
-    @NonNull public StagedComparison createRaw(@NonNull Path path) {
+    public StagedComparison createRaw(Path path) {
         try {
             long size = Files.size(path);
             return createRaw(size);
@@ -19,7 +18,7 @@ public class StagedComparisonFactory {
         }
     }
 
-    @NonNull public StagedComparison createRaw(long size) {
+    public StagedComparison createRaw(long size) {
         if (size < 10000) {
             // small files are just hashed completely
             return new StagedComparison(Collections.singletonList(new RawByteComparisonStage(0, size, Hasher.MD5)));

@@ -10,6 +10,8 @@ import paxel.lintstone.api.LintStoneMessageEventContext;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.function.Consumer;
 
 /**
@@ -17,7 +19,7 @@ import java.util.function.Consumer;
  */
 public class ResultCollector implements LintStoneActor {
 
-    public static String NAME = "collector";
+    public static final String NAME = "collector";
     private int readonly;
     private int deletedSuccessfully;
     private int deletionFailed;
@@ -28,11 +30,11 @@ public class ResultCollector implements LintStoneActor {
     private Consumer<FileCollector.FileMessage> action = f -> {
     };
 
-    public ResultCollector(DedupConfig config) {
+    public ResultCollector(DedupConfig config) throws IOException {
         if (config.isRealVerbose()) {
             statistics = f -> {
-                System.out.println("Duplicate found: " + f.getPath() + " (" + (f.isReadOnly() ? "RO)" : "RW)"));
-                if (f.isReadOnly()) {
+                System.out.println("Duplicate found: " + f.path() + " (" + (f.readOnly() ? "RO)" : "RW)"));
+                if (f.readOnly()) {
                     readonly++;
                 } else {
                     readwrite++;
@@ -40,27 +42,49 @@ public class ResultCollector implements LintStoneActor {
             };
         } else if (config.isVerbose()) {
             statistics = f -> {
-                if (f.isReadOnly()) {
+                if (f.readOnly()) {
                     readonly++;
                 } else {
                     readwrite++;
                 }
             };
         }
-        if ("PRINT".equalsIgnoreCase(config.getAction())) {
+        if (config.getAction() == Action.PRINT) {
             action = f -> {
-                if (!f.isReadOnly()) {
-                    System.out.println(f.getPath());
-                }
+                String prefix = f.readOnly() ? "[RO]" : "[RW]";
+                System.out.println(prefix + f.path());
             };
-        } else if ("DELETE".equalsIgnoreCase(config.getAction())) {
+        }
+        if (config.getAction() == Action.MOVE) {
+            if (config.getTargetDir() != null) {
+                Path path = Paths.get(config.getTargetDir());
+                if (!Files.exists(path)) {
+                    Files.createDirectories(path);
+                }
+                action = f -> {
+                    if (!f.readOnly()) {
+                        try {
+                            Files.move(f.path(), path.resolve(f.path().getFileName()));
+                            System.out.println("Moved " + f.path());
+                        } catch (IOException e) {
+                            System.err.println("Could not move " + f.path() + " to " + path);
+                            e.printStackTrace();
+                        }
+                    }
+                };
+            }
+        } else if (config.getAction() == Action.DELETE) {
             action = f -> {
-                if (!f.isReadOnly()) {
+                if (!f.readOnly()) {
                     try {
-                        if (Files.deleteIfExists(f.getPath())) {
+                        if (Files.deleteIfExists(f.path())) {
+                            System.out.println("deleted " + f.path());
                             deletedSuccessfully++;
+                        } else {
+                            System.out.println("not deleted " + f.path());
                         }
                     } catch (IOException ex) {
+                        System.out.println("failed to deleted " + f.path());
                         lastException = ex;
                         deletionFailed++;
                     }
@@ -73,9 +97,7 @@ public class ResultCollector implements LintStoneActor {
     public void newMessageEvent(LintStoneMessageEventContext mec) {
         mec.inCase(FileCollector.FileMessage.class, this::addFile)
                 .inCase(FileCollector.EndMessage.class, this::end)
-                .otherwise((a, b) -> {
-            System.out.println("" + a);
-        });
+                .otherwise((a, b) -> System.out.println("Result Collector: unknown message: " + a));
     }
 
 
