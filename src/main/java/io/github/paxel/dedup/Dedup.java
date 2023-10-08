@@ -71,12 +71,9 @@ public class Dedup {
         // put all unsafe files in
         processParameter(false, fileCollector, cfg.getUnsafe());
         // request unique Files from Collector
-        System.out.println("Asking");
         CompletableFuture<UniqueFiles> ask = fileCollector.ask(FileCollector.endMessage());
-        System.out.println("Asked");
 
         UniqueFiles files = ask.get();
-        System.out.println("Response");
 
         CompletableFuture<Stats> stats = statsActor.ask(FileCollector.endMessage());
         printStats(stats.get(), cfg);

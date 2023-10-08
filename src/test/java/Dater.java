@@ -4,7 +4,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.DateTimeException;
 import java.time.LocalDate;
-import java.time.format.*;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -13,18 +13,17 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
-import static java.time.temporal.ChronoField.*;
-
 public class Dater {
 
 
     private final static Pattern YYYYMMDD = Pattern.compile("([0-9]{8})");
     private final static Pattern YYYY_MM_DD = Pattern.compile("([0-9]{4}-[0-9]{2}-[0-9]{2})");
+    private final static Pattern YYYY_MM_DD_ALL = Pattern.compile("([0-9]{4}_[0-9]{2}_[0-9]{2})");
     private final static Pattern YYYY__MM__DD = Pattern.compile("([0-9]{4})-([0-9]{1})-([0-9]{2})");
 
     private final List<DatedPath> result = new ArrayList<>();
 
-    private Path root;
+    private final Path root;
 
     public Dater(Path root) {
         this.root = root;
@@ -32,15 +31,15 @@ public class Dater {
 
     public static void main(String[] args) {
 
-        String[] type = {"jpg", "jpeg", "gif", "mov", "png", "dng", "webm", "mp4", "mp", "webp", "3gp", "flv"};
+        String[] type = {"jpg", "JPG", "jpeg", "gif", "mov", "png", "dng", "webm", "mp4", "mp", "webp", "3gp", "flv", "avi"};
         for (String s : type) {
 
            // Path root = Paths.get("/home/axel/documents/private_unsorted_photos_videos/vids");
-            Path root = Paths.get("/home/axel/documents/private_photos");
+            Path root = Paths.get("/home/axel/pCloudDrive/ingress/pixel/");
             new Dater(root)
                     .findDates(s)
             //          .printDates();
-            .moveFiles(Paths.get("/home/axel/documents/private_sorted_by_day/photo", s));
+                    .moveFiles(Paths.get("/home/axel/pCloudDrive/data/private_sorted", s));
         }
     }
 
@@ -123,6 +122,9 @@ public class Dater {
         result = parseYyyy_Mm_Dd(fileName);
         if (result.isValid())
             return result;
+        result = parseYyyy_Mm_Dd_all(fileName);
+        if (result.isValid())
+            return result;
         result = parseYyyy__Mm__Dd(fileName);
         if (result.isValid())
             return result;
@@ -147,6 +149,19 @@ public class Dater {
         if (matcher.find()) {
             for (int i = 0; i < matcher.groupCount(); i++) {
                 ParsedFileDate parsedFileDate = ParsedFileDate.parseOther(matcher.group(i));
+                if (parsedFileDate.isValid()) {
+                    return parsedFileDate;
+                }
+            }
+        }
+        return ParsedFileDate.INVALID;
+    }
+
+    private ParsedFileDate parseYyyy_Mm_Dd_all(String fileName) {
+        Matcher matcher = YYYY_MM_DD_ALL.matcher(fileName);
+        if (matcher.find()) {
+            for (int i = 0; i < matcher.groupCount(); i++) {
+                ParsedFileDate parsedFileDate = ParsedFileDate.parseOther_(matcher.group(i));
                 if (parsedFileDate.isValid()) {
                     return parsedFileDate;
                 }
@@ -219,6 +234,15 @@ public class Dater {
             }
         }
 
+        public static ParsedFileDate parseOther_(String group) {
+            try {
+                LocalDate parse = LocalDate.parse(group, DateTimeFormatter.ofPattern("yyyy_MM_dd"));
+                return new ParsedFileDate(parse.getYear(), parse.getMonthValue(), parse.getDayOfMonth());
+            } catch (DateTimeException e) {
+                return INVALID;
+            }
+        }
+
         public int getYear() {
             return year;
         }
@@ -239,10 +263,7 @@ public class Dater {
                 return false;
             }
             // weak check
-            if (day < 1 || day > 31) {
-                return false;
-            }
-            return true;
+            return day >= 1 && day <= 31;
         }
 
         @Override
@@ -253,8 +274,7 @@ public class Dater {
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
-            if (!(o instanceof ParsedFileDate)) return false;
-            ParsedFileDate that = (ParsedFileDate) o;
+            if (!(o instanceof ParsedFileDate that)) return false;
             return year == that.year && month == that.month && day == that.day;
         }
 

@@ -9,7 +9,7 @@ import java.util.stream.Stream;
 public class JPeg {
 
     private final Path root;
-    private List<Path> deletez = new ArrayList<>();
+    private final List<Path> deletez = new ArrayList<>();
 
 
     public JPeg(Path path) {
@@ -17,7 +17,7 @@ public class JPeg {
     }
 
     public static void main(String[] args) {
-        new JPeg(Paths.get("/home/axel/documents/private_photos"))
+        new JPeg(Paths.get("/home/axel/Documents/private_photos"))
                 .findDups()
                 .printDups();
     }

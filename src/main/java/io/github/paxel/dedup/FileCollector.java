@@ -11,7 +11,10 @@ import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -171,11 +174,9 @@ public class FileCollector implements LintStoneActor {
         CompletableFuture<Void> allAnswersReceived = CompletableFuture.allOf(resultCollector.toArray(new CompletableFuture[0]));
         allAnswersReceived.thenAccept(a -> {
             try {
-                System.out.println("reply result");
                 m.reply(new UniqueFiles(files));
                 // we're done. BUG: if we unregister here, the actor
                 m.unregister();
-                System.out.println("unregistered");
             } catch (Exception e) {
                 e.printStackTrace();
             }
