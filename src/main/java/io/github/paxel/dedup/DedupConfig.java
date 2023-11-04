@@ -11,10 +11,10 @@ import java.util.List;
 public class DedupConfig {
 
     @Parameter(names = {"-s", "--safe"}, description = "Comma-separated list of paths, that will not be modified.")
-    private final List<String> safe = Collections.emptyList();
+    private List<String> safe = Collections.emptyList();
 
     @Parameter(names = {"-u", "--unsafe"}, description = "Comma-separated list of group names to be handled by the action")
-    private final List<String> unsafe = Collections.emptyList();
+    private List<String> unsafe = Collections.emptyList();
 
     @Parameter(names = "-v", description = "Verbose statistics")
     private boolean verbose;
@@ -22,8 +22,8 @@ public class DedupConfig {
     @Parameter(names = "-vv", description = "Super verbose statistics")
     private boolean realVerbose;
 
-    @Parameter(description = "What to do with the duplicates? ")
-    private final Action action = Action.PRINT;
+    @Parameter(names = "--action", description = "What to do with the duplicates? ")
+    private Action action = Action.PRINT;
 
     @Parameter(names = {"-t", "--target-dir"}, description = "target dir for the move action")
     private String targetDir;
