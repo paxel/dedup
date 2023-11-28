@@ -24,8 +24,12 @@ public class Hasher {
 
     public Result<String, HashError> calc(Path path, long offset, long size, String algorithm) {
         if (size < 0)
-            return Result.err(new HashError("Size must be > 0, was " + size));
-
+            return Result.err(new HashError("Size must be > 0, was %d".formatted(size)));
+        Result<Long, IOException> sizeResult = getSize(path);
+        if (sizeResult.hasFailed())
+            return sizeResult.mapError(e -> new HashError(e, "could not get size of %s".formatted(path)));
+        if (sizeResult.value() != size)
+            return Result.err(new HashError("File %s has wrong size: %d expected %d".formatted(path, sizeResult.value(), size)));
         try (InputStream in = Files.newInputStream(path, StandardOpenOption.READ)) {
             MessageDigest messageDigest = MessageDigest.getInstance(algorithm);
 
@@ -34,7 +38,7 @@ public class Hasher {
                 while (skipped < offset) {
                     long skip = in.skip(offset - skipped);
                     if (skip <= 0)
-                        return Result.err(new HashError("Reached end of " + path + ": skipped " + skipped + " of " + offset + " offset bytes."));
+                        return Result.err(new HashError("Reached end of %s: skipped %d of %d offset bytes.".formatted(path, skipped, offset)));
 
                     skipped += skip;
                 }
@@ -56,6 +60,14 @@ public class Hasher {
             return Result.ok(hexFormat.asString(messageDigest.digest()));
         } catch (IOException | NoSuchAlgorithmException e) {
             return Result.err(new HashError(e, "Exception while hashing " + path));
+        }
+    }
+
+    private Result<Long, IOException> getSize(Path path) {
+        try {
+            return Result.ok(Files.size(path));
+        } catch (IOException e) {
+            return Result.err(e);
         }
     }
 
