@@ -5,9 +5,9 @@ packages:
 sources:
   - https://git.sr.ht/~taum/dedup
 tasks:
-  - setup: |
+  - dependencies: |
       cd dedup
       mvn -B de.qaware.maven:go-offline-maven-plugin:1.2.8:resolve-dependencies
-  - build: |
+  - build_and_test: |
       cd dedup
       mvn package -B
