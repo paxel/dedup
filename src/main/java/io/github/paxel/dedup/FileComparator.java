@@ -36,11 +36,10 @@ public class FileComparator implements LintStoneActor {
             if (root == null) {
                 root = new LayeredMultiCompare(0, f, stagedComparison);
             } else {
-                // if the new file is a duplicate the add will call handleDuplicate
                 Result<Duplicate, ComparisonError> duplicate = root.add(f);
                 if (duplicate.isSuccess()) {
                     if (duplicate.value() != null) {
-                        m.tell(ResultCollector.NAME, duplicate.value().duplicate());
+                        m.tell(ResultCollector.NAME, duplicate.value());
                     }
                 } else
                     System.err.println(duplicate.error());

@@ -29,6 +29,10 @@ public class ResultCollector implements LintStoneActor {
     };
     private Consumer<FileCollector.FileMessage> action = f -> {
     };
+    private Consumer<Duplicate> statisticsD = f -> {
+    };
+    private Consumer<Duplicate> actionD = f -> {
+    };
 
     public ResultCollector(DedupConfig config) throws IOException {
         if (config.isRealVerbose()) {
@@ -40,6 +44,15 @@ public class ResultCollector implements LintStoneActor {
                     readwrite++;
                 }
             };
+            statisticsD = f -> {
+                System.out.printf("Duplicate found:%norg:(%s%s)%ndup:(%s%s)%n", f.original().readOnly() ? "RO" : "RW", f.original().path(), f.original().readOnly() ? "RO" : "RW", f.original().path());
+                if (f.duplicate().readOnly()) {
+                    readonly++;
+                } else {
+                    readwrite++;
+                }
+
+            };
         } else if (config.isVerbose()) {
             statistics = f -> {
                 if (f.readOnly()) {
@@ -48,11 +61,20 @@ public class ResultCollector implements LintStoneActor {
                     readwrite++;
                 }
             };
-        }
-        if (config.getAction() == Action.PRINT) {
+            statisticsD = f -> {
+                if (f.duplicate().readOnly()) {
+                    readonly++;
+                } else {
+                    readwrite++;
+                }
+            };
+        } else if (config.getAction() == Action.PRINT) {
             action = f -> {
                 String prefix = f.readOnly() ? "[RO]" : "[RW]";
                 System.out.println(prefix + f.path());
+            };
+            actionD = f -> {
+                System.out.printf("Duplicate found:%norg:(%s%s)%ndup:(%s%s)%n", f.original().readOnly() ? "RO" : "RW", f.original().path(), f.original().readOnly() ? "RO" : "RW", f.original().path());
             };
         }
         if (config.getAction() == Action.MOVE) {
@@ -68,6 +90,17 @@ public class ResultCollector implements LintStoneActor {
                             System.out.println("Moved " + f.path());
                         } catch (IOException e) {
                             System.err.println("Could not move " + f.path() + " to " + path);
+                            e.printStackTrace();
+                        }
+                    }
+                };
+                actionD = f -> {
+                    if (!f.duplicate().readOnly()) {
+                        try {
+                            Files.move(f.duplicate().path(), path.resolve(f.duplicate().path().getFileName()));
+                            System.out.println("Moved " + f.duplicate().path());
+                        } catch (IOException e) {
+                            System.err.println("Could not move " + f.duplicate().path() + " to " + path);
                             e.printStackTrace();
                         }
                     }
@@ -90,14 +123,36 @@ public class ResultCollector implements LintStoneActor {
                     }
                 }
             };
+            actionD = f -> {
+                if (!f.duplicate().readOnly()) {
+                    try {
+                        if (Files.deleteIfExists(f.duplicate().path())) {
+                            System.out.println("deleted " + f.duplicate().path());
+                            deletedSuccessfully++;
+                        } else {
+                            System.out.println("not deleted " + f.duplicate().path());
+                        }
+                    } catch (IOException ex) {
+                        System.out.println("failed to deleted " + f.duplicate().path());
+                        lastException = ex;
+                        deletionFailed++;
+                    }
+                }
+            };
         }
     }
 
     @Override
     public void newMessageEvent(LintStoneMessageEventContext mec) {
         mec.inCase(FileCollector.FileMessage.class, this::addFile)
+                .inCase(Duplicate.class, this::addDuplicate)
                 .inCase(FileCollector.EndMessage.class, this::end)
                 .otherwise((a, b) -> System.out.println("Result Collector: unknown message: " + a));
+    }
+
+    private void addDuplicate(Duplicate f, LintStoneMessageEventContext lintStoneMessageEventContext) {
+        statisticsD.accept(f);
+        actionD.accept(f);
     }
 
 
