@@ -10,9 +10,9 @@ public class RepoParameterValidation implements IParametersValidator {
 
     @Override
     public void validate(Map<String, Object> map) throws ParameterException {
-        boolean all = map.containsKey("-a");
-        boolean repo = map.containsKey("-R");
+        boolean all = map.get("-a") != null || map.get("--all") != null;
+        boolean repo = map.get("-R") != null;
         if (all && repo)
-            throw new ParameterException("Either use -a or -R bt not both");
+            throw new ParameterException("Either use -a/--all or -R bt not both");
     }
 }
