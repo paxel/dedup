@@ -1,6 +1,7 @@
 package paxel.dedup;
 
 public class RepoDeletion {
-    public void delete(String name) {
+    public int delete(String name) {
+        return 0;
     }
 }
