@@ -1,4 +1,4 @@
-package paxel.dedup;
+package paxel.dedup.parameter;
 
 import com.beust.jcommander.IParametersValidator;
 import com.beust.jcommander.ParameterException;

@@ -4,12 +4,13 @@ import com.beust.jcommander.ParameterException;
 import com.beust.jcommander.Parameters;
 import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Test;
+import paxel.dedup.parameter.CliParameter;
+import paxel.dedup.parameter.RepoParameterValidation;
 import paxel.lib.Result;
-
-import java.text.ParseException;
 
 import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
+import static org.assertj.core.api.InstanceOfAssertFactories.BOOLEAN;
 import static org.assertj.core.api.InstanceOfAssertFactories.STRING;
 
 @Parameters(parametersValidators = {RepoParameterValidation.class})

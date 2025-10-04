@@ -1,4 +1,4 @@
-package paxel.dedup;
+package paxel.dedup.parameter;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -23,11 +23,11 @@ public class CliParameter {
                 build.usage();
                 return Result.ok(null);
             }
-            return Result.ok(cliParameter);
         } catch (ParameterException e) {
             e.usage();
             return Result.err(e);
         }
+        return Result.ok(cliParameter);
     }
 
     @Parameter(names = "-v", description = "Verbose logging")
@@ -43,7 +43,7 @@ public class CliParameter {
     private List<String> repos;
 
 
-    public CliParameter() {
+    CliParameter() {
     }
 }
 
