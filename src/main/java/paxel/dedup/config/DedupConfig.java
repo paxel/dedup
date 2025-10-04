@@ -1,5 +1,6 @@
 package paxel.dedup.config;
 
+import lombok.NonNull;
 import paxel.lib.Result;
 
 import java.nio.file.Path;
@@ -13,6 +14,7 @@ public interface DedupConfig {
      *
      * @return the repos
      */
+    @NonNull
     List<Repo> getRepos();
 
     /**
@@ -20,15 +22,17 @@ public interface DedupConfig {
      *
      * @return the {@link Repo} or {@link  Optional#empty()}
      */
-    Optional<Repo> getRepo(String name);
+    @NonNull
+    Result<Repo, OpenRepoError> getRepo(@NonNull String name);
 
     /**
      * Creates a Repo with given name or explains the reason why not.
      *
      * @param name The name of the new repo.
-     * @return The new {@link Repo} or {@link CreateRepoError} if the repo could not be created.
+     * @return The new {@link Repo} or {@link CreateRepoError} if the repo could not be read.
      */
-    Result<Repo, CreateRepoError> createRepo(String name);
+    @NonNull
+    Result<Repo, CreateRepoError> createRepo(@NonNull String name, @NonNull Path path, int indices);
 
     /**
      * Deletes a Repo with given name or explains the reason why not.
@@ -36,13 +40,15 @@ public interface DedupConfig {
      * @param repo The repo to be deleted.
      * @return {@code true} if the repo existed and was deleted. {@code false} if the repo did not exist. {@link DeleteRepoError} if the repo could not be deleted.
      */
-    Result<Boolean, DeleteRepoError> deleteRepo(Repo repo);
+    @NonNull
+    Result<Boolean, DeleteRepoError> deleteRepo(@NonNull Repo repo);
 
     /**
      * Retrieve the repo root dir
      *
      * @return the root path.
      */
+    @NonNull
     Path getRepoDir();
 
 }

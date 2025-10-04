@@ -25,6 +25,7 @@ public class DedupCli {
 
         DedupCli dedupCli = new DedupCli(parameter, result.value());
         switch (parameter.getCommand()) {
+            case null -> System.err.println("No command is used");
             default -> System.err.println("Unknown command " + parameter.getCommand());
         }
     }

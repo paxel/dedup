@@ -1,4 +1,6 @@
 package paxel.dedup.config;
 
-public record Repo(String name) {
+import java.nio.file.Path;
+
+public record Repo(String name, Path path, int indices) {
 }
