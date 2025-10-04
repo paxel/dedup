@@ -42,6 +42,7 @@ public class CliParameter {
     @Parameter(names = "-R", description = "Name of the repos to use")
     private List<String> repos;
 
+    private String command;
 
     CliParameter() {
     }

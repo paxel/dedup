@@ -2,6 +2,7 @@ package paxel.dedup.config;
 
 import paxel.lib.Result;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
@@ -37,5 +38,11 @@ public interface DedupConfig {
      */
     Result<Boolean, DeleteRepoError> deleteRepo(Repo repo);
 
+    /**
+     * Retrieve the repo root dir
+     *
+     * @return the root path.
+     */
+    Path getRepoDir();
 
 }
