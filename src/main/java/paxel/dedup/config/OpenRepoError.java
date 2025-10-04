@@ -5,7 +5,7 @@ import lombok.NonNull;
 import java.io.IOException;
 import java.nio.file.Path;
 
-public record OpenRepoError(Path resolve, IOException e) {
+public record OpenRepoError(Path resolve, IOException ioException) {
     public static @NonNull OpenRepoError notFound(@NonNull Path repoPath) {
         return new OpenRepoError(repoPath, null);
     }

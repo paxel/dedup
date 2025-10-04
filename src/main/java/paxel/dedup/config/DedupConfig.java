@@ -37,11 +37,11 @@ public interface DedupConfig {
     /**
      * Deletes a Repo with given name or explains the reason why not.
      *
-     * @param repo The repo to be deleted.
+     * @param name The repo to be deleted.
      * @return {@code true} if the repo existed and was deleted. {@code false} if the repo did not exist. {@link DeleteRepoError} if the repo could not be deleted.
      */
     @NonNull
-    Result<Boolean, DeleteRepoError> deleteRepo(@NonNull Repo repo);
+    Result<Boolean, DeleteRepoError> deleteRepo(@NonNull String name);
 
     /**
      * Retrieve the repo root dir

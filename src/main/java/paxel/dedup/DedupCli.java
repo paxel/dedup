@@ -17,7 +17,6 @@ public class DedupCli {
 
         CommandLine commandLine = new CommandLine(new CliParameter());
 
-        commandLine.addSubcommand(new RepoCommand());
 
         int exitCode = commandLine.execute(args);
         System.exit(exitCode);

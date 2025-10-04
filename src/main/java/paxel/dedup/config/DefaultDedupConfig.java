@@ -8,6 +8,8 @@ import paxel.lib.Result;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Stream;
@@ -29,12 +31,7 @@ public final class DefaultDedupConfig implements DedupConfig {
             return Result.err(OpenRepoError.notFound(repoRootPath));
         }
         try (Stream<Path> list = Files.list(repoRootPath)) {
-            return Result.ok(
-                    list.filter(Files::isDirectory)
-                            .map(p -> getRepo(p.getFileName().toString()))
-                            .filter(Result::isSuccess)
-                            .map(Result::value)
-                            .toList());
+            return Result.ok(list.filter(Files::isDirectory).map(p -> getRepo(p.getFileName().toString())).filter(Result::isSuccess).map(Result::value).toList());
         } catch (IOException e) {
             return Result.err(OpenRepoError.ioError(repoRootPath, e));
         }
@@ -66,7 +63,7 @@ public final class DefaultDedupConfig implements DedupConfig {
             return Result.err(CreateRepoError.exists(repoPath));
         }
         try {
-            Files.createDirectories(repoPath);
+            Path path1 = Files.createDirectories(repoPath);
         } catch (IOException e) {
             return Result.err(CreateRepoError.ioError(repoPath, e));
         }
@@ -85,8 +82,48 @@ public final class DefaultDedupConfig implements DedupConfig {
     }
 
     @Override
-    public @NonNull Result<Boolean, DeleteRepoError> deleteRepo(@NonNull Repo repo) {
-        return Result.err(new DeleteRepoError());
+    public @NonNull Result<Boolean, DeleteRepoError> deleteRepo(@NonNull String name) {
+        Path repoPath = repoRootPath.resolve(name);
+        if (!Files.exists(repoPath)) {
+            return Result.ok(false);
+        }
+        List<Exception> exceptions = new ArrayList<>();
+        Result<Boolean, DeleteRepoError> deleteResult = deleteAllFiles(repoPath, exceptions);
+
+        if (deleteResult.hasFailed()) {
+            return deleteResult;
+        }
+
+        if (!deleteResult.value()) {
+            return Result.err(DeleteRepoError.ioErrors(repoPath, exceptions));
+        }
+
+
+        // all deleted
+        return deleteResult;
+    }
+
+    @NonNull
+    private Result<Boolean, DeleteRepoError> deleteAllFiles(Path repoPath, List<Exception> exceptions) {
+        try {
+            Path resolve = Files.move(repoPath, repoPath.resolveSibling(repoPath.getFileName().toString() + "_del"));
+
+            try (Stream<Path> pathStream = Files.walk(resolve)) {
+                pathStream.sorted(Comparator.reverseOrder()).map(Path::toFile).forEach(file -> {
+                    try {
+                        boolean delete = file.delete();
+                    } catch (Exception e) {
+                        exceptions.add(e);
+                    }
+                });
+            }
+            if (exceptions.isEmpty()) {
+                return Result.ok(true);
+            }
+            return Result.ok(false);
+        } catch (IOException e) {
+            return Result.err(DeleteRepoError.ioError(repoPath, e));
+        }
     }
 
     @Override
