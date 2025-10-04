@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Stream;
 
 
 public final class DefaultDedupConfig implements DedupConfig {
@@ -23,8 +24,20 @@ public final class DefaultDedupConfig implements DedupConfig {
 
 
     @Override
-    public @NonNull List<Repo> getRepos() {
-        return List.of();
+    public @NonNull Result<List<Repo>, OpenRepoError> getRepos() {
+        if (!Files.exists(repoRootPath)) {
+            return Result.err(OpenRepoError.notFound(repoRootPath));
+        }
+        try (Stream<Path> list = Files.list(repoRootPath)) {
+            return Result.ok(
+                    list.filter(Files::isDirectory)
+                            .map(p -> getRepo(p.getFileName().toString()))
+                            .filter(Result::isSuccess)
+                            .map(Result::value)
+                            .toList());
+        } catch (IOException e) {
+            return Result.err(OpenRepoError.ioError(repoRootPath, e));
+        }
     }
 
     @Override

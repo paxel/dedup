@@ -15,7 +15,7 @@ public interface DedupConfig {
      * @return the repos
      */
     @NonNull
-    List<Repo> getRepos();
+    Result<List<Repo>, OpenRepoError> getRepos();
 
     /**
      * Provide a {@link Repo} by name
