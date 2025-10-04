@@ -2,6 +2,7 @@ package paxel.dedup.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import lombok.NonNull;
 import paxel.lib.Result;
 
@@ -18,7 +19,10 @@ import java.util.stream.Stream;
 public final class DefaultDedupConfig implements DedupConfig {
 
     private final Path repoRootPath;
-    private final ObjectMapper objectMapper = new ObjectMapper(new YAMLFactory());
+    private final ObjectMapper objectMapper = new ObjectMapper(new YAMLFactory()
+            .disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER)
+            .enable(YAMLGenerator.Feature.INDENT_ARRAYS_WITH_INDICATOR)
+            .enable(YAMLGenerator.Feature.MINIMIZE_QUOTES));
 
     public DefaultDedupConfig(Path repoRootPath) {
         this.repoRootPath = repoRootPath;
@@ -67,17 +71,21 @@ public final class DefaultDedupConfig implements DedupConfig {
         } catch (IOException e) {
             return Result.err(CreateRepoError.ioError(repoPath, e));
         }
-        Path resolve = repoPath.resolve("dedup_repo.yml");
-        if (Files.exists(resolve)) {
-            return Result.err(CreateRepoError.exists(resolve));
+        Path ymlFile = repoPath.resolve("dedup_repo.yml");
+        if (Files.exists(ymlFile)) {
+            return Result.err(CreateRepoError.exists(ymlFile));
         }
 
         try {
             Repo repo = new Repo(name, path.toAbsolutePath(), indices);
-            objectMapper.writerFor(Repo.class).writeValue(resolve.toFile(), repo);
+            objectMapper.writerFor(Repo.class).writeValue(ymlFile.toFile(), repo);
+
+            for (int i = 0; i < indices; i++) {
+                Files.createFile(ymlFile.resolveSibling(i + ".idx"));
+            }
             return Result.ok(repo);
         } catch (IOException e) {
-            return Result.err(CreateRepoError.ioError(resolve, e));
+            return Result.err(CreateRepoError.ioError(ymlFile, e));
         }
     }
 

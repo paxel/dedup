@@ -1,7 +1,8 @@
 package paxel.dedup.parameter;
 
-import paxel.dedup.RepoCreation;
-import paxel.dedup.RepoDeletion;
+import paxel.dedup.cli.CreateRepoProcess;
+import paxel.dedup.cli.RmRepoProcess;
+import paxel.dedup.cli.LsReposProcess;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -15,13 +16,19 @@ public class RepoCommand {
             @Parameters(index = "1", description = "Path of the repo") String path,
             @Option(defaultValue = "10", names = {"--indices", "-i"}, description = "Number of index files") int indices) {
 
-        return new RepoCreation().create(name, path, indices);
+        return new CreateRepoProcess().create(name, path, indices);
     }
 
-    @Command(name = "delete", description = "Deletes existing repo")
+    @Command(name = "rm", description = "Deletes existing repo")
     public int delete(
             @Parameters(index = "0", description = "Name of the repo") String name) {
-        return new RepoDeletion().delete(name);
+        return new RmRepoProcess().delete(name);
+    }
+
+
+    @Command(name = "ls", description = "Lists repos")
+    public int list() {
+        return new LsReposProcess().list();
     }
 
 }

@@ -5,7 +5,7 @@ import lombok.NonNull;
 import java.io.IOException;
 import java.nio.file.Path;
 
-public record CreateRepoError(Path repoPath, IOException ioException) {
+public record CreateRepoError(Path path, IOException ioException) {
     public static @NonNull CreateRepoError exists(@NonNull Path repoPath) {
         return new CreateRepoError(repoPath, null);
     }

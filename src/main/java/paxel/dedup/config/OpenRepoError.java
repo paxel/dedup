@@ -5,12 +5,12 @@ import lombok.NonNull;
 import java.io.IOException;
 import java.nio.file.Path;
 
-public record OpenRepoError(Path resolve, IOException ioException) {
-    public static @NonNull OpenRepoError notFound(@NonNull Path repoPath) {
-        return new OpenRepoError(repoPath, null);
+public record OpenRepoError(Path path, IOException ioException) {
+    public static @NonNull OpenRepoError notFound(@NonNull Path path) {
+        return new OpenRepoError(path, null);
     }
 
-    public static @NonNull OpenRepoError ioError(@NonNull Path resolve, @NonNull IOException ioException) {
-        return new OpenRepoError(resolve, ioException);
+    public static @NonNull OpenRepoError ioError(@NonNull Path path, @NonNull IOException ioException) {
+        return new OpenRepoError(path, ioException);
     }
 }
