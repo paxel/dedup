@@ -7,5 +7,5 @@ import java.util.Date;
 
 @Builder
 @Jacksonized
-public record RepoFile(String hash, String relativePath, Long size, Date lastModified, boolean missing, String meta) {
+public record RepoFile(String hash, String relativePath, Long size, long lastModified, boolean missing, String meta) {
 }

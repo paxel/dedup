@@ -1,7 +1,6 @@
 package paxel.dedup.repo.index;
 
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -57,5 +56,14 @@ public class Statistics {
 
     public void forTimer(BiConsumer<String, Duration> consumer) {
         timer.entrySet().stream().sorted(Comparator.comparing(Map.Entry::getKey)).forEach(e -> consumer.accept(e.getKey(), e.getValue()));
+    }
+
+    public void add(Statistics value) {
+        value.forCounter((key, newCount) -> counter.computeIfAbsent(key, k -> new AtomicLong()).addAndGet(newCount));
+        value.forTimer((key, newDuration) -> timer.compute(key, (k, prevDuration) -> {
+            if (prevDuration == null)
+                return newDuration;
+            return prevDuration.plus(newDuration);
+        }));
     }
 }

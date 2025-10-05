@@ -22,7 +22,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPOutputStream;
 
-public class IndexManager implements AutoCloseable {
+public class IndexManager {
     public static final String FILES = "files";
     public static final String MISSING = "missing";
     public static final String DUPLICATES = "duplicates";
@@ -135,10 +135,16 @@ public class IndexManager implements AutoCloseable {
         }
     }
 
-    @Override
-    public void close() throws Exception {
+    public Result<Boolean, CloseError> close() {
         OutputStream outputStream = out.getAndSet(null);
-        if (outputStream != null)
+        if (outputStream == null) {
+            return Result.ok(false);
+        }
+        try {
             outputStream.close();
+            return Result.ok(true);
+        } catch (IOException e) {
+            return Result.err(CloseError.ioException(indexFile, e));
+        }
     }
 }
