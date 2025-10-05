@@ -16,7 +16,7 @@ public class RmRepoProcess {
         if (configResult.hasFailed()) {
             IOException ioException = configResult.error().ioException();
             if (ioException != null) {
-                System.err.println(configResult.error().path() + " not a valid config path");
+                System.err.println(configResult.error().path() + " not a valid config relativePath");
                 ioException.printStackTrace();
                return -1;
             }

@@ -123,6 +123,8 @@ Pruning a repo means remove all deprecated information
 ## Agenda
 
 - [x] CLI main with simple argument parsing (JCommander)
-- [ ] Config Dir Management (use default)
-- [ ] Simple Repository Management (query Config Dir for Repository)
-- [ ] List Repo command
+- [x] Config Dir Management (use default)
+- [x] Simple Repository Management (query Config Dir for Repository)
+- [x] List, create and delete Repo commands
+- [ ] Index Manager
+- [ ] Repo interface

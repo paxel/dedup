@@ -1,6 +1,7 @@
 package paxel.dedup.config;
 
 import lombok.NonNull;
+import paxel.dedup.data.Repo;
 import paxel.lib.Result;
 
 import java.nio.file.Path;
@@ -46,7 +47,7 @@ public interface DedupConfig {
     /**
      * Retrieve the repo root dir
      *
-     * @return the root path.
+     * @return the root relativePath.
      */
     @NonNull
     Path getRepoDir();

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import lombok.NonNull;
+import paxel.dedup.data.Repo;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -77,7 +78,7 @@ public final class DefaultDedupConfig implements DedupConfig {
         }
 
         try {
-            Repo repo = new Repo(name, path.toAbsolutePath(), indices);
+            Repo repo = new Repo(name, path.toAbsolutePath().toString(), indices);
             objectMapper.writerFor(Repo.class).writeValue(ymlFile.toFile(), repo);
 
             for (int i = 0; i < indices; i++) {

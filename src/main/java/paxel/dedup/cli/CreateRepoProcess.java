@@ -1,6 +1,7 @@
 package paxel.dedup.cli;
 
 import paxel.dedup.config.*;
+import paxel.dedup.data.Repo;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -8,13 +9,13 @@ import java.nio.file.Paths;
 
 public class CreateRepoProcess {
     public int create(String name, String path, int indices) {
-        // TODO: use configured config path
+        // TODO: use configured config relativePath
         Result<DedupConfig, CreateConfigError> configResult = DedupConfigFactory.create();
 
         if (configResult.hasFailed()) {
             IOException ioException = configResult.error().ioException();
             if (ioException != null) {
-                System.err.println(configResult.error().path() + " not a valid config path");
+                System.err.println(configResult.error().path() + " not a valid config relativePath");
                 ioException.printStackTrace();
                return -1;
             }
@@ -24,7 +25,7 @@ public class CreateRepoProcess {
         if (createResult.hasFailed()) {
             IOException ioException = createResult.error().ioException();
             if (ioException != null) {
-                System.err.println(createResult.error().path() + " not a valid repo path");
+                System.err.println(createResult.error().path() + " not a valid repo relativePath");
                 ioException.printStackTrace();
                return -2;
             }
