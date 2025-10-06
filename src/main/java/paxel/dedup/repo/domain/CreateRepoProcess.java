@@ -19,8 +19,8 @@ public class CreateRepoProcess {
             if (ioException != null) {
                 System.err.println(configResult.error().path() + " not a valid config relativePath");
                 ioException.printStackTrace();
-               return -1;
             }
+            return -1;
         }
         DedupConfig dedupConfig = configResult.value();
         Result<Repo, CreateRepoError> createResult = dedupConfig.createRepo(name, Paths.get(path), indices);
@@ -29,8 +29,8 @@ public class CreateRepoProcess {
             if (ioException != null) {
                 System.err.println(createResult.error().path() + " not a valid repo relativePath");
                 ioException.printStackTrace();
-               return -2;
             }
+            return -2;
         }
 
         System.out.println("Created " + createResult.value());

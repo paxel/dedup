@@ -18,8 +18,8 @@ public class RmRepoProcess {
             if (ioException != null) {
                 System.err.println(configResult.error().path() + " not a valid config relativePath");
                 ioException.printStackTrace();
-               return -1;
             }
+            return -1;
         }
 
         DedupConfig dedupConfig = configResult.value();
@@ -30,7 +30,7 @@ public class RmRepoProcess {
             List<Exception> exceptions = deleteResult.error().ioExceptions();
             System.out.println("While deleting " + name + " " + exceptions.size() + " exceptions happened");
             exceptions.getFirst().printStackTrace();
-            return -3;
+            return -6;
         }
 
         System.out.println("Deleted " + name);

@@ -20,8 +20,8 @@ public class LsReposProcess {
             if (ioException != null) {
                 System.err.println(configResult.error().path() + " not a valid config relativePath");
                 ioException.printStackTrace();
-                return -1;
             }
+            return -1;
         }
         DedupConfig dedupConfig = configResult.value();
         Result<List<Repo>, OpenRepoError> getReposResult = dedupConfig.getRepos();
@@ -30,9 +30,8 @@ public class LsReposProcess {
             if (ioException != null) {
                 System.err.println(getReposResult.error().path() + " Invalid");
                 ioException.printStackTrace();
-                return -2;
             }
-            return -1;
+            return -4;
         }
         getReposResult.value().stream()
                 .sorted(Comparator.comparing(Repo::name, String::compareTo))

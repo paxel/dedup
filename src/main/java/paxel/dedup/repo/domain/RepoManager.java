@@ -3,6 +3,7 @@ package paxel.dedup.repo.domain;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import lombok.Getter;
 import paxel.dedup.config.DedupConfig;
 import paxel.dedup.model.*;
 import paxel.dedup.model.errors.CloseError;
@@ -24,10 +25,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 public class RepoManager {
+    @Getter
     private final Repo repo;
     private final Map<Integer, IndexManager> indices = new ConcurrentHashMap<>();
     private final ObjectReader objectReader;
     private final ObjectWriter objectWriter;
+    @Getter
     private final Path repoDir;
     private final BinaryFormatter binaryFormatter = new HexFormatter();
     private final FileHasher fileHasher = new Sha1Hasher(binaryFormatter);
