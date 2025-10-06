@@ -1,7 +1,7 @@
 package paxel.dedup;
 
 
-import paxel.dedup.config.CreateConfigError;
+import paxel.dedup.model.errors.CreateConfigError;
 import paxel.dedup.config.DedupConfig;
 import paxel.dedup.config.DedupConfigFactory;
 import paxel.dedup.parameter.CliParameter;

@@ -1,7 +1,10 @@
 package paxel.dedup.config;
 
 import lombok.NonNull;
-import paxel.dedup.data.Repo;
+import paxel.dedup.model.Repo;
+import paxel.dedup.model.errors.CreateRepoError;
+import paxel.dedup.model.errors.DeleteRepoError;
+import paxel.dedup.model.errors.OpenRepoError;
 import paxel.lib.Result;
 
 import java.nio.file.Path;

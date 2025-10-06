@@ -1,4 +1,4 @@
-package paxel.dedup.data;
+package paxel.dedup.model;
 
 public record Repo(String name, String absolutePath, int indices) {
 

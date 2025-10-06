@@ -1,6 +1,7 @@
 package paxel.dedup.config;
 
 import lombok.NonNull;
+import paxel.dedup.model.errors.CreateConfigError;
 import paxel.lib.Result;
 
 import java.io.IOException;

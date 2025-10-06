@@ -1,20 +1,24 @@
-package paxel.dedup.repo.index;
+package paxel.dedup.repo.domain;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import paxel.dedup.config.DedupConfig;
-import paxel.dedup.data.Repo;
-import paxel.dedup.data.RepoFile;
+import paxel.dedup.model.*;
+import paxel.dedup.model.errors.CloseError;
+import paxel.dedup.model.errors.LoadError;
+import paxel.dedup.model.errors.WriteError;
+import paxel.dedup.model.utils.BinaryFormatter;
+import paxel.dedup.model.utils.FileHasher;
+import paxel.dedup.model.utils.HexFormatter;
+import paxel.dedup.model.utils.Sha1Hasher;
 import paxel.lib.Result;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
-import java.security.MessageDigest;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -25,6 +29,8 @@ public class RepoManager {
     private final ObjectReader objectReader;
     private final ObjectWriter objectWriter;
     private final Path repoDir;
+    private final BinaryFormatter binaryFormatter = new HexFormatter();
+    private final FileHasher fileHasher = new Sha1Hasher(binaryFormatter);
 
 
     public RepoManager(Repo repo, DedupConfig dedupConfig, ObjectMapper objectMapper) {
@@ -102,7 +108,7 @@ public class RepoManager {
         }
 
 
-        Result<String, LoadError> hashResult = calchHash(absolutePath, size);
+        Result<String, LoadError> hashResult = calcHash(absolutePath, size);
         if (hashResult.hasFailed())
             return hashResult.mapError(l -> new WriteError(null, absolutePath, l.ioException()));
 
@@ -118,15 +124,15 @@ public class RepoManager {
                 .map(f -> true, Function.identity());
     }
 
-    private Result<String, LoadError> calchHash(Path absolutePath, long size) {
+    private Result<String, LoadError> calcHash(Path absolutePath, long size) {
         if (size < 20) {
             try {
-                return Result.ok(toHexString(Files.readAllBytes(absolutePath)));
+                return Result.ok(binaryFormatter.format(Files.readAllBytes(absolutePath)));
             } catch (IOException e) {
                 return Result.err(new LoadError(absolutePath, e, e.toString()));
             }
         }
-        return calculateSHA1(absolutePath);
+        return fileHasher.hash(absolutePath);
     }
 
     private Result<FileTime, LoadError> getLastModifiedTime(Path absolutePath) {
@@ -145,35 +151,5 @@ public class RepoManager {
         }
     }
 
-    public Result<String, LoadError> calculateSHA1(Path path) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-1");
-            byte[] buffer = new byte[8192];
-            try (InputStream fis = Files.newInputStream(path)) {
-                int bytesRead;
-                while ((bytesRead = fis.read(buffer)) != -1) {
-                    digest.update(buffer, 0, bytesRead);
-                }
-            }
-            byte[] hashBytes = digest.digest();
 
-            String hexString = toHexString(hashBytes);
-            return Result.ok(hexString);
-        } catch (Exception e) {
-            return Result.err(new LoadError(path, e, e.toString()));
-        }
-    }
-
-    private String toHexString(byte[] hashBytes) {
-        // Konvertiert das Hash-Array in einen hexadezimalen String
-        StringBuilder hexString = new StringBuilder();
-        for (byte b : hashBytes) {
-            String hex = Integer.toHexString(0xff & b);
-            if (hex.length() == 1) {
-                hexString.append('0');
-            }
-            hexString.append(hex);
-        }
-        return hexString.toString();
-    }
 }

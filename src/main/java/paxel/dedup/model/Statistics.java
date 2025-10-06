@@ -1,4 +1,4 @@
-package paxel.dedup.repo.index;
+package paxel.dedup.model;
 
 import lombok.Getter;
 

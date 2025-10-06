@@ -1,4 +1,4 @@
-package paxel.dedup.repo.index;
+package paxel.dedup.model.errors;
 
 import java.io.IOException;
 import java.nio.file.Path;

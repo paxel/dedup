@@ -1,4 +1,4 @@
-package paxel.dedup.config;
+package paxel.dedup.model.errors;
 
 import lombok.NonNull;
 

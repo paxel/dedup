@@ -1,7 +1,7 @@
-package paxel.dedup.repo.index;
+package paxel.dedup.model.errors;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import paxel.dedup.data.RepoFile;
+import paxel.dedup.model.RepoFile;
 
 import java.io.IOException;
 import java.nio.file.Path;

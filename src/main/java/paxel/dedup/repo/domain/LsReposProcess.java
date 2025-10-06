@@ -1,7 +1,9 @@
-package paxel.dedup.cli;
+package paxel.dedup.repo.domain;
 
 import paxel.dedup.config.*;
-import paxel.dedup.data.Repo;
+import paxel.dedup.model.Repo;
+import paxel.dedup.model.errors.CreateConfigError;
+import paxel.dedup.model.errors.OpenRepoError;
 import paxel.lib.Result;
 
 import java.io.IOException;

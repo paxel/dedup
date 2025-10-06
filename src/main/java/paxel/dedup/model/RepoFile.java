@@ -1,9 +1,7 @@
-package paxel.dedup.data;
+package paxel.dedup.model;
 
 import lombok.Builder;
 import lombok.extern.jackson.Jacksonized;
-
-import java.util.Date;
 
 @Builder
 @Jacksonized

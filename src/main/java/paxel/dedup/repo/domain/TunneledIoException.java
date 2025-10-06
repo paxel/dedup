@@ -1,4 +1,4 @@
-package paxel.dedup.repo.index;
+package paxel.dedup.repo.domain;
 
 import java.io.IOException;
 

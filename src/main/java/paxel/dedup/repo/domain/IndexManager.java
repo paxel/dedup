@@ -1,10 +1,13 @@
-package paxel.dedup.repo.index;
+package paxel.dedup.repo.domain;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
-import lombok.RequiredArgsConstructor;
-import paxel.dedup.data.RepoFile;
+import paxel.dedup.model.RepoFile;
+import paxel.dedup.model.Statistics;
+import paxel.dedup.model.errors.WriteError;
+import paxel.dedup.model.errors.CloseError;
+import paxel.dedup.model.errors.LoadError;
 import paxel.lib.Result;
 
 import java.io.BufferedOutputStream;
