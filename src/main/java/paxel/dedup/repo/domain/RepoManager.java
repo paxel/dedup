@@ -1,5 +1,6 @@
 package paxel.dedup.repo.domain;
 
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
@@ -90,7 +91,8 @@ public class RepoManager {
         if (!Files.exists(absolutePath)) {
             return Result.ok(false);
         }
-        Path relativize = absolutePath.relativize(Paths.get(repo.absolutePath()));
+        Path relativize = Paths.get(repo.absolutePath()).relativize(absolutePath);
+        //       Path relativize = absolutePath.relativize(Paths.get(repo.absolutePath()));
         RepoFile oldRepoFile = getByPath(relativize.toString());
         Result<Long, LoadError> sizeResult = getSize(absolutePath);
         if (sizeResult.hasFailed())

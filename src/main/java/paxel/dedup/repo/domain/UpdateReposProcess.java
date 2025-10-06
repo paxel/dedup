@@ -4,10 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import paxel.dedup.config.DedupConfig;
 import paxel.dedup.config.DedupConfigFactory;
 import paxel.dedup.model.Repo;
-import paxel.dedup.model.errors.CreateConfigError;
-import paxel.dedup.model.errors.OpenRepoError;
-import paxel.dedup.model.errors.UpdateRepoError;
-import paxel.dedup.model.errors.WriteError;
+import paxel.dedup.model.Statistics;
+import paxel.dedup.model.errors.*;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -64,12 +62,17 @@ public class UpdateReposProcess {
     }
 
     private Result<Long, UpdateRepoError> updateRepo(RepoManager repo) {
+        Result<Statistics, LoadError> load = repo.load();
+        if (load.hasFailed())
+            return load.mapError(f -> new UpdateRepoError(repo.getRepoDir(), load.error().ioException()));
         AtomicLong added = new AtomicLong();
         try (Stream<Path> x = Files.walk(Paths.get(repo.getRepo().absolutePath()))) {
             x.forEach(absolutePath -> {
-                Result<Boolean, WriteError> add = repo.add(absolutePath);
-                if (add.isSuccess() && add.value() == Boolean.TRUE)
-                    added.incrementAndGet();
+                if (Files.isRegularFile(absolutePath)) {
+                    Result<Boolean, WriteError> add = repo.add(absolutePath);
+                    if (add.isSuccess() && add.value() == Boolean.TRUE)
+                        added.incrementAndGet();
+                }
             });
         } catch (IOException e) {
             return Result.err(UpdateRepoError.ioException(repo.getRepoDir(), e));

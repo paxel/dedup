@@ -114,12 +114,13 @@ public class IndexManager {
     public Result<Void, WriteError> add(RepoFile repoFile) {
         try {
 
-            BufferedOutputStream outputStream = out.getAndUpdate(o -> {
+            BufferedOutputStream outputStream = out.updateAndGet(o -> {
                 if (o != null)
                     return o;
                 else {
                     try {
-                        return new BufferedOutputStream(new GZIPOutputStream(Files.newOutputStream(indexFile, StandardOpenOption.APPEND)));
+                //        return new BufferedOutputStream(new GZIPOutputStream(Files.newOutputStream(indexFile, StandardOpenOption.APPEND)));
+                        return new BufferedOutputStream(Files.newOutputStream(indexFile, StandardOpenOption.APPEND));
                     } catch (IOException e) {
                         throw new TunneledIoException(e);
                     }
