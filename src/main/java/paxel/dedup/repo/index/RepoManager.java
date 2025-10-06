@@ -90,27 +90,43 @@ public class RepoManager {
         if (lastModifiedResult.hasFailed())
             return sizeResult.mapError(f -> new WriteError(null, f.path(), f.ioException()));
 
-        Long value = sizeResult.value();
+        Long size = sizeResult.value();
         FileTime fileTime = lastModifiedResult.value();
 
         if (oldRepoFile != null) {
-            if (oldRepoFile.size() == value) {
+            if (oldRepoFile.size() == size) {
                 if (fileTime.toMillis() <= oldRepoFile.lastModified()) {
                     return Result.ok(false);
                 }
             }
         }
 
+
+        Result<String, LoadError> hashResult = calchHash(absolutePath, size);
+        if (hashResult.hasFailed())
+            return hashResult.mapError(l -> new WriteError(null, absolutePath, l.ioException()));
+
         RepoFile repoFile = RepoFile.builder()
-                .size(value)
+                .size(size)
                 .relativePath(relativize.toString())
                 .lastModified(fileTime.toMillis())
-                .hash(createHash(absolutePath))
+                .hash(hashResult.value())
                 .build();
 
-        return indices.get((int) (value % repo.indices()))
+        return indices.get((int) (size % repo.indices()))
                 .add(repoFile)
                 .map(f -> true, Function.identity());
+    }
+
+    private Result<String, LoadError> calchHash(Path absolutePath, long size) {
+        if (size < 20) {
+            try {
+                return Result.ok(toHexString(Files.readAllBytes(absolutePath)));
+            } catch (IOException e) {
+                return Result.err(new LoadError(absolutePath, e, e.toString()));
+            }
+        }
+        return calculateSHA1(absolutePath);
     }
 
     private Result<FileTime, LoadError> getLastModifiedTime(Path absolutePath) {
@@ -133,7 +149,7 @@ public class RepoManager {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-1");
             byte[] buffer = new byte[8192];
-            try (InputStream in = Files.newInputStream(path)) {
+            try (InputStream fis = Files.newInputStream(path)) {
                 int bytesRead;
                 while ((bytesRead = fis.read(buffer)) != -1) {
                     digest.update(buffer, 0, bytesRead);
@@ -141,18 +157,23 @@ public class RepoManager {
             }
             byte[] hashBytes = digest.digest();
 
-            // Konvertiert das Hash-Array in einen hexadezimalen String
-            StringBuilder hexString = new StringBuilder();
-            for (byte b : hashBytes) {
-                String hex = Integer.toHexString(0xff & b);
-                if (hex.length() == 1) {
-                    hexString.append('0');
-                }
-                hexString.append(hex);
-            }
-            return hexString.toString();
+            String hexString = toHexString(hashBytes);
+            return Result.ok(hexString);
         } catch (Exception e) {
             return Result.err(new LoadError(path, e, e.toString()));
         }
+    }
+
+    private String toHexString(byte[] hashBytes) {
+        // Konvertiert das Hash-Array in einen hexadezimalen String
+        StringBuilder hexString = new StringBuilder();
+        for (byte b : hashBytes) {
+            String hex = Integer.toHexString(0xff & b);
+            if (hex.length() == 1) {
+                hexString.append('0');
+            }
+            hexString.append(hex);
+        }
+        return hexString.toString();
     }
 }
