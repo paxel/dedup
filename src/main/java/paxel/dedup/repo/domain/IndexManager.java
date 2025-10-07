@@ -3,11 +3,12 @@ package paxel.dedup.repo.domain;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import lombok.RequiredArgsConstructor;
 import paxel.dedup.model.RepoFile;
 import paxel.dedup.model.Statistics;
-import paxel.dedup.model.errors.WriteError;
 import paxel.dedup.model.errors.CloseError;
 import paxel.dedup.model.errors.LoadError;
+import paxel.dedup.model.errors.WriteError;
 import paxel.lib.Result;
 
 import java.io.BufferedOutputStream;
@@ -23,8 +24,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.zip.GZIPOutputStream;
 
+@RequiredArgsConstructor
 public class IndexManager {
     public static final String FILES = "files";
     public static final String MISSING = "missing";
@@ -32,18 +33,17 @@ public class IndexManager {
     public static final String LOAD = "load";
     public static final String LINES = "Lines";
     public static final String CHANGES = "Changes";
+
+    private final Map<String, RepoFile> paths = new ConcurrentHashMap<>();
+    private final AtomicReference<BufferedOutputStream> out = new AtomicReference<>();
+    private final Map<String, Set<String>> hashes = new ConcurrentHashMap<>();
+
+
     private final Path indexFile;
     private final ObjectReader objectReader;
     private final ObjectWriter objectWriter;
-    private final Map<String, Set<String>> hashes = new ConcurrentHashMap<>();
-    private final Map<String, RepoFile> paths = new ConcurrentHashMap<>();
-    private final AtomicReference<BufferedOutputStream> out = new AtomicReference<>();
+    private final boolean verbose;
 
-    public IndexManager(Path indexFile, ObjectReader objectReader, ObjectWriter objectWriter) {
-        this.indexFile = indexFile;
-        this.objectReader = objectReader;
-        this.objectWriter = objectWriter;
-    }
 
     public Result<Statistics, LoadError> load() {
         // MVP: we load everything to memory
@@ -119,7 +119,7 @@ public class IndexManager {
                     return o;
                 else {
                     try {
-                //        return new BufferedOutputStream(new GZIPOutputStream(Files.newOutputStream(indexFile, StandardOpenOption.APPEND)));
+                        //        return new BufferedOutputStream(new GZIPOutputStream(Files.newOutputStream(indexFile, StandardOpenOption.APPEND)));
                         return new BufferedOutputStream(Files.newOutputStream(indexFile, StandardOpenOption.APPEND));
                     } catch (IOException e) {
                         throw new TunneledIoException(e);

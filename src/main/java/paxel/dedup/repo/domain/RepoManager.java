@@ -14,7 +14,9 @@ import paxel.dedup.model.utils.BinaryFormatter;
 import paxel.dedup.model.utils.FileHasher;
 import paxel.dedup.model.utils.HexFormatter;
 import paxel.dedup.model.utils.Sha1Hasher;
+import paxel.dedup.parameter.CliParameter;
 import paxel.lib.Result;
+import picocli.CommandLine;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -31,14 +33,16 @@ public class RepoManager {
     private final Map<Integer, IndexManager> indices = new ConcurrentHashMap<>();
     private final ObjectReader objectReader;
     private final ObjectWriter objectWriter;
+    private final CliParameter cliParameter;
     @Getter
     private final Path repoDir;
     private final BinaryFormatter binaryFormatter = new HexFormatter();
     private final FileHasher fileHasher = new Sha1Hasher(binaryFormatter);
 
 
-    public RepoManager(Repo repo, DedupConfig dedupConfig, ObjectMapper objectMapper) {
+    public RepoManager(Repo repo, DedupConfig dedupConfig, ObjectMapper objectMapper, CliParameter cliParameter) {
         this.repo = repo;
+        this.cliParameter = cliParameter;
         objectReader = objectMapper.readerFor(RepoFile.class);
         objectWriter = objectMapper.writerFor(RepoFile.class);
         repoDir = dedupConfig.getRepoDir().resolve(repo.name());
@@ -55,7 +59,7 @@ public class RepoManager {
         Statistics sum = new Statistics(repoDir.toString());
 
         for (int index = 0; index < repo.indices(); index++) {
-            IndexManager indexManager = new IndexManager(repoDir.resolve(index + ".idx"), objectReader, objectWriter);
+            IndexManager indexManager = new IndexManager(repoDir.resolve(index + ".idx"), objectReader, objectWriter, cliParameter.isVerbose());
             Result<Statistics, LoadError> load = indexManager.load();
             if (load.hasFailed()) {
                 return load;

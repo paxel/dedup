@@ -6,6 +6,7 @@ import paxel.dedup.config.DedupConfigFactory;
 import paxel.dedup.model.Repo;
 import paxel.dedup.model.Statistics;
 import paxel.dedup.model.errors.*;
+import paxel.dedup.parameter.CliParameter;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -19,7 +20,7 @@ import java.util.stream.Stream;
 public class UpdateReposProcess {
 
 
-    public int update(List<String> names, boolean all) {
+    public int update(List<String> names, boolean all, CliParameter cliParameter) {
         // TODO: use configured config relativePath
         Result<DedupConfig, CreateConfigError> configResult = DedupConfigFactory.create();
 
@@ -45,7 +46,7 @@ public class UpdateReposProcess {
                 return -3;
             }
             for (Repo repo : lsResult.value()) {
-                Result<Long, UpdateRepoError> result = updateRepo(new RepoManager(repo, dedupConfig, objectMapper));
+                Result<Long, UpdateRepoError> result = updateRepo(new RepoManager(repo, dedupConfig, objectMapper, cliParameter));
                 System.out.println("Updated " + repo + " " + result);
             }
             return 0;
@@ -54,7 +55,7 @@ public class UpdateReposProcess {
         for (String name : names) {
             Result<Repo, OpenRepoError> getRepoResult = dedupConfig.getRepo(name);
             if (getRepoResult.isSuccess()) {
-                Result<Long, UpdateRepoError> result = updateRepo(new RepoManager(getRepoResult.value(), dedupConfig, objectMapper));
+                Result<Long, UpdateRepoError> result = updateRepo(new RepoManager(getRepoResult.value(), dedupConfig, objectMapper, cliParameter));
                 System.out.println("Updated " + name + " " + result);
             }
         }

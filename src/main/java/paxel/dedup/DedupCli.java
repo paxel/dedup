@@ -5,6 +5,7 @@ import paxel.dedup.model.errors.CreateConfigError;
 import paxel.dedup.config.DedupConfig;
 import paxel.dedup.config.DedupConfigFactory;
 import paxel.dedup.parameter.CliParameter;
+import paxel.dedup.parameter.RepoCommand;
 import paxel.lib.Result;
 import picocli.CommandLine;
 
@@ -14,7 +15,9 @@ public class DedupCli {
 
         Result<DedupConfig, CreateConfigError> result = DedupConfigFactory.create();
 
-        CommandLine commandLine = new CommandLine(new CliParameter());
+        CliParameter command = new CliParameter();
+        CommandLine commandLine = new CommandLine(command)
+                .addSubcommand(new RepoCommand(command));
 
 
         int exitCode = commandLine.execute(args);

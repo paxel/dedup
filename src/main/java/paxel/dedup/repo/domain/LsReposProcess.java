@@ -4,6 +4,7 @@ import paxel.dedup.config.*;
 import paxel.dedup.model.Repo;
 import paxel.dedup.model.errors.CreateConfigError;
 import paxel.dedup.model.errors.OpenRepoError;
+import paxel.dedup.parameter.CliParameter;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -11,7 +12,7 @@ import java.util.Comparator;
 import java.util.List;
 
 public class LsReposProcess {
-    public int list() {
+    public int list(CliParameter cliParameter) {
         // TODO: use configured config relativePath
         Result<DedupConfig, CreateConfigError> configResult = DedupConfigFactory.create();
 

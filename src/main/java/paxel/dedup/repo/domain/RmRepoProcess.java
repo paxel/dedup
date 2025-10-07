@@ -4,13 +4,14 @@ import paxel.dedup.model.errors.CreateConfigError;
 import paxel.dedup.config.DedupConfig;
 import paxel.dedup.config.DedupConfigFactory;
 import paxel.dedup.model.errors.DeleteRepoError;
+import paxel.dedup.parameter.CliParameter;
 import paxel.lib.Result;
 
 import java.io.IOException;
 import java.util.List;
 
 public class RmRepoProcess {
-    public int delete(String name) {
+    public int delete(String name, CliParameter cliParameter) {
         Result<DedupConfig, CreateConfigError> configResult = DedupConfigFactory.create();
 
         if (configResult.hasFailed()) {
