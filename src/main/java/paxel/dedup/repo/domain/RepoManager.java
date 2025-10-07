@@ -1,12 +1,13 @@
 package paxel.dedup.repo.domain;
 
-import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import lombok.Getter;
 import paxel.dedup.config.DedupConfig;
-import paxel.dedup.model.*;
+import paxel.dedup.model.Repo;
+import paxel.dedup.model.RepoFile;
+import paxel.dedup.model.Statistics;
 import paxel.dedup.model.errors.CloseError;
 import paxel.dedup.model.errors.LoadError;
 import paxel.dedup.model.errors.WriteError;
@@ -16,7 +17,6 @@ import paxel.dedup.model.utils.HexFormatter;
 import paxel.dedup.model.utils.Sha1Hasher;
 import paxel.dedup.parameter.CliParameter;
 import paxel.lib.Result;
-import picocli.CommandLine;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -26,6 +26,7 @@ import java.nio.file.attribute.FileTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 public class RepoManager {
     @Getter
@@ -47,6 +48,7 @@ public class RepoManager {
         objectWriter = objectMapper.writerFor(RepoFile.class);
         repoDir = dedupConfig.getRepoDir().resolve(repo.name());
     }
+
 
     public Result<Statistics, LoadError> load() {
         for (IndexManager index : indices.values()) {
@@ -77,6 +79,11 @@ public class RepoManager {
         return Result.ok(sum);
     }
 
+    public Stream<RepoFile> stream() {
+        return indices.values().stream().flatMap(IndexManager::stream);
+    }
+
+
     private static String nameIndexFile(int index) {
         return index + ".idx";
     }
@@ -101,7 +108,13 @@ public class RepoManager {
         return list.getLast();
     }
 
-    public Result<Boolean, WriteError> add(Path absolutePath) {
+    public Result<Boolean, WriteError> addRepoFile(RepoFile repoFile) {
+        return indices.get((int) (repoFile.size() % repo.indices()))
+                .add(repoFile)
+                .map(f -> true, Function.identity());
+    }
+
+    public Result<Boolean, WriteError> addPath(Path absolutePath) {
         if (!Files.exists(absolutePath)) {
             return Result.ok(false);
         }
@@ -151,9 +164,7 @@ public class RepoManager {
                 .hash(hashResult.value())
                 .build();
 
-        return indices.get((int) (size % repo.indices()))
-                .add(repoFile)
-                .map(f -> true, Function.identity());
+        return addRepoFile(repoFile);
     }
 
     private Result<String, LoadError> calcHash(Path absolutePath, long size) {

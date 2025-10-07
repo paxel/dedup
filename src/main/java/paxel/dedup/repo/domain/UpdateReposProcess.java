@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import paxel.dedup.config.DedupConfig;
 import paxel.dedup.config.DedupConfigFactory;
 import paxel.dedup.model.Repo;
+import paxel.dedup.model.RepoFile;
 import paxel.dedup.model.Statistics;
 import paxel.dedup.model.errors.*;
 import paxel.dedup.parameter.CliParameter;
@@ -14,7 +15,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 
@@ -83,12 +87,16 @@ public class UpdateReposProcess {
             load.value().forTimer((a, b) -> System.out.println(a + ": " + b));
             System.out.println("--");
         }
+        Map<Path, RepoFile> collect = repo.stream()
+                .filter(r -> !r.missing())
+                .collect(Collectors.toMap(r -> Paths.get(repo.getRepo().absolutePath(), r.relativePath()), Function.identity()));
 
         AtomicLong added = new AtomicLong();
         try (Stream<Path> path = Files.walk(Paths.get(repo.getRepo().absolutePath()))) {
             path.forEach(absolutePath -> {
                 if (Files.isRegularFile(absolutePath)) {
-                    Result<Boolean, WriteError> add = repo.add(absolutePath);
+                    collect.remove(absolutePath);
+                    Result<Boolean, WriteError> add = repo.addPath(absolutePath);
                     if (add.isSuccess() && add.value() == Boolean.TRUE)
                         added.incrementAndGet();
                     else {
@@ -102,6 +110,9 @@ public class UpdateReposProcess {
             });
         } catch (IOException e) {
             return Result.err(UpdateRepoError.ioException(repo.getRepoDir(), e));
+        }
+        for (RepoFile value : collect.values()) {
+            repo.addRepoFile(value.withMissing(true));
         }
         return Result.ok(added.get());
     }

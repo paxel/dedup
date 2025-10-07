@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @RequiredArgsConstructor
 public class IndexManager {
@@ -45,6 +46,9 @@ public class IndexManager {
     private final ObjectWriter objectWriter;
     private final CliParameter cliParameter;
 
+    public Stream<RepoFile> stream() {
+        return paths.values().stream();
+    }
 
     public Result<Statistics, LoadError> load() {
         // MVP: we load everything to memory
@@ -56,7 +60,7 @@ public class IndexManager {
                 if (s == null)
                     break;
                 statistics.inc(LINES);
-                RepoFile repoFile = objectReader.readValue(s, RepoFile.class);
+                RepoFile repoFile = readValid(s);
                 if (repoFile != null) {
                     // the same hash can exist as multiple paths. so we store the paths per hash
                     hashes.computeIfAbsent(repoFile.hash(), h -> new HashSet<>()).add(repoFile.relativePath());
@@ -96,6 +100,19 @@ public class IndexManager {
         } catch (IOException e) {
             return Result.err(LoadError.ioException(indexFile, e));
         }
+    }
+
+    private RepoFile readValid(String s) throws IOException {
+        RepoFile repoFile = objectReader.readValue(s, RepoFile.class);
+        if (repoFile.size() == null)
+            repoFile = repoFile.withSize(0L);
+        if (repoFile.meta() == null)
+            repoFile = repoFile.withMeta("");
+        if (repoFile.hash() == null)
+            repoFile = repoFile.withHash("");
+        if (repoFile.relativePath() == null)
+            repoFile = repoFile.withRelativePath(".");
+        return repoFile;
     }
 
     public List<RepoFile> getByHash(String hash) {
