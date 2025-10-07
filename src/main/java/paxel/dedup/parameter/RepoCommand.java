@@ -1,5 +1,6 @@
 package paxel.dedup.parameter;
 
+import lombok.RequiredArgsConstructor;
 import paxel.dedup.repo.domain.CreateRepoProcess;
 import paxel.dedup.repo.domain.LsReposProcess;
 import paxel.dedup.repo.domain.RmRepoProcess;
@@ -11,13 +12,11 @@ import picocli.CommandLine.Parameters;
 import java.util.List;
 
 @Command(name = "repo", description = "manipulates repos")
+@RequiredArgsConstructor
 public class RepoCommand {
 
     private final CliParameter cliParameter;
 
-    public RepoCommand(CliParameter cliParameter) {
-        this.cliParameter = cliParameter;
-    }
 
     @Command(name = "create", description = "Creates a non existing repo")
     public int create(

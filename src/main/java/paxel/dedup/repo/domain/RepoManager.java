@@ -59,16 +59,26 @@ public class RepoManager {
         Statistics sum = new Statistics(repoDir.toString());
 
         for (int index = 0; index < repo.indices(); index++) {
-            IndexManager indexManager = new IndexManager(repoDir.resolve(index + ".idx"), objectReader, objectWriter, cliParameter.isVerbose());
+            IndexManager indexManager = new IndexManager(repoDir.resolve(nameIndexFile(index)), objectReader, objectWriter, cliParameter);
             Result<Statistics, LoadError> load = indexManager.load();
             if (load.hasFailed()) {
                 return load;
+            }
+            if (cliParameter.isVerbose()) {
+                System.out.println("loaded: " + nameIndexFile(index));
+                load.value().forCounter((a, b) -> System.out.println(a + ": " + b));
+                load.value().forTimer((a, b) -> System.out.println(a + ": " + b));
+                System.out.println("--");
             }
             sum.add(load.value());
             indices.put(index, indexManager);
         }
 
         return Result.ok(sum);
+    }
+
+    private static String nameIndexFile(int index) {
+        return index + ".idx";
     }
 
     public List<RepoFile> getByHash(String hash) {
@@ -96,26 +106,39 @@ public class RepoManager {
             return Result.ok(false);
         }
         Path relativize = Paths.get(repo.absolutePath()).relativize(absolutePath);
-        //       Path relativize = absolutePath.relativize(Paths.get(repo.absolutePath()));
         RepoFile oldRepoFile = getByPath(relativize.toString());
+
         Result<Long, LoadError> sizeResult = getSize(absolutePath);
-        if (sizeResult.hasFailed())
+        if (sizeResult.hasFailed()) {
             return sizeResult.mapError(f -> new WriteError(null, f.path(), f.ioException()));
+        }
         Result<FileTime, LoadError> lastModifiedResult = getLastModifiedTime(absolutePath);
-        if (lastModifiedResult.hasFailed())
+        if (lastModifiedResult.hasFailed()) {
             return sizeResult.mapError(f -> new WriteError(null, f.path(), f.ioException()));
+        }
 
         Long size = sizeResult.value();
         FileTime fileTime = lastModifiedResult.value();
 
         if (oldRepoFile != null) {
-            if (oldRepoFile.size() == size) {
+            if (Objects.equals(oldRepoFile.size(), size)) {
                 if (fileTime.toMillis() <= oldRepoFile.lastModified()) {
                     return Result.ok(false);
+                } else {
+                    if (cliParameter.isVerbose()) {
+                        System.out.println("different last modified for " + relativize + " " + fileTime.toMillis() + " > " + oldRepoFile.lastModified());
+                    }
+                }
+            } else {
+                if (cliParameter.isVerbose()) {
+                    System.out.println("different sizes for " + relativize + " " + size + " != " + oldRepoFile.size());
                 }
             }
+        } else {
+            if (cliParameter.isVerbose()) {
+                System.out.println("No old file found for " + relativize);
+            }
         }
-
 
         Result<String, LoadError> hashResult = calcHash(absolutePath, size);
         if (hashResult.hasFailed())

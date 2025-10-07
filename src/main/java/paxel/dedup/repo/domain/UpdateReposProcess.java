@@ -17,10 +17,14 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Stream;
 
+
 public class UpdateReposProcess {
 
 
+    private CliParameter cliParameter;
+
     public int update(List<String> names, boolean all, CliParameter cliParameter) {
+        this.cliParameter = cliParameter;
         // TODO: use configured config relativePath
         Result<DedupConfig, CreateConfigError> configResult = DedupConfigFactory.create();
 
@@ -47,7 +51,14 @@ public class UpdateReposProcess {
             }
             for (Repo repo : lsResult.value()) {
                 Result<Long, UpdateRepoError> result = updateRepo(new RepoManager(repo, dedupConfig, objectMapper, cliParameter));
-                System.out.println("Updated " + repo + " " + result);
+                if (cliParameter.isVerbose()) {
+                    if (result.isSuccess()) {
+                        System.out.println("Updated " + repo + " " + result.value());
+                    } else {
+                        System.out.println("Updated " + repo + " " + result.error());
+                    }
+                }
+
             }
             return 0;
         }
@@ -66,13 +77,27 @@ public class UpdateReposProcess {
         Result<Statistics, LoadError> load = repo.load();
         if (load.hasFailed())
             return load.mapError(f -> new UpdateRepoError(repo.getRepoDir(), load.error().ioException()));
+        if (cliParameter.isVerbose()) {
+            System.out.println("loaded: " + repo.getRepo().name());
+            load.value().forCounter((a, b) -> System.out.println(a + ": " + b));
+            load.value().forTimer((a, b) -> System.out.println(a + ": " + b));
+            System.out.println("--");
+        }
+
         AtomicLong added = new AtomicLong();
-        try (Stream<Path> x = Files.walk(Paths.get(repo.getRepo().absolutePath()))) {
-            x.forEach(absolutePath -> {
+        try (Stream<Path> path = Files.walk(Paths.get(repo.getRepo().absolutePath()))) {
+            path.forEach(absolutePath -> {
                 if (Files.isRegularFile(absolutePath)) {
                     Result<Boolean, WriteError> add = repo.add(absolutePath);
                     if (add.isSuccess() && add.value() == Boolean.TRUE)
                         added.incrementAndGet();
+                    else {
+                        if (cliParameter.isVerbose())
+                            System.out.println("Not added " + absolutePath);
+                    }
+                } else {
+                    if (cliParameter.isVerbose())
+                        System.out.println("Skipping " + absolutePath);
                 }
             });
         } catch (IOException e) {
