@@ -1,6 +1,9 @@
 package paxel.dedup.repo.domain;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
+import com.googlecode.lanterna.terminal.Terminal;
+import com.googlecode.lanterna.terminal.virtual.DefaultVirtualTerminal;
 import paxel.dedup.config.DedupConfig;
 import paxel.dedup.config.DedupConfigFactory;
 import paxel.dedup.model.Repo;
@@ -8,6 +11,7 @@ import paxel.dedup.model.RepoFile;
 import paxel.dedup.model.Statistics;
 import paxel.dedup.model.errors.*;
 import paxel.dedup.parameter.CliParameter;
+import paxel.dedup.terminal.TerminalProgress;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -23,12 +27,12 @@ import java.util.stream.Stream;
 
 
 public class UpdateReposProcess {
-
-
+    private TerminalProgress terminalProgress;
     private CliParameter cliParameter;
 
     public int update(List<String> names, boolean all, CliParameter cliParameter) {
         this.cliParameter = cliParameter;
+
         Result<DedupConfig, CreateConfigError> configResult = DedupConfigFactory.create();
         if (configResult.hasFailed()) {
             new DedupConfigErrorHandler().dump(configResult.error());
@@ -42,21 +46,12 @@ public class UpdateReposProcess {
             if (lsResult.hasFailed()) {
                 IOException ioException = lsResult.error().ioException();
                 if (ioException != null) {
-                    System.err.println(lsResult.error().path() + " ls failed");
                     ioException.printStackTrace();
                 }
                 return -3;
             }
             for (Repo repo : lsResult.value()) {
-                Result<Long, UpdateRepoError> result = updateRepo(new RepoManager(repo, dedupConfig, objectMapper, cliParameter));
-                if (cliParameter.isVerbose()) {
-                    if (result.isSuccess()) {
-                        System.out.println("Updated " + repo + " " + result.value());
-                    } else {
-                        System.out.println("Updated " + repo + " " + result.error());
-                    }
-                }
-
+                updateRepo(new RepoManager(repo, dedupConfig, objectMapper, cliParameter));
             }
             return 0;
         }
@@ -64,52 +59,54 @@ public class UpdateReposProcess {
         for (String name : names) {
             Result<Repo, OpenRepoError> getRepoResult = dedupConfig.getRepo(name);
             if (getRepoResult.isSuccess()) {
-                Result<Long, UpdateRepoError> result = updateRepo(new RepoManager(getRepoResult.value(), dedupConfig, objectMapper, cliParameter));
-                System.out.println("Updated " + name + " " + result);
+                Result<Statistics, UpdateRepoError> statisticsUpdateRepoErrorResult = updateRepo(new RepoManager(getRepoResult.value(), dedupConfig, objectMapper, cliParameter));
             }
         }
         return 0;
     }
 
-    private Result<Long, UpdateRepoError> updateRepo(RepoManager repo) {
+
+    private Result<Statistics, UpdateRepoError> updateRepo(RepoManager repo) {
         Result<Statistics, LoadError> load = repo.load();
-        if (load.hasFailed())
+        if (load.hasFailed()) {
             return load.mapError(f -> new UpdateRepoError(repo.getRepoDir(), load.error().ioException()));
-        if (cliParameter.isVerbose()) {
-            System.out.println("loaded: " + repo.getRepo().name());
-            load.value().forCounter((a, b) -> System.out.println(a + ": " + b));
-            load.value().forTimer((a, b) -> System.out.println(a + ": " + b));
-            System.out.println("--");
         }
-        Map<Path, RepoFile> collect = repo.stream()
+        Map<Path, RepoFile> remainingPaths = repo.stream()
                 .filter(r -> !r.missing())
                 .collect(Collectors.toMap(r -> Paths.get(repo.getRepo().absolutePath(), r.relativePath()), Function.identity()));
-
-        AtomicLong added = new AtomicLong();
-        try (Stream<Path> path = Files.walk(Paths.get(repo.getRepo().absolutePath()))) {
-            path.forEach(absolutePath -> {
-                if (Files.isRegularFile(absolutePath)) {
-                    collect.remove(absolutePath);
-                    Result<Boolean, WriteError> add = repo.addPath(absolutePath);
-                    if (add.isSuccess() && add.value() == Boolean.TRUE)
-                        added.incrementAndGet();
-                    else {
-                        if (cliParameter.isVerbose())
-                            System.out.println("Not added " + absolutePath);
+        terminalProgress = TerminalProgress.init(cliParameter.isVerbose());
+        try {
+            terminalProgress.put(repo.getRepo().name(), repo.getRepo().absolutePath());
+            Statistics statistics = new Statistics(repo.getRepo().absolutePath());
+            AtomicLong dirs = new AtomicLong();
+            AtomicLong files = new AtomicLong();
+            AtomicLong news = new AtomicLong();
+            try (Stream<Path> path = Files.walk(Paths.get(repo.getRepo().absolutePath()))) {
+                path.forEach(absolutePath -> {
+                    if (Files.isRegularFile(absolutePath)) {
+                        remainingPaths.remove(absolutePath);
+                        terminalProgress.put("files", "" + files.incrementAndGet());
+                        terminalProgress.put("remaining", "" + remainingPaths.size());
+                        Result<Boolean, WriteError> add = repo.addPath(absolutePath);
+                        if (add.isSuccess() && add.value() == Boolean.TRUE) {
+                            statistics.inc("added");
+                            terminalProgress.put("new/modified", "" + news.incrementAndGet());
+                        }
+                    } else {
+                        terminalProgress.put("directories", "" + dirs.incrementAndGet());
                     }
-                } else {
-                    if (cliParameter.isVerbose())
-                        System.out.println("Skipping " + absolutePath);
-                }
-            });
-        } catch (IOException e) {
-            return Result.err(UpdateRepoError.ioException(repo.getRepoDir(), e));
+                });
+            } catch (IOException e) {
+                return Result.err(UpdateRepoError.ioException(repo.getRepoDir(), e));
+            }
+            statistics.set("deleted", remainingPaths.size());
+            terminalProgress.put("deleted", "" + remainingPaths.size());
+            for (RepoFile value : remainingPaths.values()) {
+                repo.addRepoFile(value.withMissing(true));
+            }
+            return Result.ok(statistics);
+        } finally {
+            terminalProgress.deactivate();
         }
-        for (RepoFile value : collect.values()) {
-            repo.addRepoFile(value.withMissing(true));
-        }
-        return Result.ok(added.get());
     }
-
-
 }

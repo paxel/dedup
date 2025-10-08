@@ -66,12 +66,6 @@ public class RepoManager {
             if (load.hasFailed()) {
                 return load;
             }
-            if (cliParameter.isVerbose()) {
-                System.out.println("loaded: " + nameIndexFile(index));
-                load.value().forCounter((a, b) -> System.out.println(a + ": " + b));
-                load.value().forTimer((a, b) -> System.out.println(a + ": " + b));
-                System.out.println("--");
-            }
             sum.add(load.value());
             indices.put(index, indexManager);
         }
