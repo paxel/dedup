@@ -29,15 +29,9 @@ public class UpdateReposProcess {
 
     public int update(List<String> names, boolean all, CliParameter cliParameter) {
         this.cliParameter = cliParameter;
-        // TODO: use configured config relativePath
         Result<DedupConfig, CreateConfigError> configResult = DedupConfigFactory.create();
-
         if (configResult.hasFailed()) {
-            IOException ioException = configResult.error().ioException();
-            if (ioException != null) {
-                System.err.println(configResult.error().path() + " not a valid config relativePath");
-                ioException.printStackTrace();
-            }
+            new DedupConfigErrorHandler().dump(configResult.error());
             return -1;
         }
         ObjectMapper objectMapper = new ObjectMapper();

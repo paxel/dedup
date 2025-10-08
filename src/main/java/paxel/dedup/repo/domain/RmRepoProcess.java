@@ -13,13 +13,8 @@ import java.util.List;
 public class RmRepoProcess {
     public int delete(String name, CliParameter cliParameter) {
         Result<DedupConfig, CreateConfigError> configResult = DedupConfigFactory.create();
-
         if (configResult.hasFailed()) {
-            IOException ioException = configResult.error().ioException();
-            if (ioException != null) {
-                System.err.println(configResult.error().path() + " not a valid config relativePath");
-                ioException.printStackTrace();
-            }
+            new DedupConfigErrorHandler().dump(configResult.error());
             return -1;
         }
 

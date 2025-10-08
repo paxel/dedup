@@ -14,13 +14,8 @@ public class CreateRepoProcess {
     public int create(String name, String path, int indices, CliParameter cliParameter) {
         // TODO: use configured config relativePath
         Result<DedupConfig, CreateConfigError> configResult = DedupConfigFactory.create();
-
         if (configResult.hasFailed()) {
-            IOException ioException = configResult.error().ioException();
-            if (ioException != null) {
-                System.err.println(configResult.error().path() + " not a valid config relativePath");
-                ioException.printStackTrace();
-            }
+           new DedupConfigErrorHandler().dump(configResult.error());
             return -1;
         }
         DedupConfig dedupConfig = configResult.value();

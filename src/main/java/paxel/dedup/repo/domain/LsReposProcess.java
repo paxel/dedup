@@ -15,15 +15,11 @@ public class LsReposProcess {
     public int list(CliParameter cliParameter) {
         // TODO: use configured config relativePath
         Result<DedupConfig, CreateConfigError> configResult = DedupConfigFactory.create();
-
         if (configResult.hasFailed()) {
-            IOException ioException = configResult.error().ioException();
-            if (ioException != null) {
-                System.err.println(configResult.error().path() + " not a valid config relativePath");
-                ioException.printStackTrace();
-            }
+            new DedupConfigErrorHandler().dump(configResult.error());
             return -1;
         }
+
         DedupConfig dedupConfig = configResult.value();
         Result<List<Repo>, OpenRepoError> getReposResult = dedupConfig.getRepos();
         if (!getReposResult.isSuccess()) {
