@@ -29,7 +29,6 @@ public class CreateRepoProcess {
             return -2;
         }
 
-        System.out.println("Created " + createResult.value());
         return 0;
 
     }

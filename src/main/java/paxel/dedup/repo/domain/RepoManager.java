@@ -131,19 +131,7 @@ public class RepoManager {
             if (Objects.equals(oldRepoFile.size(), size)) {
                 if (fileTime.toMillis() <= oldRepoFile.lastModified()) {
                     return Result.ok(false);
-                } else {
-                    if (cliParameter.isVerbose()) {
-                        System.out.println("different last modified for " + relativize + " " + fileTime.toMillis() + " > " + oldRepoFile.lastModified());
-                    }
                 }
-            } else {
-                if (cliParameter.isVerbose()) {
-                    System.out.println("different sizes for " + relativize + " " + size + " != " + oldRepoFile.size());
-                }
-            }
-        } else {
-            if (cliParameter.isVerbose()) {
-                System.out.println("No old file found for " + relativize);
             }
         }
 

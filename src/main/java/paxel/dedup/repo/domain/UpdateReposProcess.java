@@ -1,9 +1,6 @@
 package paxel.dedup.repo.domain;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
-import com.googlecode.lanterna.terminal.Terminal;
-import com.googlecode.lanterna.terminal.virtual.DefaultVirtualTerminal;
 import paxel.dedup.config.DedupConfig;
 import paxel.dedup.config.DedupConfigFactory;
 import paxel.dedup.model.Repo;
@@ -11,6 +8,7 @@ import paxel.dedup.model.RepoFile;
 import paxel.dedup.model.Statistics;
 import paxel.dedup.model.errors.*;
 import paxel.dedup.parameter.CliParameter;
+import paxel.dedup.terminal.StatisticPrinter;
 import paxel.dedup.terminal.TerminalProgress;
 import paxel.lib.Result;
 
@@ -74,9 +72,10 @@ public class UpdateReposProcess {
         Map<Path, RepoFile> remainingPaths = repo.stream()
                 .filter(r -> !r.missing())
                 .collect(Collectors.toMap(r -> Paths.get(repo.getRepo().absolutePath(), r.relativePath()), Function.identity()));
-        terminalProgress = TerminalProgress.init(cliParameter.isVerbose());
+        StatisticPrinter progressPrinter = new StatisticPrinter();
+        terminalProgress = TerminalProgress.init(progressPrinter);
         try {
-            terminalProgress.put(repo.getRepo().name(), repo.getRepo().absolutePath());
+            progressPrinter.put(repo.getRepo().name(), repo.getRepo().absolutePath());
             Statistics statistics = new Statistics(repo.getRepo().absolutePath());
             AtomicLong dirs = new AtomicLong();
             AtomicLong files = new AtomicLong();
@@ -85,22 +84,22 @@ public class UpdateReposProcess {
                 path.forEach(absolutePath -> {
                     if (Files.isRegularFile(absolutePath)) {
                         remainingPaths.remove(absolutePath);
-                        terminalProgress.put("files", "" + files.incrementAndGet());
-                        terminalProgress.put("remaining", "" + remainingPaths.size());
+                        progressPrinter.put("files", "" + files.incrementAndGet());
+                        progressPrinter.put("remaining", "" + remainingPaths.size());
                         Result<Boolean, WriteError> add = repo.addPath(absolutePath);
                         if (add.isSuccess() && add.value() == Boolean.TRUE) {
                             statistics.inc("added");
-                            terminalProgress.put("new/modified", "" + news.incrementAndGet());
+                            progressPrinter.put("new/modified", "" + news.incrementAndGet());
                         }
                     } else {
-                        terminalProgress.put("directories", "" + dirs.incrementAndGet());
+                        progressPrinter.put("directories", "" + dirs.incrementAndGet());
                     }
                 });
             } catch (IOException e) {
                 return Result.err(UpdateRepoError.ioException(repo.getRepoDir(), e));
             }
             statistics.set("deleted", remainingPaths.size());
-            terminalProgress.put("deleted", "" + remainingPaths.size());
+            progressPrinter.put("deleted", "" + remainingPaths.size());
             for (RepoFile value : remainingPaths.values()) {
                 repo.addRepoFile(value.withMissing(true));
             }
