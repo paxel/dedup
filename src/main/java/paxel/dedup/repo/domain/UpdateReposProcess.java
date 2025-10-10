@@ -88,7 +88,7 @@ public class UpdateReposProcess {
                 @Override
                 public void file(Path absolutePath) {
                     remainingPaths.remove(absolutePath);
-                    progressPrinter.put("files", "" + files.incrementAndGet()+ " last: " + absolutePath);
+                    progressPrinter.put("files", files.incrementAndGet() + " last: " + absolutePath);
                     progressPrinter.put("remaining", "" + remainingPaths.size());
                     Result<Boolean, WriteError> add = repo.addPath(absolutePath);
                     if (add.isSuccess() && add.value() == Boolean.TRUE) {

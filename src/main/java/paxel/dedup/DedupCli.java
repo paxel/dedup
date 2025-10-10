@@ -15,9 +15,8 @@ public class DedupCli {
 
         Result<DedupConfig, CreateConfigError> result = DedupConfigFactory.create();
 
-        CliParameter command = new CliParameter();
-        CommandLine commandLine = new CommandLine(command)
-                .addSubcommand(new RepoCommand(command));
+        CommandLine commandLine = new CommandLine(new CliParameter())
+                .addSubcommand(new RepoCommand());
 
 
         int exitCode = commandLine.execute(args);
