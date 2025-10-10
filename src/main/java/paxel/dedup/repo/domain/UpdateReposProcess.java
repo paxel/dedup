@@ -71,7 +71,9 @@ public class UpdateReposProcess {
         }
         Map<Path, RepoFile> remainingPaths = repo.stream()
                 .filter(r -> !r.missing())
-                .collect(Collectors.toMap(r -> Paths.get(repo.getRepo().absolutePath(), r.relativePath()), Function.identity()));
+                .collect(Collectors.toMap(r -> Paths.get(repo.getRepo().absolutePath(),
+                                r.relativePath()), Function.identity(),
+                        (old, update) -> update));
         StatisticPrinter progressPrinter = new StatisticPrinter();
         terminalProgress = TerminalProgress.init(progressPrinter);
         try {
@@ -80,24 +82,25 @@ public class UpdateReposProcess {
             AtomicLong dirs = new AtomicLong();
             AtomicLong files = new AtomicLong();
             AtomicLong news = new AtomicLong();
-            try (Stream<Path> path = Files.walk(Paths.get(repo.getRepo().absolutePath()))) {
-                path.forEach(absolutePath -> {
-                    if (Files.isRegularFile(absolutePath)) {
-                        remainingPaths.remove(absolutePath);
-                        progressPrinter.put("files", "" + files.incrementAndGet());
-                        progressPrinter.put("remaining", "" + remainingPaths.size());
-                        Result<Boolean, WriteError> add = repo.addPath(absolutePath);
-                        if (add.isSuccess() && add.value() == Boolean.TRUE) {
-                            statistics.inc("added");
-                            progressPrinter.put("new/modified", "" + news.incrementAndGet());
-                        }
-                    } else {
-                        progressPrinter.put("directories", "" + dirs.incrementAndGet());
+            new ResilientFileWalker(new FileObserver() {
+
+                @Override
+                public void file(Path absolutePath) {
+                    remainingPaths.remove(absolutePath);
+                    progressPrinter.put("files", "" + files.incrementAndGet());
+                    progressPrinter.put("remaining", "" + remainingPaths.size());
+                    Result<Boolean, WriteError> add = repo.addPath(absolutePath);
+                    if (add.isSuccess() && add.value() == Boolean.TRUE) {
+                        statistics.inc("added");
+                        progressPrinter.put("new/modified", "" + news.incrementAndGet());
                     }
-                });
-            } catch (IOException e) {
-                return Result.err(UpdateRepoError.ioException(repo.getRepoDir(), e));
-            }
+                }
+
+                @Override
+                public void dir(Path f) {
+                    progressPrinter.put("directories", "" + dirs.incrementAndGet());
+                }
+            }).walk(Paths.get(repo.getRepo().absolutePath()));
             statistics.set("deleted", remainingPaths.size());
             progressPrinter.put("deleted", "" + remainingPaths.size());
             for (RepoFile value : remainingPaths.values()) {

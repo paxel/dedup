@@ -130,7 +130,12 @@ public class RepoManager {
         if (oldRepoFile != null) {
             if (Objects.equals(oldRepoFile.size(), size)) {
                 if (fileTime.toMillis() <= oldRepoFile.lastModified()) {
-                    return Result.ok(false);
+                    if (!oldRepoFile.missing()) {
+                        return Result.ok(false);
+                    } else {
+                        // repapeared
+                        addRepoFile(oldRepoFile.withMissing(false));
+                    }
                 }
             }
         }

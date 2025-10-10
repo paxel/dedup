@@ -2,6 +2,7 @@ package paxel.dedup.terminal;
 
 import com.googlecode.lanterna.TerminalPosition;
 import com.googlecode.lanterna.TerminalSize;
+import com.googlecode.lanterna.input.KeyStroke;
 import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
 import com.googlecode.lanterna.terminal.Terminal;
 import lombok.RequiredArgsConstructor;
@@ -47,8 +48,12 @@ public class TerminalProgressImpl implements TerminalProgress {
                     terminal.putString(s.substring(0, terminalSize.getColumns()));
                 }
             }
+            KeyStroke keyStroke = terminal.pollInput();
+            if (keyStroke != null && keyStroke.isCtrlDown() && keyStroke.getCharacter() == 'c') {
+                System.out.println("Aborted");
+                System.exit(-5);
+            }
             terminal.setCursorPosition(new TerminalPosition(0, originalCursorPos.getRow()));
-            terminal.setCursorVisible(true);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -81,7 +86,7 @@ public class TerminalProgressImpl implements TerminalProgress {
                 System.out.println();
 
             // store new position after scrolling down
-            originalCursorPos = new TerminalPosition(0, originalCursorPos.getRow() - (additionalLines ));
+            originalCursorPos = new TerminalPosition(0, originalCursorPos.getRow() - (additionalLines));
         }
     }
 
