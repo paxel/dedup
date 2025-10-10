@@ -134,7 +134,7 @@ public class RepoManager {
                         return Result.ok(false);
                     } else {
                         // repapeared
-                        addRepoFile(oldRepoFile.withMissing(false));
+                        return addRepoFile(oldRepoFile.withMissing(false));
                     }
                 }
             }

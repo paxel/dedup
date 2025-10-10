@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 
 public interface FileObserver {
-    default void fail(Path root, IOException e) {
+    default void fail(Path root, Exception e) {
     }
 
     default void file(Path f) {

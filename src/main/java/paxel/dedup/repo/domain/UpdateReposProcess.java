@@ -82,23 +82,29 @@ public class UpdateReposProcess {
             AtomicLong dirs = new AtomicLong();
             AtomicLong files = new AtomicLong();
             AtomicLong news = new AtomicLong();
+            AtomicLong errors = new AtomicLong();
             new ResilientFileWalker(new FileObserver() {
 
                 @Override
                 public void file(Path absolutePath) {
                     remainingPaths.remove(absolutePath);
-                    progressPrinter.put("files", "" + files.incrementAndGet());
+                    progressPrinter.put("files", "" + files.incrementAndGet()+ " last: " + absolutePath);
                     progressPrinter.put("remaining", "" + remainingPaths.size());
                     Result<Boolean, WriteError> add = repo.addPath(absolutePath);
                     if (add.isSuccess() && add.value() == Boolean.TRUE) {
                         statistics.inc("added");
-                        progressPrinter.put("new/modified", "" + news.incrementAndGet());
+                        progressPrinter.put("new/modified", news.incrementAndGet() + " last: " + absolutePath);
                     }
                 }
 
                 @Override
                 public void dir(Path f) {
-                    progressPrinter.put("directories", "" + dirs.incrementAndGet());
+                    progressPrinter.put("directories", dirs.incrementAndGet() + " last: " + f);
+                }
+
+                @Override
+                public void fail(Path root, Exception e) {
+                    progressPrinter.put("errors", errors.incrementAndGet() + " last:" + e.getMessage());
                 }
             }).walk(Paths.get(repo.getRepo().absolutePath()));
             statistics.set("deleted", remainingPaths.size());

@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.stream.Stream;
 
 @RequiredArgsConstructor
@@ -14,15 +15,17 @@ public class ResilientFileWalker {
 
     public void walk(Path root) {
         try (Stream<Path> list = Files.list(root)) {
-            list.forEach(f -> {
+            list.sorted(Comparator.comparing(Path::toString)).forEach(f -> {
                 if (Files.isRegularFile(f)) {
                     fileObserver.file(f);
                 } else if (Files.isDirectory(f)) {
                     fileObserver.dir(f);
-                    walk(f);
+                    if (!Files.isSymbolicLink(f)) {
+                        walk(f);
+                    }
                 }
             });
-        } catch (IOException e) {
+        } catch (Exception e) {
             fileObserver.fail(root, e);
         }
     }
