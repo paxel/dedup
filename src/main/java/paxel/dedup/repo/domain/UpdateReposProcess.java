@@ -7,13 +7,14 @@ import paxel.dedup.model.Repo;
 import paxel.dedup.model.RepoFile;
 import paxel.dedup.model.Statistics;
 import paxel.dedup.model.errors.*;
+import paxel.dedup.model.utils.FileObserver;
+import paxel.dedup.model.utils.ResilientFileWalker;
 import paxel.dedup.parameter.CliParameter;
 import paxel.dedup.terminal.StatisticPrinter;
 import paxel.dedup.terminal.TerminalProgress;
 import paxel.lib.Result;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
@@ -21,15 +22,12 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 
 public class UpdateReposProcess {
     private TerminalProgress terminalProgress;
-    private CliParameter cliParameter;
 
     public int update(List<String> names, boolean all, CliParameter cliParameter) {
-        this.cliParameter = cliParameter;
 
         Result<DedupConfig, CreateConfigError> configResult = DedupConfigFactory.create();
         if (configResult.hasFailed()) {
@@ -46,7 +44,7 @@ public class UpdateReposProcess {
                 if (ioException != null) {
                     ioException.printStackTrace();
                 }
-                return -3;
+                return -50;
             }
             for (Repo repo : lsResult.value()) {
                 updateRepo(new RepoManager(repo, dedupConfig, objectMapper, cliParameter));

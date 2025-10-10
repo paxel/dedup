@@ -9,6 +9,7 @@ import paxel.dedup.model.Statistics;
 import paxel.dedup.model.errors.CloseError;
 import paxel.dedup.model.errors.LoadError;
 import paxel.dedup.model.errors.WriteError;
+import paxel.dedup.model.utils.TunneledIoException;
 import paxel.dedup.parameter.CliParameter;
 import paxel.lib.Result;
 

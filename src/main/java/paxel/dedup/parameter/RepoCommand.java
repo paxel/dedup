@@ -1,9 +1,6 @@
 package paxel.dedup.parameter;
 
-import paxel.dedup.repo.domain.CreateRepoProcess;
-import paxel.dedup.repo.domain.LsReposProcess;
-import paxel.dedup.repo.domain.RmRepoProcess;
-import paxel.dedup.repo.domain.UpdateReposProcess;
+import paxel.dedup.repo.domain.*;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;

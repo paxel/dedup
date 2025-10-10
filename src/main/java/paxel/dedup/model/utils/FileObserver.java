@@ -1,6 +1,5 @@
-package paxel.dedup.repo.domain;
+package paxel.dedup.model.utils;
 
-import java.io.IOException;
 import java.nio.file.Path;
 
 public interface FileObserver {

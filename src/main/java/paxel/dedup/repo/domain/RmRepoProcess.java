@@ -26,7 +26,7 @@ public class RmRepoProcess {
             List<Exception> exceptions = deleteResult.error().ioExceptions();
             System.out.println("While deleting " + name + " " + exceptions.size() + " exceptions happened");
             exceptions.getFirst().printStackTrace();
-            return -6;
+            return -40;
         }
 
         System.out.println("Deleted " + name);

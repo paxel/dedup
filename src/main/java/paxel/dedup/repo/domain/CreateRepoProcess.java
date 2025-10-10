@@ -26,7 +26,7 @@ public class CreateRepoProcess {
                 System.err.println(createResult.error().path() + " not a valid repo relativePath");
                 ioException.printStackTrace();
             }
-            return -2;
+            return -10;
         }
 
         return 0;

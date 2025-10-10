@@ -28,7 +28,7 @@ public class LsReposProcess {
                 System.err.println(getReposResult.error().path() + " Invalid");
                 ioException.printStackTrace();
             }
-            return -4;
+            return -20;
         }
         getReposResult.value().stream()
                 .sorted(Comparator.comparing(Repo::name, String::compareTo))
