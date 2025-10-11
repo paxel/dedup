@@ -8,11 +8,13 @@ import paxel.dedup.model.Repo;
 import paxel.dedup.model.errors.CreateRepoError;
 import paxel.dedup.model.errors.DeleteRepoError;
 import paxel.dedup.model.errors.OpenRepoError;
+import paxel.dedup.model.errors.RenameRepoError;
 import paxel.lib.Result;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -22,6 +24,7 @@ import java.util.stream.Stream;
 
 public final class DefaultDedupConfig implements DedupConfig {
 
+    public static final String DEDUP_REPO_YML = "dedup_repo.yml";
     private final Path repoRootPath;
     private final ObjectMapper objectMapper = new ObjectMapper(new YAMLFactory()
             .disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER)
@@ -51,7 +54,7 @@ public final class DefaultDedupConfig implements DedupConfig {
         if (!Files.exists(repoPath)) {
             return Result.err(OpenRepoError.notFound(repoPath));
         }
-        Path resolve = repoPath.resolve("dedup_repo.yml");
+        Path resolve = repoPath.resolve(DEDUP_REPO_YML);
         if (!Files.exists(resolve)) {
             return Result.err(OpenRepoError.notFound(resolve));
         }
@@ -75,14 +78,17 @@ public final class DefaultDedupConfig implements DedupConfig {
         } catch (IOException e) {
             return Result.err(CreateRepoError.ioError(repoPath, e));
         }
-        Path ymlFile = repoPath.resolve("dedup_repo.yml");
+        Path ymlFile = repoPath.resolve(DEDUP_REPO_YML);
         if (Files.exists(ymlFile)) {
             return Result.err(CreateRepoError.exists(ymlFile));
         }
 
+        return writeRepoFiles(name, path, indices, ymlFile);
+    }
+
+    private Result<Repo, CreateRepoError> writeRepoFiles(String name, Path path, int indices, Path ymlFile) {
         try {
-            Repo repo = new Repo(name, path.toAbsolutePath().toString(), indices);
-            objectMapper.writerFor(Repo.class).writeValue(ymlFile.toFile(), repo);
+            Repo repo = writeRepoFile(name, path, indices, ymlFile);
 
             for (int i = 0; i < indices; i++) {
                 Files.createFile(ymlFile.resolveSibling(i + ".idx"));
@@ -91,6 +97,12 @@ public final class DefaultDedupConfig implements DedupConfig {
         } catch (IOException e) {
             return Result.err(CreateRepoError.ioError(ymlFile, e));
         }
+    }
+
+    private Repo writeRepoFile(String name, Path path, int indices, Path ymlFile) throws IOException {
+        Repo repo = new Repo(name, path.toAbsolutePath().toString(), indices);
+        objectMapper.writerFor(Repo.class).writeValue(ymlFile.toFile(), repo);
+        return repo;
     }
 
     @Override
@@ -141,6 +153,28 @@ public final class DefaultDedupConfig implements DedupConfig {
     @Override
     public @NonNull Path getRepoDir() {
         return repoRootPath;
+    }
+
+    @Override
+    public Result<Boolean, RenameRepoError> renameRepo(String oldName, String newName) {
+        if (oldName.equals(newName))
+            return Result.ok(false);
+        Result<Repo, OpenRepoError> repo = getRepo(oldName);
+        if (repo.hasFailed())
+            return Result.ok(false);
+        try {
+            Files.move(repoRootPath.resolve(oldName), repoRootPath.resolve(newName));
+        } catch (IOException e) {
+            return Result.err(RenameRepoError.ioError(repoRootPath.resolve(newName), e));
+        }
+        Path ymlFile = repoRootPath.resolve(newName).resolve(DEDUP_REPO_YML);
+
+        try {
+            writeRepoFile(newName, Paths.get(repo.value().absolutePath()), repo.value().indices(), ymlFile);
+            return Result.ok(true);
+        } catch (IOException e) {
+            return Result.err(RenameRepoError.ioError(ymlFile, e));
+        }
     }
 
 

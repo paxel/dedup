@@ -5,6 +5,7 @@ import paxel.dedup.model.Repo;
 import paxel.dedup.model.errors.CreateRepoError;
 import paxel.dedup.model.errors.DeleteRepoError;
 import paxel.dedup.model.errors.OpenRepoError;
+import paxel.dedup.model.errors.RenameRepoError;
 import paxel.lib.Result;
 
 import java.nio.file.Path;
@@ -55,4 +56,12 @@ public interface DedupConfig {
     @NonNull
     Path getRepoDir();
 
+    /**
+     * Renames a repo and moves it to the new name
+     *
+     * @param oldName the current name of the repo
+     * @param newName the new name of the repo
+     * @return {@code true} if the repo existed and was moved. {@code false} if the repo did not exist or was not moved. {@link RenameRepoError} if the repo could not be moved.
+     */
+    Result<Boolean, RenameRepoError> renameRepo(String oldName, String newName);
 }
