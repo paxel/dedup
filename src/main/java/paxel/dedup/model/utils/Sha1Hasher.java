@@ -1,6 +1,7 @@
 package paxel.dedup.model.utils;
 
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import paxel.dedup.model.errors.LoadError;
 import paxel.lib.Result;
 
@@ -9,14 +10,23 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @RequiredArgsConstructor
 public class Sha1Hasher implements FileHasher {
 
     private final BinaryFormatter hexStringer;
+    private final ExecutorService executorService = Executors.newFixedThreadPool(4);
 
     @Override
     public CompletableFuture<Result<String, LoadError>> hash(Path path) {
+        return CompletableFuture.supplyAsync(() -> hashMe(path), executorService);
+      //  return CompletableFuture.completedFuture(hashMe(path));
+    }
+
+    private Result<String, LoadError> hashMe(Path path) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-1");
             byte[] buffer = new byte[8192];
@@ -28,10 +38,18 @@ public class Sha1Hasher implements FileHasher {
             }
             byte[] hashBytes = digest.digest();
 
-            String hexString = hexStringer.format(hashBytes);
-            return CompletableFuture.completedFuture(Result.ok(hexString));
+            return Result.ok(hexStringer.format(hashBytes));
         } catch (Exception e) {
-            return CompletableFuture.completedFuture(Result.err(new LoadError(path, e, e.toString())));
+            return Result.err(new LoadError(path, e, e.toString()));
+        }
+    }
+
+    @SneakyThrows
+    @Override
+    public void close() {
+        executorService.shutdown();
+        while (!executorService.awaitTermination(1, TimeUnit.HOURS)) {
+            ;
         }
     }
 }

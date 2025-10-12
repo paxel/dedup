@@ -1,9 +1,11 @@
 package paxel.dedup.terminal;
 
+import com.googlecode.lanterna.SGR;
 import com.googlecode.lanterna.TerminalPosition;
 import com.googlecode.lanterna.TerminalSize;
 import com.googlecode.lanterna.TextColor;
 import com.googlecode.lanterna.input.KeyStroke;
+import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
 import com.googlecode.lanterna.terminal.Terminal;
 import lombok.RequiredArgsConstructor;
 
@@ -33,7 +35,7 @@ public class TerminalProgressImpl implements TerminalProgress {
 
             makeRoom();
             TerminalSize terminalSize = terminal.getTerminalSize();
-            terminal.setForegroundColor(TextColor.ANSI.WHITE_BRIGHT);
+            terminal.enableSGR(SGR.BOLD);
             terminal.setBackgroundColor(TextColor.ANSI.BLACK);
             //   textGraphics.fillRectangle(new TerminalPosition(0, originalCursorPos.getRow()), new TerminalSize(terminalSize.getColumns(), values.size()), ' ');
             for (int row = 0; row < progressPrinter.getLines(); row++) {
@@ -42,12 +44,13 @@ public class TerminalProgressImpl implements TerminalProgress {
                 int stringSize = s.length();
                 int columns = terminalSize.getColumns();
                 int toEndOfLine = columns - stringSize;
+                terminal.setForegroundColor(TextColor.ANSI.WHITE_BRIGHT);
                 if (toEndOfLine >= 0) {
                     String fullLine = s + (" ".repeat(toEndOfLine));
-                    int lineLength = fullLine.length();
                     terminal.putString(fullLine);
                 } else {
-                    terminal.putString(s.substring(0, terminalSize.getColumns()));
+                    int i = terminalSize.getColumns() / 2 - 2;
+                    terminal.putString(s.substring(0, i) + "[..]" + s.substring(s.length() - i));
                 }
             }
             KeyStroke keyStroke = terminal.pollInput();

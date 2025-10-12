@@ -12,16 +12,17 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
+import static java.lang.Boolean.TRUE;
+
 @RequiredArgsConstructor
 public class ResilientFileWalker {
 
     private final FileObserver fileObserver;
     private final LinkedBlockingDeque<Path> directories = new LinkedBlockingDeque<>();
-    private AtomicBoolean finished = new AtomicBoolean();
+    private final AtomicBoolean finished = new AtomicBoolean();
 
     @SneakyThrows(InterruptedException.class)
     public void walk(Path root) {
-        directories.add(root);
         CompletableFuture.runAsync(() ->
                         populateDirectories(root))
                 .whenComplete((ignore, ig) -> {
@@ -58,18 +59,19 @@ public class ResilientFileWalker {
         }
     }
 
-    private void populateDirectories(Path root) {
-        try (Stream<Path> list = Files.list(root)) {
+    private void populateDirectories(Path parent) {
+        // count parent when entered. so the numbers are equal to the "when left"
+        directories.add(parent);
+        fileObserver.addDir(parent);
+        try (Stream<Path> list = Files.list(parent)) {
             list.filter(Files::isDirectory)
                     .filter(f -> !Files.isSymbolicLink(f))
                     .sorted(Comparator.comparing(Path::toString))
                     .forEach(f -> {
-                        fileObserver.addDir(f);
-                        directories.add(f);
                         populateDirectories(f);
                     });
         } catch (Exception e) {
-            fileObserver.fail(root, e);
+            fileObserver.fail(parent, e);
         }
     }
 }

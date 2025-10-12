@@ -7,10 +7,7 @@ import paxel.dedup.config.DedupConfigFactory;
 import paxel.dedup.model.Repo;
 import paxel.dedup.model.RepoFile;
 import paxel.dedup.model.Statistics;
-import paxel.dedup.model.errors.CreateConfigError;
-import paxel.dedup.model.errors.LoadError;
-import paxel.dedup.model.errors.OpenRepoError;
-import paxel.dedup.model.errors.UpdateRepoError;
+import paxel.dedup.model.errors.*;
 import paxel.dedup.model.utils.FileObserver;
 import paxel.dedup.model.utils.HexFormatter;
 import paxel.dedup.model.utils.ResilientFileWalker;
@@ -32,6 +29,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static paxel.dedup.repo.domain.BetterPrediction.COUNT;
 
 
 public class UpdateReposProcess {
@@ -73,22 +72,19 @@ public class UpdateReposProcess {
     }
 
 
-    private Result<Statistics, UpdateRepoError> updateRepo(RepoManager repo) {
-        Result<Statistics, LoadError> load = repo.load();
+    private Result<Statistics, UpdateRepoError> updateRepo(RepoManager repoManager) {
+        Result<Statistics, LoadError> load = repoManager.load();
         if (load.hasFailed()) {
-            return load.mapError(f -> new UpdateRepoError(repo.getRepoDir(), load.error().ioException()));
+            return load.mapError(f -> new UpdateRepoError(repoManager.getRepoDir(), load.error().ioException()));
         }
-        Map<Path, RepoFile> remainingPaths = repo.stream()
-                .filter(r -> !r.missing())
-                .collect(Collectors.toMap(r -> Paths.get(repo.getRepo().absolutePath(),
-                                r.relativePath()), Function.identity(),
-                        (old, update) -> update));
+        Map<Path, RepoFile> remainingPaths = repoManager.stream().filter(r -> !r.missing()).collect(Collectors.toMap(r -> Paths.get(repoManager.getRepo().absolutePath(), r.relativePath()), Function.identity(), (old, update) -> update));
         StatisticPrinter progressPrinter = new StatisticPrinter();
         terminalProgress = TerminalProgress.init(progressPrinter);
         BetterPrediction betterPrediction = new BetterPrediction();
         try {
-            progressPrinter.put(repo.getRepo().name(), repo.getRepo().absolutePath());
-            Statistics statistics = new Statistics(repo.getRepo().absolutePath());
+            progressPrinter.put(repoManager.getRepo().name(), repoManager.getRepo().absolutePath());
+            progressPrinter.put("progress", "...stand by... collecting info");
+            Statistics statistics = new Statistics(repoManager.getRepo().absolutePath());
             AtomicLong allDirs = new AtomicLong();
             AtomicLong finishedDirs = new AtomicLong();
             AtomicLong files = new AtomicLong();
@@ -104,19 +100,19 @@ public class UpdateReposProcess {
                     remainingPaths.remove(absolutePath);
                     progressPrinter.put("files", files.incrementAndGet() + " last: " + absolutePath);
                     progressPrinter.put("deleted", "" + remainingPaths.size());
-                    repo.addPath(absolutePath).thenApply(add -> {
-                        if (add.isSuccess())
-                            if (add.value() == Boolean.TRUE) {
-                                statistics.inc("added");
-                                hash.incrementAndGet();
-                                progressPrinter.put("hashed", hash + " / " + (files.get() - unchanged.get()));
-                                calcUpdate(allDirs, finishedDirs, start, progressPrinter, betterPrediction);
-                            } else {
-                                unchanged.incrementAndGet();
-                                statistics.inc("unchanged");
-                                progressPrinter.put("unchanged", unchanged + " / " + (files.get() - hash.get()));
-                                calcUpdate(allDirs, finishedDirs, start, progressPrinter, betterPrediction);
-                            }
+                    repoManager.addPath(absolutePath).thenApply(add -> {
+                        betterPrediction.trigger();
+                        if (add.isSuccess()) if (add.value() == Boolean.TRUE) {
+                            statistics.inc("added");
+                            hash.incrementAndGet();
+                            logHash(progressPrinter, hash, files, unchanged);
+                            calcUpdate(start, progressPrinter, betterPrediction, files.get(), hash.get() + unchanged.get());
+                        } else {
+                            unchanged.incrementAndGet();
+                            statistics.inc("unchanged");
+                            logHash(progressPrinter, hash, files, unchanged);
+                            calcUpdate(start, progressPrinter, betterPrediction, files.get(), hash.get() + unchanged.get());
+                        }
                         return null;
                     });
                     news.incrementAndGet();
@@ -131,49 +127,58 @@ public class UpdateReposProcess {
                 @Override
                 public void finishedDir(Path f) {
                     finishedDirs.incrementAndGet();
-                    betterPrediction.trigger();
                     progressPrinter.put("directories", finishedDirs + " / " + allDirs);
-                    calcUpdate(allDirs, finishedDirs, start, progressPrinter, betterPrediction);
                 }
 
                 @Override
                 public void fail(Path root, Throwable e) {
                     progressPrinter.put("errors", errors.incrementAndGet() + " last:" + e.getMessage());
                 }
-            }).walk(Paths.get(repo.getRepo().absolutePath()));
+            }).walk(Paths.get(repoManager.getRepo().absolutePath()));
+            progressPrinter.put("files", files.incrementAndGet() + " scan finished");
+            progressPrinter.put("deleted", remainingPaths.size() + " scan finished");
+            progressPrinter.put("directories", finishedDirs + " scan finished");
             statistics.set("deleted", remainingPaths.size());
             for (RepoFile value : remainingPaths.values()) {
-                repo.addRepoFile(value.withMissing(true));
+                repoManager.addRepoFile(value.withMissing(true));
             }
             return Result.ok(statistics);
         } finally {
+            repoManager.close();
             terminalProgress.deactivate();
         }
     }
 
-    private void calcUpdate(AtomicLong dirs, AtomicLong finishedDirs, Instant now, StatisticPrinter progressPrinter, BetterPrediction betterPrediction) {
-        long allDirs = dirs.get();
-        if (allDirs != 0) {
-            long percent = Math.clamp((finishedDirs.get() * 100) / allDirs, 1, 100);
-            Duration estimation = Duration.between(now, Instant.now());
+    private static void logHash(StatisticPrinter progressPrinter, AtomicLong hash, AtomicLong files, AtomicLong unchanged) {
+        progressPrinter.put("hashed", hash + " / " + (files.get() - unchanged.get()));
+        progressPrinter.put("unchanged", unchanged + " / " + (files.get() - hash.get()));
+    }
 
-            if (estimation.minusMillis(30000).isPositive()) {
-                estimation = getBetterDuration(betterPrediction, estimation.multipliedBy(100).dividedBy(percent), allDirs);
-                ZonedDateTime eta = ZonedDateTime.now().plus(estimation);
-                progressPrinter.put("progress", "%d %% estimated duration: %s ETA: %s".formatted(percent,
-                        DurationFormatUtils.formatDurationWords(estimation.toMillis(), true, true),
-                        dateTimeFormatter.format(eta)));
+    private void calcUpdate(Instant start, StatisticPrinter progressPrinter, BetterPrediction betterPrediction, long total, long processed) {
+        try {
+
+
+            if (total != 0) {
+                double percent = (processed * 100.0) / total;
+                Duration estimation = Duration.between(start, Instant.now());
+
+                if (estimation.minusMillis(30000).isPositive()) {
+                    estimation = getBetterDuration(betterPrediction, estimation.multipliedBy((long) (100 / percent)), total);
+                    ZonedDateTime eta = ZonedDateTime.now().plus(estimation);
+                    progressPrinter.put("progress", "%.2f %% estimated duration: %s ETA: %s".formatted(percent, DurationFormatUtils.formatDurationWords(estimation.toMillis(), true, true), dateTimeFormatter.format(eta)));
+                }
             }
+        } catch (RuntimeException e) {
+            e.printStackTrace();
         }
     }
 
-    private static Duration getBetterDuration(BetterPrediction betterPrediction, Duration estimation, long allDirs) {
+    private static Duration getBetterDuration(BetterPrediction betterPrediction, Duration estimation, long total) {
         Duration duration = betterPrediction.get();
         if (duration != null) {
-            long tenFilesPercent = Math.clamp((1000) / allDirs, 1, 100);
-            Duration recentEta = duration.multipliedBy(100).dividedBy(tenFilesPercent);
-            if (recentEta.minus(estimation).isPositive())
-                return recentEta;
+            double tenFilesPercent = (COUNT * 100.0) / total;
+            Duration recentEta = duration.multipliedBy((long) (100 / tenFilesPercent));
+            if (recentEta.minus(estimation).isPositive()) return recentEta;
         }
         return estimation;
     }

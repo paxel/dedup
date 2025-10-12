@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import lombok.Getter;
+import lombok.SneakyThrows;
 import paxel.dedup.config.DedupConfig;
 import paxel.dedup.model.Repo;
 import paxel.dedup.model.RepoFile;
@@ -183,5 +184,8 @@ public class RepoManager {
         }
     }
 
-
+    @SneakyThrows
+    public void close() {
+        fileHasher.close();
+    }
 }

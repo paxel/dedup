@@ -6,17 +6,19 @@ import java.util.Queue;
 import java.util.concurrent.ArrayBlockingQueue;
 
 public class BetterPrediction {
-    private final Queue<Instant> lastInstants = new ArrayBlockingQueue<>(11);
+
+    public static final int COUNT = 1000;
+    private final Queue<Instant> lastInstants = new ArrayBlockingQueue<>(COUNT + 1);
 
     public void trigger() {
         lastInstants.add(Instant.now());
-        if (lastInstants.size() == 11)
+        if (lastInstants.size() == COUNT + 1)
             lastInstants.poll();
     }
 
     public Duration get() {
         Instant peek = lastInstants.peek();
-        if (peek == null || lastInstants.size() < 10)
+        if (peek == null || lastInstants.size() < COUNT)
             return null;
         return Duration.between(peek, Instant.now());
     }
