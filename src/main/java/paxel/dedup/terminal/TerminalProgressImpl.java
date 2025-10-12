@@ -2,8 +2,8 @@ package paxel.dedup.terminal;
 
 import com.googlecode.lanterna.TerminalPosition;
 import com.googlecode.lanterna.TerminalSize;
+import com.googlecode.lanterna.TextColor;
 import com.googlecode.lanterna.input.KeyStroke;
-import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
 import com.googlecode.lanterna.terminal.Terminal;
 import lombok.RequiredArgsConstructor;
 
@@ -33,6 +33,8 @@ public class TerminalProgressImpl implements TerminalProgress {
 
             makeRoom();
             TerminalSize terminalSize = terminal.getTerminalSize();
+            terminal.setForegroundColor(TextColor.ANSI.WHITE_BRIGHT);
+            terminal.setBackgroundColor(TextColor.ANSI.BLACK);
             //   textGraphics.fillRectangle(new TerminalPosition(0, originalCursorPos.getRow()), new TerminalSize(terminalSize.getColumns(), values.size()), ' ');
             for (int row = 0; row < progressPrinter.getLines(); row++) {
                 terminal.setCursorPosition(new TerminalPosition(0, originalCursorPos.getRow() + row));
@@ -51,8 +53,11 @@ public class TerminalProgressImpl implements TerminalProgress {
             KeyStroke keyStroke = terminal.pollInput();
             if (keyStroke != null && keyStroke.isCtrlDown() && keyStroke.getCharacter() == 'c') {
                 System.out.println("Aborted");
+                terminal.setCursorVisible(true);
+                terminal.resetColorAndSGR();
                 System.exit(-5);
             }
+            terminal.resetColorAndSGR();
             terminal.setCursorPosition(new TerminalPosition(0, originalCursorPos.getRow()));
         } catch (IOException e) {
             e.printStackTrace();

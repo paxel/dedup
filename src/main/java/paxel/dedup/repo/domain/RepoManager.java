@@ -14,7 +14,6 @@ import paxel.dedup.model.errors.WriteError;
 import paxel.dedup.model.utils.BinaryFormatter;
 import paxel.dedup.model.utils.FileHasher;
 import paxel.dedup.model.utils.HexFormatter;
-import paxel.dedup.model.utils.Sha1Hasher;
 import paxel.dedup.parameter.CliParameter;
 import paxel.lib.Result;
 
@@ -24,6 +23,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -38,14 +38,15 @@ public class RepoManager {
     @Getter
     private final Path repoDir;
     private final BinaryFormatter binaryFormatter = new HexFormatter();
-    private final FileHasher fileHasher = new Sha1Hasher(binaryFormatter);
+    private final FileHasher fileHasher;
 
 
-    public RepoManager(Repo repo, DedupConfig dedupConfig, ObjectMapper objectMapper, CliParameter cliParameter) {
+    public RepoManager(Repo repo, DedupConfig dedupConfig, ObjectMapper objectMapper, CliParameter cliParameter, FileHasher fileHasher) {
         this.repo = repo;
         this.cliParameter = cliParameter;
         objectReader = objectMapper.readerFor(RepoFile.class);
         objectWriter = objectMapper.writerFor(RepoFile.class);
+        this.fileHasher = fileHasher;
         repoDir = dedupConfig.getRepoDir().resolve(repo.name());
     }
 
@@ -108,20 +109,20 @@ public class RepoManager {
                 .map(f -> true, Function.identity());
     }
 
-    public Result<Boolean, WriteError> addPath(Path absolutePath) {
+    public CompletableFuture<Result<Boolean, WriteError>> addPath(Path absolutePath) {
         if (!Files.exists(absolutePath)) {
-            return Result.ok(false);
+            return CompletableFuture.completedFuture(Result.ok(false));
         }
         Path relativize = Paths.get(repo.absolutePath()).relativize(absolutePath);
         RepoFile oldRepoFile = getByPath(relativize.toString());
 
         Result<Long, LoadError> sizeResult = getSize(absolutePath);
         if (sizeResult.hasFailed()) {
-            return sizeResult.mapError(f -> new WriteError(null, f.path(), f.ioException()));
+            return CompletableFuture.completedFuture(sizeResult.mapError(f -> new WriteError(null, f.path(), f.ioException())));
         }
         Result<FileTime, LoadError> lastModifiedResult = getLastModifiedTime(absolutePath);
         if (lastModifiedResult.hasFailed()) {
-            return sizeResult.mapError(f -> new WriteError(null, f.path(), f.ioException()));
+            return CompletableFuture.completedFuture(sizeResult.mapError(f -> new WriteError(null, f.path(), f.ioException())));
         }
 
         Long size = sizeResult.value();
@@ -131,35 +132,36 @@ public class RepoManager {
             if (Objects.equals(oldRepoFile.size(), size)) {
                 if (fileTime.toMillis() <= oldRepoFile.lastModified()) {
                     if (!oldRepoFile.missing()) {
-                        return Result.ok(false);
+                        return CompletableFuture.completedFuture(Result.ok(false));
                     } else {
                         // repapeared
-                        return addRepoFile(oldRepoFile.withMissing(false));
+                        return CompletableFuture.completedFuture(addRepoFile(oldRepoFile.withMissing(false)));
                     }
                 }
             }
         }
 
-        Result<String, LoadError> hashResult = calcHash(absolutePath, size);
-        if (hashResult.hasFailed())
-            return hashResult.mapError(l -> new WriteError(null, absolutePath, l.ioException()));
+        return calcHash(absolutePath, size).thenApply(hashResult -> {
+            if (hashResult.hasFailed())
+                return hashResult.mapError(l -> new WriteError(null, absolutePath, l.ioException()));
 
-        RepoFile repoFile = RepoFile.builder()
-                .size(size)
-                .relativePath(relativize.toString())
-                .lastModified(fileTime.toMillis())
-                .hash(hashResult.value())
-                .build();
+            RepoFile repoFile = RepoFile.builder()
+                    .size(size)
+                    .relativePath(relativize.toString())
+                    .lastModified(fileTime.toMillis())
+                    .hash(hashResult.value())
+                    .build();
 
-        return addRepoFile(repoFile);
+            return addRepoFile(repoFile);
+        });
     }
 
-    private Result<String, LoadError> calcHash(Path absolutePath, long size) {
+    private CompletableFuture<Result<String, LoadError>> calcHash(Path absolutePath, long size) {
         if (size < 20) {
             try {
-                return Result.ok(binaryFormatter.format(Files.readAllBytes(absolutePath)));
+                return CompletableFuture.completedFuture(Result.ok(binaryFormatter.format(Files.readAllBytes(absolutePath))));
             } catch (IOException e) {
-                return Result.err(new LoadError(absolutePath, e, e.toString()));
+                return CompletableFuture.completedFuture(Result.err(new LoadError(absolutePath, e, e.toString())));
             }
         }
         return fileHasher.hash(absolutePath);
@@ -180,7 +182,6 @@ public class RepoManager {
             return Result.err(new LoadError(absolutePath, e, "Could not get size"));
         }
     }
-
 
 
 }

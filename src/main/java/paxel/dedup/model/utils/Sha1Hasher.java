@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.util.concurrent.CompletableFuture;
 
 @RequiredArgsConstructor
 public class Sha1Hasher implements FileHasher {
@@ -15,7 +16,7 @@ public class Sha1Hasher implements FileHasher {
     private final BinaryFormatter hexStringer;
 
     @Override
-    public Result<String, LoadError> hash(Path path) {
+    public CompletableFuture<Result<String, LoadError>> hash(Path path) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-1");
             byte[] buffer = new byte[8192];
@@ -28,9 +29,9 @@ public class Sha1Hasher implements FileHasher {
             byte[] hashBytes = digest.digest();
 
             String hexString = hexStringer.format(hashBytes);
-            return Result.ok(hexString);
+            return CompletableFuture.completedFuture(Result.ok(hexString));
         } catch (Exception e) {
-            return Result.err(new LoadError(path, e, e.toString()));
+            return CompletableFuture.completedFuture(Result.err(new LoadError(path, e, e.toString())));
         }
     }
 }

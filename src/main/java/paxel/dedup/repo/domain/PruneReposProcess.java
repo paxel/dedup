@@ -4,9 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import paxel.dedup.config.DedupConfig;
 import paxel.dedup.config.DedupConfigFactory;
 import paxel.dedup.model.Repo;
-import paxel.dedup.model.RepoFile;
 import paxel.dedup.model.Statistics;
 import paxel.dedup.model.errors.*;
+import paxel.dedup.model.utils.HexFormatter;
+import paxel.dedup.model.utils.Sha1Hasher;
 import paxel.dedup.parameter.CliParameter;
 import paxel.lib.Result;
 
@@ -38,7 +39,7 @@ public class PruneReposProcess {
                 return -30;
             }
             for (Repo repo : lsResult.value()) {
-                Result<Statistics, UpdateRepoError> result = pruneRepo(new RepoManager(repo, dedupConfig, objectMapper, cliParameter), indices);
+                Result<Statistics, UpdateRepoError> result = pruneRepo(new RepoManager(repo, dedupConfig, objectMapper, cliParameter, new Sha1Hasher(new HexFormatter())), indices);
                 if (result.hasFailed()) {
                     System.err.println("Could not prune " + repo.name() + " " + result.error());
                 }
@@ -49,7 +50,7 @@ public class PruneReposProcess {
         for (String name : names) {
             Result<Repo, OpenRepoError> repoResult = dedupConfig.getRepo(name);
             if (repoResult.isSuccess()) {
-                Result<Statistics, UpdateRepoError> result = pruneRepo(new RepoManager(repoResult.value(), dedupConfig, objectMapper, cliParameter), indices);
+                Result<Statistics, UpdateRepoError> result = pruneRepo(new RepoManager(repoResult.value(), dedupConfig, objectMapper, cliParameter, new Sha1Hasher(new HexFormatter())), indices);
                 if (result.hasFailed()) {
                     System.err.println("Could not prune " + repoResult.value().name() + " " + result.error());
                 }
@@ -71,7 +72,7 @@ public class PruneReposProcess {
         Result<Repo, CreateRepoError> repo = dedupConfig.createRepo(newName, Paths.get(oldRepo.absolutePath()), indices);
         // Stream existing files into the repo
         if (repo.isSuccess()) {
-            RepoManager temp = new RepoManager(repo.value(), dedupConfig, new ObjectMapper(), cliParameter);
+            RepoManager temp = new RepoManager(repo.value(), dedupConfig, new ObjectMapper(), cliParameter, new Sha1Hasher(new HexFormatter()));
             Result<Statistics, LoadError> loadNew = temp.load();
             if (loadNew.hasFailed()) {
                 return loadNew.mapError(f -> new UpdateRepoError(repoManager.getRepoDir(), loadNew.error().ioException()));

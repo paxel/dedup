@@ -4,7 +4,8 @@ import paxel.dedup.model.errors.LoadError;
 import paxel.lib.Result;
 
 import java.nio.file.Path;
+import java.util.concurrent.CompletableFuture;
 
 public interface FileHasher {
-    Result<String, LoadError> hash(Path path);
+    CompletableFuture<Result<String, LoadError>> hash(Path path);
 }
