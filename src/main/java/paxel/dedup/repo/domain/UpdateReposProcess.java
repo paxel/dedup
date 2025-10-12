@@ -26,6 +26,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -37,7 +38,7 @@ public class UpdateReposProcess {
     private TerminalProgress terminalProgress;
     private final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss (dd.MM.yyyy)");
 
-    public int update(List<String> names, boolean all, CliParameter cliParameter) {
+    public int update(List<String> names, boolean all, CliParameter cliParameter, int threads) {
 
         Result<DedupConfig, CreateConfigError> configResult = DedupConfigFactory.create();
         if (configResult.hasFailed()) {
@@ -57,7 +58,7 @@ public class UpdateReposProcess {
                 return -50;
             }
             for (Repo repo : lsResult.value()) {
-                updateRepo(new RepoManager(repo, dedupConfig, objectMapper, cliParameter, new Sha1Hasher(new HexFormatter())));
+                updateRepo(new RepoManager(repo, dedupConfig, objectMapper, cliParameter, new Sha1Hasher(new HexFormatter(), Executors.newFixedThreadPool(threads))));
             }
             return 0;
         }
@@ -65,7 +66,8 @@ public class UpdateReposProcess {
         for (String name : names) {
             Result<Repo, OpenRepoError> getRepoResult = dedupConfig.getRepo(name);
             if (getRepoResult.isSuccess()) {
-                Result<Statistics, UpdateRepoError> statisticsUpdateRepoErrorResult = updateRepo(new RepoManager(getRepoResult.value(), dedupConfig, objectMapper, cliParameter, new Sha1Hasher(new HexFormatter())));
+                Result<Statistics, UpdateRepoError> statisticsUpdateRepoErrorResult = updateRepo(new RepoManager(getRepoResult.value(), dedupConfig, objectMapper, cliParameter,
+                        new Sha1Hasher(new HexFormatter(), Executors.newFixedThreadPool(threads))));
             }
         }
         return 0;

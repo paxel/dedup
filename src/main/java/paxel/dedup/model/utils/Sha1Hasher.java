@@ -18,12 +18,12 @@ import java.util.concurrent.TimeUnit;
 public class Sha1Hasher implements FileHasher {
 
     private final BinaryFormatter hexStringer;
-    private final ExecutorService executorService = Executors.newFixedThreadPool(4);
+    private final ExecutorService executorService;
 
     @Override
     public CompletableFuture<Result<String, LoadError>> hash(Path path) {
         return CompletableFuture.supplyAsync(() -> hashMe(path), executorService);
-      //  return CompletableFuture.completedFuture(hashMe(path));
+        //  return CompletableFuture.completedFuture(hashMe(path));
     }
 
     private Result<String, LoadError> hashMe(Path path) {

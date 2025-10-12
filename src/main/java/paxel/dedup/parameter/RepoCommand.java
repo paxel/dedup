@@ -38,8 +38,9 @@ public class RepoCommand {
     @Command(name = "update", description = "Reads all changes into the Repo")
     public int update(
             @Option(names = {"-R"}, description = "Repos") List<String> names,
+            @Option(names = {"-t", "--threads"}, description = "number of threads used for hashing", defaultValue = "2") int threads,
             @Option(names = {"-a", "--all"}, description = "All repos") boolean all) {
-        return (new UpdateReposProcess().update(names, all, cliParameter));
+        return (new UpdateReposProcess().update(names, all, cliParameter, threads));
     }
 
     @Command(name = "prune", description = "Prunes the DB removing all old versions and deleted files")
