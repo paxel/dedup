@@ -14,4 +14,8 @@ public interface FileObserver {
 
     default void finishedDir(Path f) {
     }
+
+
+    default void close() {
+    }
 }

@@ -1,8 +1,8 @@
 package paxel.dedup.repo.domain;
 
-import paxel.dedup.config.*;
+import lombok.RequiredArgsConstructor;
+import paxel.dedup.config.DedupConfig;
 import paxel.dedup.model.Repo;
-import paxel.dedup.model.errors.CreateConfigError;
 import paxel.dedup.model.errors.CreateRepoError;
 import paxel.dedup.parameter.CliParameter;
 import paxel.lib.Result;
@@ -10,15 +10,22 @@ import paxel.lib.Result;
 import java.io.IOException;
 import java.nio.file.Paths;
 
+@RequiredArgsConstructor
 public class CreateRepoProcess {
-    public int create(String name, String path, int indices, CliParameter cliParameter) {
-        // TODO: use configured config relativePath
-        Result<DedupConfig, CreateConfigError> configResult = DedupConfigFactory.create();
-        if (configResult.hasFailed()) {
-           new DedupConfigErrorHandler().dump(configResult.error());
-            return -1;
+
+    private final CliParameter cliParameter;
+    private final String name;
+    private final String path;
+    private final int indices;
+    private final DedupConfig dedupConfig;
+
+
+    public int create() {
+
+        if (cliParameter.isVerbose()) {
+            System.out.printf("::Creating Repo at '%s'%n", dedupConfig.getRepoDir());
         }
-        DedupConfig dedupConfig = configResult.value();
+
         Result<Repo, CreateRepoError> createResult = dedupConfig.createRepo(name, Paths.get(path), indices);
         if (createResult.hasFailed()) {
             IOException ioException = createResult.error().ioException();
@@ -28,7 +35,9 @@ public class CreateRepoProcess {
             }
             return -10;
         }
-
+        if (cliParameter.isVerbose()) {
+            System.out.printf("::Created Repo '%s'%n", createResult.value());
+        }
         return 0;
 
     }

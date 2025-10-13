@@ -12,8 +12,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
-import static java.lang.Boolean.TRUE;
-
 @RequiredArgsConstructor
 public class ResilientFileWalker {
 
@@ -36,8 +34,10 @@ public class ResilientFileWalker {
             Path pop = directories.poll(1, TimeUnit.SECONDS);
             if (pop != null)
                 processDir(pop);
-            else if (finished.get())
+            else if (finished.get()) {
+                fileObserver.close();
                 return;
+            }
         }
     }
 

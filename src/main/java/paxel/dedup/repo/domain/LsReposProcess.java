@@ -1,8 +1,8 @@
 package paxel.dedup.repo.domain;
 
-import paxel.dedup.config.*;
+import lombok.RequiredArgsConstructor;
+import paxel.dedup.config.DedupConfig;
 import paxel.dedup.model.Repo;
-import paxel.dedup.model.errors.CreateConfigError;
 import paxel.dedup.model.errors.OpenRepoError;
 import paxel.dedup.parameter.CliParameter;
 import paxel.lib.Result;
@@ -11,16 +11,14 @@ import java.io.IOException;
 import java.util.Comparator;
 import java.util.List;
 
+@RequiredArgsConstructor
 public class LsReposProcess {
-    public int list(CliParameter cliParameter) {
-        // TODO: use configured config relativePath
-        Result<DedupConfig, CreateConfigError> configResult = DedupConfigFactory.create();
-        if (configResult.hasFailed()) {
-            new DedupConfigErrorHandler().dump(configResult.error());
-            return -1;
-        }
 
-        DedupConfig dedupConfig = configResult.value();
+    private final CliParameter cliParameter;
+    private final DedupConfig dedupConfig;
+
+    public int list() {
+
         Result<List<Repo>, OpenRepoError> getReposResult = dedupConfig.getRepos();
         if (!getReposResult.isSuccess()) {
             IOException ioException = getReposResult.error().ioException();
