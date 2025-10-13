@@ -2,10 +2,7 @@ package paxel.dedup.config;
 
 import lombok.NonNull;
 import paxel.dedup.model.Repo;
-import paxel.dedup.model.errors.CreateRepoError;
-import paxel.dedup.model.errors.DeleteRepoError;
-import paxel.dedup.model.errors.OpenRepoError;
-import paxel.dedup.model.errors.RenameRepoError;
+import paxel.dedup.model.errors.*;
 import paxel.lib.Result;
 
 import java.nio.file.Path;
@@ -38,6 +35,8 @@ public interface DedupConfig {
      */
     @NonNull
     Result<Repo, CreateRepoError> createRepo(@NonNull String name, @NonNull Path path, int indices);
+
+    @NonNull Result<Repo, ModifyRepoError> changePath(@NonNull String name, @NonNull Path path);
 
     /**
      * Deletes a Repo with given name or explains the reason why not.

@@ -81,6 +81,10 @@ public class RepoCommand {
             @Parameters(description = "Source Repo") String sourceRepo,
             @Parameters(description = "Destination Repo") String destinationRepo,
             @Parameters(description = "Path of the new repo") String path) {
+        int i = initDefaultConfig();
+        if (i != 0)
+            return i;
+
         return (new CopyRepoProcess(cliParameter, sourceRepo, destinationRepo, path, dedupConfig).copy());
     }
 

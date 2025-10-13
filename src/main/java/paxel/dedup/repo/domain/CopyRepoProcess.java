@@ -2,11 +2,15 @@ package paxel.dedup.repo.domain;
 
 import lombok.RequiredArgsConstructor;
 import paxel.dedup.config.DedupConfig;
+import paxel.dedup.model.Repo;
+import paxel.dedup.model.errors.ModifyRepoError;
 import paxel.dedup.parameter.CliParameter;
+import paxel.lib.Result;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
@@ -25,7 +29,9 @@ public class CopyRepoProcess {
         }
         List<IOException> ioExceptions = copyDirectory(dedupConfig.getRepoDir().resolve(sourceRepo), dedupConfig.getRepoDir().resolve(destinationRepo));
         ioExceptions.forEach(Throwable::printStackTrace);
-
+        Result<Repo, ModifyRepoError> repoModifyRepoErrorResult = dedupConfig.changePath(destinationRepo, Paths.get(path));
+        if (repoModifyRepoErrorResult.hasFailed())
+            return -60;
         return 0;
     }
 
@@ -33,7 +39,7 @@ public class CopyRepoProcess {
         List<IOException> errors = new ArrayList<>();
         try (Stream<Path> fileStream = Files.walk(from)) {
             fileStream.forEach(source -> {
-                Path destination = to.resolve(source.relativize(from).toString());
+                Path destination = to.resolve(from.relativize(source).toString());
                 try {
                     Files.copy(source, destination);
                 } catch (IOException e) {

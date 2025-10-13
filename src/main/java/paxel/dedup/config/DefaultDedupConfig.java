@@ -84,6 +84,7 @@ public final class DefaultDedupConfig implements DedupConfig {
         return writeRepoFiles(name, path, indices, ymlFile);
     }
 
+    @Override
     public @NonNull Result<Repo, ModifyRepoError> changePath(@NonNull String name, @NonNull Path path) {
 
         Result<Repo, OpenRepoError> repo = this.getRepo(name);
