@@ -39,7 +39,7 @@ public class RepoCommand {
         if (i != 0)
             return i;
 
-        return new RmRepoProcess(cliParameter, name, dedupConfig).delete();
+        return new RmReposProcess(cliParameter, name, dedupConfig).delete();
     }
 
 
@@ -81,7 +81,7 @@ public class RepoCommand {
             @Parameters(description = "Source Repo") String sourceRepo,
             @Parameters(description = "Destination Repo") String destinationRepo,
             @Parameters(description = "Path of the new repo") String path) {
-        return (new CopyReposProcess(cliParameter, sourceRepo, destinationRepo, path, dedupConfig).copy());
+        return (new CopyRepoProcess(cliParameter, sourceRepo, destinationRepo, path, dedupConfig).copy());
     }
 
     private int initDefaultConfig() {

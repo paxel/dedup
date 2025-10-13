@@ -9,7 +9,7 @@ import paxel.lib.Result;
 import java.util.List;
 
 @RequiredArgsConstructor
-public class RmRepoProcess {
+public class RmReposProcess {
 
     private final CliParameter cliParameter;
     private final String name;
