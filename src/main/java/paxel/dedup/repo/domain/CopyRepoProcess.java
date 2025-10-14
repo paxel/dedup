@@ -24,14 +24,28 @@ public class CopyRepoProcess {
     private final DedupConfig dedupConfig;
 
     public int copy() {
+        if (sourceRepo.equals(destinationRepo)) {
+            System.err.println("Can not copy to same directory");
+            return -62;
+        }
+
         if (cliParameter.isVerbose()) {
-            System.out.println("cloning " + sourceRepo + " to " + destinationRepo);
+            System.out.printf("cloning %s to %s%n", sourceRepo, destinationRepo);
         }
         List<IOException> ioExceptions = copyDirectory(dedupConfig.getRepoDir().resolve(sourceRepo), dedupConfig.getRepoDir().resolve(destinationRepo));
+
         ioExceptions.forEach(Throwable::printStackTrace);
+        if (!ioExceptions.isEmpty()) {
+            return -61;
+        }
         Result<Repo, ModifyRepoError> repoModifyRepoErrorResult = dedupConfig.changePath(destinationRepo, Paths.get(path));
-        if (repoModifyRepoErrorResult.hasFailed())
+        if (repoModifyRepoErrorResult.hasFailed()) {
+            System.err.printf("cloning %s to %s failed: %s%n", sourceRepo, destinationRepo, repoModifyRepoErrorResult.error());
             return -60;
+        }
+        if (cliParameter.isVerbose()) {
+            System.out.printf("cloning %s to %s%n", sourceRepo, destinationRepo);
+        }
         return 0;
     }
 

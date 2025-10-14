@@ -1,6 +1,4 @@
-package paxel.dedup.repo.domain;
-
-import paxel.dedup.model.errors.CreateConfigError;
+package paxel.dedup.model.errors;
 
 import java.io.IOException;
 

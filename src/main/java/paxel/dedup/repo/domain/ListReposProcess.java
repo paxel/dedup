@@ -12,7 +12,7 @@ import java.util.Comparator;
 import java.util.List;
 
 @RequiredArgsConstructor
-public class LsReposProcess {
+public class ListReposProcess {
 
     private final CliParameter cliParameter;
     private final DedupConfig dedupConfig;
@@ -30,7 +30,13 @@ public class LsReposProcess {
         }
         getReposResult.value().stream()
                 .sorted(Comparator.comparing(Repo::name, String::compareTo))
-                .map(repo -> repo.name() + ": " + repo.absolutePath())
+                .map(repo -> {
+                    if (cliParameter.isVerbose()) {
+                        return repo.name() + ": " + repo.absolutePath() + " index files: " + repo.indices();
+                    } else {
+                        return repo.name() + ": " + repo.absolutePath();
+                    }
+                })
                 .forEach(System.out::println);
         return 0;
     }

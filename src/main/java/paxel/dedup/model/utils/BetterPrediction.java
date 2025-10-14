@@ -1,4 +1,4 @@
-package paxel.dedup.repo.domain;
+package paxel.dedup.model.utils;
 
 import java.time.Duration;
 import java.time.Instant;

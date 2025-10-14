@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import paxel.dedup.config.DedupConfig;
 import paxel.dedup.config.DedupConfigFactory;
 import paxel.dedup.model.errors.CreateConfigError;
+import paxel.dedup.model.errors.DedupConfigErrorHandler;
 import paxel.dedup.repo.domain.*;
 import paxel.lib.Result;
 import picocli.CommandLine;
@@ -43,16 +44,16 @@ public class RepoCommand {
     }
 
 
-    @Command(name = "ls", description = "Lists repos")
+    @Command(name = "ls", description = "List all repos")
     public int list() {
         int i = initDefaultConfig();
         if (i != 0)
             return i;
 
-        return new LsReposProcess(cliParameter, dedupConfig).list();
+        return new ListReposProcess(cliParameter, dedupConfig).list();
     }
 
-    @Command(name = "update", description = "Reads all changes into the Repo")
+    @Command(name = "update", description = "Reads all file changes from the path into the Repos DB")
     public int update(
             @Option(names = {"-R"}, description = "Repos") List<String> names,
             @Option(names = {"-t", "--threads"}, description = "Number of threads used for hashing", defaultValue = "2") int threads,
@@ -76,7 +77,7 @@ public class RepoCommand {
         return (new PruneReposProcess(cliParameter, names, all, indices, dedupConfig, new ObjectMapper()).prune());
     }
 
-    @Command(name = "clone", description = "Clones the DB into a new one with a new path, keeping all the entries from the original. The original is unmodified")
+    @Command(name = "cp", description = "Copies the Repo into a new one with a new path, keeping all the entries from the original. The original is unmodified")
     public int clone(
             @Parameters(description = "Source Repo") String sourceRepo,
             @Parameters(description = "Destination Repo") String destinationRepo,
@@ -87,6 +88,29 @@ public class RepoCommand {
 
         return (new CopyRepoProcess(cliParameter, sourceRepo, destinationRepo, path, dedupConfig).copy());
     }
+
+    @Command(name = "rel", description = "Relocates the path of a Repo. The entries remain unchanged.")
+    public int clone(
+            @Parameters(description = "Source Repo") String repo,
+            @Parameters(description = "The relocated path") String path) {
+        int i = initDefaultConfig();
+        if (i != 0)
+            return i;
+
+        return (new RelocateRepoProcess(cliParameter, repo, path, dedupConfig).move());
+    }
+
+    @Command(name = "mv", description = "Moves the repos to a new Repo. The entries remain unchanged.")
+    public int move(
+            @Parameters(description = "Source Repo") String sourceRepo,
+            @Parameters(description = "Target Repo") String destinationRepo) {
+        int i = initDefaultConfig();
+        if (i != 0)
+            return i;
+
+        return (new MoveRepoProcess(cliParameter, sourceRepo, destinationRepo, dedupConfig).move());
+    }
+
 
     private int initDefaultConfig() {
         Result<DedupConfig, CreateConfigError> configResult = DedupConfigFactory.create();
