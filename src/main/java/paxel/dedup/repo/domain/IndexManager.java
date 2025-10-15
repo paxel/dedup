@@ -45,7 +45,6 @@ public class IndexManager {
     private final Path indexFile;
     private final ObjectReader objectReader;
     private final ObjectWriter objectWriter;
-    private final CliParameter cliParameter;
 
     public Stream<RepoFile> stream() {
         return paths.values().stream();
