@@ -23,7 +23,7 @@ public class TerminalProgressImpl implements TerminalProgress {
 
     private final AtomicReference<Instant> lastDraw = new AtomicReference<>();
 
-    void draw(boolean force) {
+    synchronized void draw(boolean force) {
         Instant last = lastDraw.get();
         Instant now = Instant.now();
         // don't draw more often than once per second

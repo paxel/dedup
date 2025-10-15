@@ -63,7 +63,7 @@ public class RepoManager {
         Statistics sum = new Statistics(repoDir.toString());
 
         for (int index = 0; index < repo.indices(); index++) {
-            IndexManager indexManager = new IndexManager(repoDir.resolve(nameIndexFile(index)), objectReader, objectWriter, cliParameter);
+            IndexManager indexManager = new IndexManager(repoDir.resolve(nameIndexFile(index)), objectReader, objectWriter);
             Result<Statistics, LoadError> load = indexManager.load();
             if (load.hasFailed()) {
                 return load;

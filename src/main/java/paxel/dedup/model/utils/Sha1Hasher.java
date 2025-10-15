@@ -32,7 +32,7 @@ public class Sha1Hasher implements FileHasher {
             byte[] buffer = new byte[8192];
             try (InputStream fis = Files.newInputStream(path)) {
                 int bytesRead;
-                while ((bytesRead = fis.read(buffer)) != -1) {
+                while ((bytesRead = fis.read(buffer)) > 0) {
                     digest.update(buffer, 0, bytesRead);
                 }
             }

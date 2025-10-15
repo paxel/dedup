@@ -18,7 +18,7 @@ public class StatisticPrinter implements ProgressPrinter {
         if (!keys.containsValue(key)) {
             keys.put(keys.size(), key);
         }
-        values.put(key, value);
+        values.put(key, value.replaceAll(System.lineSeparator(), " - "));
         action.run();
     }
 

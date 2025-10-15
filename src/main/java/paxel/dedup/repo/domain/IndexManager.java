@@ -129,7 +129,7 @@ public class IndexManager {
         return paths.get(relative);
     }
 
-    public Result<Void, WriteError> add(RepoFile repoFile) {
+    public synchronized Result<Void, WriteError> add(RepoFile repoFile) {
         try {
 
             BufferedOutputStream outputStream = out.updateAndGet(o -> {

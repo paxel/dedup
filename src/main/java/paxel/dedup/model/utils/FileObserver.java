@@ -18,4 +18,7 @@ public interface FileObserver {
 
     default void close() {
     }
+
+    default void scanFinished() {
+    }
 }

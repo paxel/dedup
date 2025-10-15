@@ -70,7 +70,9 @@ public class UpdateReposProcess {
         if (load.hasFailed()) {
             return load.mapError(f -> new UpdateRepoError(repoManager.getRepoDir(), load.error().ioException()));
         }
-        Map<Path, RepoFile> remainingPaths = repoManager.stream().filter(r -> !r.missing()).collect(Collectors.toMap(r -> Paths.get(repoManager.getRepo().absolutePath(), r.relativePath()), Function.identity(), (old, update) -> update));
+        Map<Path, RepoFile> remainingPaths = repoManager.stream()
+                .filter(r -> !r.missing())
+                .collect(Collectors.toMap(r -> Paths.get(repoManager.getRepo().absolutePath(), r.relativePath()), Function.identity(), (old, update) -> update));
         StatisticPrinter progressPrinter = new StatisticPrinter();
         TerminalProgress terminalProgress = TerminalProgress.init(progressPrinter);
         try {

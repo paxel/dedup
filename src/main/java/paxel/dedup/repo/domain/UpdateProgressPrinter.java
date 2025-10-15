@@ -13,12 +13,14 @@ import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static paxel.dedup.model.utils.BetterPrediction.COUNT;
 
 class UpdateProgressPrinter implements FileObserver {
     private final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss (dd.MM.yyyy)");
+
 
     private final BetterPrediction betterPrediction = new BetterPrediction();
     private final Map<Path, RepoFile> remainingPaths;
@@ -33,6 +35,7 @@ class UpdateProgressPrinter implements FileObserver {
     private final AtomicLong unchanged = new AtomicLong();
     private final AtomicLong errors = new AtomicLong();
     private final Instant start = Instant.now();
+    private final AtomicBoolean scanFinished = new AtomicBoolean();
 
 
     public UpdateProgressPrinter(Map<Path, RepoFile> remainingPaths, StatisticPrinter progressPrinter,
@@ -69,6 +72,7 @@ class UpdateProgressPrinter implements FileObserver {
     private void logHash(StatisticPrinter progressPrinter, AtomicLong hash, AtomicLong files, AtomicLong unchanged) {
         progressPrinter.put("hashed", hash + " / " + (files.get() - unchanged.get()));
         progressPrinter.put("unchanged", unchanged + " / " + (files.get() - hash.get()));
+        progressPrinter.put("duration", DurationFormatUtils.formatDurationWords(Duration.between(start, Instant.now()).toMillis(), true, true));
     }
 
     @Override
@@ -84,31 +88,34 @@ class UpdateProgressPrinter implements FileObserver {
     }
 
     @Override
+    public void scanFinished() {
+        scanFinished.set(true);
+        progressPrinter.put("directories", finishedDirs + ". scan finished after " + DurationFormatUtils.formatDurationWords(Duration.between(start, Instant.now()).toMillis(), true, true));
+    }
+
+    @Override
     public void fail(Path root, Throwable e) {
         progressPrinter.put("errors", errors.incrementAndGet() + " last:" + e.getMessage());
     }
 
     @Override
     public void close() {
-        progressPrinter.put("files", files.incrementAndGet() + " scan finished");
-        progressPrinter.put("deleted", remainingPaths.size() + " scan finished");
-        progressPrinter.put("directories", finishedDirs + " scan finished");
-        progressPrinter.put("progress", "finished");
+        progressPrinter.put("files", files.incrementAndGet() + " finished");
+        progressPrinter.put("deleted", remainingPaths.size() + " finished");
         statistics.set("deleted", remainingPaths.size());
     }
 
     private void calcUpdate(Instant start, StatisticPrinter progressPrinter, BetterPrediction betterPrediction, long total, long processed) {
         try {
-
-
-            if (total != 0) {
-                double percent = (processed * 100.0) / total;
+            if (total != 0 && scanFinished.get()) {
+                long remaining = total - processed;
+                double remainingPercent = (double) (remaining) / total;
                 Duration estimation = Duration.between(start, Instant.now());
 
                 if (estimation.minusMillis(30000).isPositive()) {
-                    estimation = getBetterDuration(betterPrediction, estimation.multipliedBy((long) (100 / percent)), total);
+                    estimation = getBetterDuration(betterPrediction, estimation.multipliedBy((long) (remainingPercent)), total, remaining);
                     ZonedDateTime eta = ZonedDateTime.now().plus(estimation);
-                    progressPrinter.put("progress", "%.2f %% estimated duration: %s ETA: %s".formatted(percent,
+                    progressPrinter.put("progress", "%.2f %% estimated remaining duration: %s ETA: %s".formatted((1.0 - remainingPercent) * 100,
                             DurationFormatUtils.formatDurationWords(estimation.toMillis(), true, true),
                             dateTimeFormatter.format(eta)));
                 }
@@ -118,11 +125,10 @@ class UpdateProgressPrinter implements FileObserver {
         }
     }
 
-    private Duration getBetterDuration(BetterPrediction betterPrediction, Duration estimation, long total) {
-        Duration duration = betterPrediction.get();
-        if (duration != null) {
-            double tenFilesPercent = (COUNT * 100.0) / total;
-            Duration recentEta = duration.multipliedBy((long) (100 / tenFilesPercent));
+    private Duration getBetterDuration(BetterPrediction betterPrediction, Duration estimation, long total, long remaining) {
+        Duration duartionLast1000 = betterPrediction.get();
+        if (duartionLast1000 != null) {
+            Duration recentEta = duartionLast1000.multipliedBy(remaining / COUNT);
             if (recentEta.minus(estimation).isPositive()) return recentEta;
         }
         return estimation;

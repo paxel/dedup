@@ -42,6 +42,7 @@ public class ResilientFileWalker {
     }
 
     private void finished() {
+        fileObserver.scanFinished();
         finished.set(true);
     }
 
