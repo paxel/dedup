@@ -4,11 +4,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import paxel.dedup.config.DedupConfig;
 import paxel.dedup.model.Repo;
+import paxel.dedup.model.RepoFile;
+import paxel.dedup.model.Statistics;
+import paxel.dedup.model.errors.LoadError;
 import paxel.dedup.model.errors.OpenRepoError;
 import paxel.dedup.parameter.CliParameter;
 import paxel.lib.Result;
 
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 public class DuplicateRepoProcess {
@@ -25,15 +29,55 @@ public class DuplicateRepoProcess {
             if (repos.hasFailed()) {
                 return -80;
             }
-            dupe(repos.value());
+            return dupe(repos.value());
         }
+        List<Repo> repos = new ArrayList<>();
+        for (String name : names) {
+            Result<Repo, OpenRepoError> repoResult = dedupConfig.getRepo(name);
+            if (repoResult.isSuccess()) {
+                repos.add(repoResult.value());
+            }
+        }
+        dupe(repos);
         return 0;
     }
 
-    private void dupe(List<Repo> repos) {
+    private int dupe(List<Repo> repos) {
+
+        Map<UniqueHash, List<RepoRepoFile>> all = new HashMap<>();
+
         for (Repo repo : repos) {
             RepoManager r = new RepoManager(repo, dedupConfig, objectMapper);
+            Result<Statistics, LoadError> load = r.load();
+            if (load.hasFailed()) {
+                return -81;
+            }
+            r.stream()
+                    .filter(repoFile1 -> !repoFile1.missing())
+                    .forEach(repoFile ->
+                            all.computeIfAbsent(new UniqueHash(repoFile.hash(), repoFile.size()),
+                                    k -> new ArrayList<>()).add(new RepoRepoFile(repo, repoFile)));
         }
+
+        printDuplicates(all);
+
+
+        return 0;
+    }
+
+    private static void printDuplicates(Map<UniqueHash, List<RepoRepoFile>> all) {
+        List<List<RepoRepoFile>> list = all.entrySet().stream().filter(e -> e.getValue().size() > 1).map(Map.Entry::getValue).toList();
+        for (List<RepoRepoFile> repoRepoFiles : list) {
+            System.out.printf("%s%n %d bytes%n", repoRepoFiles.getFirst().file.hash(), repoRepoFiles.getFirst().file.size());
+            repoRepoFiles.stream().sorted(Comparator.comparing(f -> f.file().lastModified()))
+                    .forEach(repoRepoFile -> System.out.printf("  %s%n   %s/%s%n",repoRepoFile.repo.name(), repoRepoFile.repo.absolutePath(), repoRepoFile.file.relativePath()));
+        }
+    }
+
+    record UniqueHash(String hash, long size) {
+    }
+
+    record RepoRepoFile(Repo repo, RepoFile file) {
 
     }
 }
