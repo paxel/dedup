@@ -4,7 +4,9 @@ import org.apache.commons.lang3.time.DurationFormatUtils;
 import paxel.dedup.model.RepoFile;
 import paxel.dedup.model.Statistics;
 import paxel.dedup.model.utils.BetterPrediction;
+import paxel.dedup.model.utils.FileHasher;
 import paxel.dedup.model.utils.FileObserver;
+import paxel.dedup.model.utils.Sha1Hasher;
 import paxel.dedup.terminal.StatisticPrinter;
 
 import java.nio.file.Path;
@@ -28,6 +30,7 @@ class UpdateProgressPrinter implements FileObserver {
     private final AtomicLong files = new AtomicLong();
     private final RepoManager repoManager;
     private final Statistics statistics;
+    private final FileHasher fileHasher;
     private final AtomicLong finishedDirs = new AtomicLong();
     private final AtomicLong allDirs = new AtomicLong();
     private final AtomicLong news = new AtomicLong();
@@ -39,11 +42,12 @@ class UpdateProgressPrinter implements FileObserver {
 
 
     public UpdateProgressPrinter(Map<Path, RepoFile> remainingPaths, StatisticPrinter progressPrinter,
-                                 RepoManager repoManager, Statistics statistics) {
+                                 RepoManager repoManager, Statistics statistics, FileHasher fileHasher) {
         this.remainingPaths = remainingPaths;
         this.progressPrinter = progressPrinter;
         this.repoManager = repoManager;
         this.statistics = statistics;
+        this.fileHasher = fileHasher;
     }
 
     @Override
@@ -51,7 +55,7 @@ class UpdateProgressPrinter implements FileObserver {
         remainingPaths.remove(absolutePath);
         progressPrinter.put("files", files.incrementAndGet() + " last: " + absolutePath);
         progressPrinter.put("deleted", "" + remainingPaths.size());
-        repoManager.addPath(absolutePath).thenApply(add -> {
+        repoManager.addPath(absolutePath, fileHasher).thenApply(add -> {
             betterPrediction.trigger();
             if (add.isSuccess()) if (add.value() == Boolean.TRUE) {
                 statistics.inc("added");

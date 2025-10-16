@@ -111,6 +111,17 @@ public class RepoCommand {
         return (new MoveRepoProcess(cliParameter, sourceRepo, destinationRepo, dedupConfig).move());
     }
 
+    @Command(name = "dupes", description = "Manage duplicates in one or more repos.")
+    public int move(
+            @Option(names = {"-R"}, description = "Repos") List<String> names,
+            @Option(names = {"-a", "--all"}, description = "All repos") boolean all) {
+        int i = initDefaultConfig();
+        if (i != 0)
+            return i;
+
+        return (new DuplicateRepoProcess(cliParameter, names, all, dedupConfig).dupes());
+    }
+
 
     private int initDefaultConfig() {
         Result<DedupConfig, CreateConfigError> configResult = DedupConfigFactory.create();

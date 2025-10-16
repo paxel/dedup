@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import lombok.Getter;
-import lombok.SneakyThrows;
 import paxel.dedup.config.DedupConfig;
 import paxel.dedup.model.Repo;
 import paxel.dedup.model.RepoFile;
@@ -15,7 +14,6 @@ import paxel.dedup.model.errors.WriteError;
 import paxel.dedup.model.utils.BinaryFormatter;
 import paxel.dedup.model.utils.FileHasher;
 import paxel.dedup.model.utils.HexFormatter;
-import paxel.dedup.parameter.CliParameter;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -35,19 +33,15 @@ public class RepoManager {
     private final Map<Integer, IndexManager> indices = new ConcurrentHashMap<>();
     private final ObjectReader objectReader;
     private final ObjectWriter objectWriter;
-    private final CliParameter cliParameter;
     @Getter
     private final Path repoDir;
     private final BinaryFormatter binaryFormatter = new HexFormatter();
-    private final FileHasher fileHasher;
 
 
-    public RepoManager(Repo repo, DedupConfig dedupConfig, ObjectMapper objectMapper, CliParameter cliParameter, FileHasher fileHasher) {
+    public RepoManager(Repo repo, DedupConfig dedupConfig, ObjectMapper objectMapper) {
         this.repo = repo;
-        this.cliParameter = cliParameter;
         objectReader = objectMapper.readerFor(RepoFile.class);
         objectWriter = objectMapper.writerFor(RepoFile.class);
-        this.fileHasher = fileHasher;
         repoDir = dedupConfig.getRepoDir().resolve(repo.name());
     }
 
@@ -110,7 +104,7 @@ public class RepoManager {
                 .map(f -> true, Function.identity());
     }
 
-    public CompletableFuture<Result<Boolean, WriteError>> addPath(Path absolutePath) {
+    public CompletableFuture<Result<Boolean, WriteError>> addPath(Path absolutePath, FileHasher fileHasher) {
         if (!Files.exists(absolutePath)) {
             return CompletableFuture.completedFuture(Result.ok(false));
         }
@@ -142,7 +136,7 @@ public class RepoManager {
             }
         }
 
-        return calcHash(absolutePath, size).thenApply(hashResult -> {
+        return calcHash(absolutePath, size, fileHasher).thenApply(hashResult -> {
             if (hashResult.hasFailed())
                 return hashResult.mapError(l -> new WriteError(null, absolutePath, l.ioException()));
 
@@ -157,7 +151,7 @@ public class RepoManager {
         });
     }
 
-    private CompletableFuture<Result<String, LoadError>> calcHash(Path absolutePath, long size) {
+    private CompletableFuture<Result<String, LoadError>> calcHash(Path absolutePath, long size, FileHasher fileHasher) {
         if (size < 20) {
             try {
                 return CompletableFuture.completedFuture(Result.ok(binaryFormatter.format(Files.readAllBytes(absolutePath))));
@@ -184,8 +178,5 @@ public class RepoManager {
         }
     }
 
-    @SneakyThrows
-    public void close() {
-        fileHasher.close();
-    }
+
 }

@@ -49,7 +49,7 @@ public class UpdateReposProcess {
                 return -50;
             }
             for (Repo repo : lsResult.value()) {
-                updateRepo(new RepoManager(repo, dedupConfig, objectMapper, cliParameter, new Sha1Hasher(new HexFormatter(), Executors.newFixedThreadPool(threads))));
+                updateRepo(new RepoManager(repo, dedupConfig, objectMapper));
             }
             return 0;
         }
@@ -57,8 +57,7 @@ public class UpdateReposProcess {
         for (String name : names) {
             Result<Repo, OpenRepoError> getRepoResult = dedupConfig.getRepo(name);
             if (getRepoResult.isSuccess()) {
-                Result<Statistics, UpdateRepoError> statisticsUpdateRepoErrorResult = updateRepo(new RepoManager(getRepoResult.value(), dedupConfig, objectMapper, cliParameter,
-                        new Sha1Hasher(new HexFormatter(), Executors.newFixedThreadPool(threads))));
+                Result<Statistics, UpdateRepoError> statisticsUpdateRepoErrorResult = updateRepo(new RepoManager(getRepoResult.value(), dedupConfig, objectMapper));
             }
         }
         return 0;
@@ -75,11 +74,12 @@ public class UpdateReposProcess {
                 .collect(Collectors.toMap(r -> Paths.get(repoManager.getRepo().absolutePath(), r.relativePath()), Function.identity(), (old, update) -> update));
         StatisticPrinter progressPrinter = new StatisticPrinter();
         TerminalProgress terminalProgress = TerminalProgress.init(progressPrinter);
+        Sha1Hasher sha1Hasher = new Sha1Hasher(new HexFormatter(), Executors.newFixedThreadPool(threads));
         try {
             progressPrinter.put(repoManager.getRepo().name(), repoManager.getRepo().absolutePath());
             progressPrinter.put("progress", "...stand by... collecting info");
             Statistics statistics = new Statistics(repoManager.getRepo().absolutePath());
-            new ResilientFileWalker(new UpdateProgressPrinter(remainingPaths, progressPrinter, repoManager, statistics))
+            new ResilientFileWalker(new UpdateProgressPrinter(remainingPaths, progressPrinter, repoManager, statistics, sha1Hasher))
                     .walk(Paths.get(repoManager.getRepo().absolutePath()));
 
             for (RepoFile value : remainingPaths.values()) {
@@ -87,7 +87,7 @@ public class UpdateReposProcess {
             }
             return Result.ok(statistics);
         } finally {
-            repoManager.close();
+            sha1Hasher.close();
             terminalProgress.deactivate();
         }
     }
