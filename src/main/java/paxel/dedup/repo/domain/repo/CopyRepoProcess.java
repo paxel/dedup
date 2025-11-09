@@ -1,4 +1,4 @@
-package paxel.dedup.repo.domain;
+package paxel.dedup.repo.domain.repo;
 
 import lombok.RequiredArgsConstructor;
 import paxel.dedup.config.DedupConfig;

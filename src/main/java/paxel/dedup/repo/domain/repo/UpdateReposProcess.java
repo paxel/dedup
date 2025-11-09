@@ -1,4 +1,4 @@
-package paxel.dedup.repo.domain;
+package paxel.dedup.repo.domain.repo;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -67,7 +67,7 @@ public class UpdateReposProcess {
     private Result<Statistics, UpdateRepoError> updateRepo(RepoManager repoManager) {
         Result<Statistics, LoadError> load = repoManager.load();
         if (load.hasFailed()) {
-            return load.mapError(f -> new UpdateRepoError(repoManager.getRepoDir(), load.error().ioException()));
+            return load.mapError(f -> UpdateRepoError.ioException(repoManager.getRepoDir(), load.error().ioException()));
         }
         Map<Path, RepoFile> remainingPaths = repoManager.stream()
                 .filter(r -> !r.missing())

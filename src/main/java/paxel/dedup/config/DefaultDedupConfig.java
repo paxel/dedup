@@ -180,13 +180,16 @@ public final class DefaultDedupConfig implements DedupConfig {
         if (repo.hasFailed())
             return Result.ok(false);
         try {
-            Files.move(repoRootPath.resolve(oldName), repoRootPath.resolve(newName));
+            Path resolve1 = repoRootPath.resolve(oldName);
+            Path resolve2 = repoRootPath.resolve(newName);
+            Path resolve = Files.move(resolve1, resolve2);
         } catch (IOException e) {
             return Result.err(RenameRepoError.ioError(repoRootPath.resolve(newName), e));
         }
         Path ymlFile = repoRootPath.resolve(newName).resolve(DEDUP_REPO_YML);
+        Result<Repo, IOException> repoIOExceptionResult = writeRepoFile(newName, Paths.get(repo.value().absolutePath()), repo.value().indices(), ymlFile);
 
-        return writeRepoFile(newName, Paths.get(repo.value().absolutePath()), repo.value().indices(), ymlFile)
+        return repoIOExceptionResult
                 .map(a -> true, e -> new RenameRepoError(ymlFile, List.of(e)));
     }
 

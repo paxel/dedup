@@ -1,4 +1,4 @@
-package paxel.dedup.repo.domain;
+package paxel.dedup.repo.domain.repo;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
@@ -83,6 +83,16 @@ public class RepoManager {
                 .map(i -> i.getByHash(hash))
                 .filter(Objects::nonNull)
                 .flatMap(Collection::stream)
+                .toList();
+
+    }
+
+    public List<RepoFile> getByHashAndSize(String hash, Long size) {
+        return indices.values().stream()
+                .map(i -> i.getByHash(hash))
+                .filter(Objects::nonNull)
+                .flatMap(Collection::stream)
+                .filter(r -> Objects.equals(r.size(), size))
                 .toList();
 
     }

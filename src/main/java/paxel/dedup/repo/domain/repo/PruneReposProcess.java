@@ -1,4 +1,4 @@
-package paxel.dedup.repo.domain;
+package paxel.dedup.repo.domain.repo;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -79,22 +79,39 @@ public class PruneReposProcess {
         Statistics statistics = new Statistics(newName);
         Result<Statistics, LoadError> load = repoManager.load();
         if (load.hasFailed()) {
-            return load.mapError(f -> new UpdateRepoError(repoManager.getRepoDir(), load.error().ioException()));
+            return load.mapError(f -> UpdateRepoError.ioException(repoManager.getRepoDir(), load.error().ioException()));
         }
         Result<Repo, CreateRepoError> repo = dedupConfig.createRepo(newName, Paths.get(oldRepo.absolutePath()), indices);
         // Stream existing files into the repo
         if (repo.isSuccess()) {
             Result<Statistics, UpdateRepoError> loadNew = streamRepo(repoManager, statistics, repo.value());
-            if (loadNew != null) {
+            if (loadNew.hasFailed())
                 return loadNew;
-            }
         }
         // rename old repo
-        dedupConfig.renameRepo(name, name + "_del");
+        Result<Boolean, RenameRepoError> result = dedupConfig.renameRepo(name, name + "_del");
+        if (result.hasFailed())
+            return result.mapError(f -> new UpdateRepoError(f.resolve(), f.ioExceptions(), null));
+        if (!result.value()) {
+            System.err.println("Could not rename " + name + " to " + name + "_del");
+            return Result.err(UpdateRepoError.description("Could not rename repo from " + name + " to " + name + "_del"));
+        }
         // rename new repo
-        dedupConfig.renameRepo(newName, name);
+        Result<Boolean, RenameRepoError> otherResult = dedupConfig.renameRepo(newName, name);
+        if (otherResult.hasFailed())
+            return otherResult.mapError(f -> new UpdateRepoError(f.resolve(), f.ioExceptions(), null));
+        if (!otherResult.value()) {
+            System.err.println("Could not rename " + newName + " to " + name);
+            return Result.err(UpdateRepoError.description("Could not rename repo from " + newName + " to " + name));
+        }
         //delete old repo
-        dedupConfig.deleteRepo(name + "_del");
+        Result<Boolean, DeleteRepoError> deleteResult = dedupConfig.deleteRepo(name + "_del");
+        if (deleteResult.hasFailed())
+            return result.mapError(f -> new UpdateRepoError(f.resolve(), f.ioExceptions(), null));
+        if (!deleteResult.value()) {
+            System.err.println("Could not delete " + name + "_del");
+            return Result.err(UpdateRepoError.description("Could not delete " + name + "_del"));
+        }
 
         return Result.ok(statistics);
     }
@@ -103,7 +120,7 @@ public class PruneReposProcess {
         RepoManager temp = new RepoManager(newRepo, dedupConfig, new ObjectMapper());
         Result<Statistics, LoadError> loadNew = temp.load();
         if (loadNew.hasFailed()) {
-            return loadNew.mapError(f -> new UpdateRepoError(repoManager.getRepoDir(), loadNew.error().ioException()));
+            return loadNew.mapError(f -> UpdateRepoError.ioException(repoManager.getRepoDir(), loadNew.error().ioException()));
         }
         repoManager.stream().filter(f -> !f.missing()).forEach(repoFile -> {
             Result<Boolean, WriteError> booleanWriteErrorResult = temp.addRepoFile(repoFile);

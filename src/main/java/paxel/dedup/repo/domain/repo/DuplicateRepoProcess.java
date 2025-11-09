@@ -1,4 +1,4 @@
-package paxel.dedup.repo.domain;
+package paxel.dedup.repo.domain.repo;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -12,7 +12,6 @@ import paxel.dedup.parameter.CliParameter;
 import paxel.lib.Result;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 public class DuplicateRepoProcess {

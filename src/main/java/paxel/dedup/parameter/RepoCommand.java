@@ -5,7 +5,7 @@ import paxel.dedup.config.DedupConfig;
 import paxel.dedup.config.DedupConfigFactory;
 import paxel.dedup.model.errors.CreateConfigError;
 import paxel.dedup.model.errors.DedupConfigErrorHandler;
-import paxel.dedup.repo.domain.*;
+import paxel.dedup.repo.domain.repo.*;
 import paxel.lib.Result;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;

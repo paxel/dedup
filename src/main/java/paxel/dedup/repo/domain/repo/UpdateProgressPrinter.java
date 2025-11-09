@@ -1,4 +1,4 @@
-package paxel.dedup.repo.domain;
+package paxel.dedup.repo.domain.repo;
 
 import org.apache.commons.lang3.time.DurationFormatUtils;
 import paxel.dedup.model.RepoFile;
@@ -6,7 +6,6 @@ import paxel.dedup.model.Statistics;
 import paxel.dedup.model.utils.BetterPrediction;
 import paxel.dedup.model.utils.FileHasher;
 import paxel.dedup.model.utils.FileObserver;
-import paxel.dedup.model.utils.Sha1Hasher;
 import paxel.dedup.terminal.StatisticPrinter;
 
 import java.nio.file.Path;

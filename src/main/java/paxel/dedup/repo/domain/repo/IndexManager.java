@@ -1,4 +1,4 @@
-package paxel.dedup.repo.domain;
+package paxel.dedup.repo.domain.repo;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectReader;
@@ -10,7 +10,6 @@ import paxel.dedup.model.errors.CloseError;
 import paxel.dedup.model.errors.LoadError;
 import paxel.dedup.model.errors.WriteError;
 import paxel.dedup.model.utils.TunneledIoException;
-import paxel.dedup.parameter.CliParameter;
 import paxel.lib.Result;
 
 import java.io.BufferedOutputStream;
