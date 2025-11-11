@@ -15,6 +15,7 @@ import paxel.lib.Result;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 @RequiredArgsConstructor
 public class CreateDiffProcess {
@@ -22,7 +23,9 @@ public class CreateDiffProcess {
     private final String source;
     private final String target;
     private final DedupConfig dedupConfig;
+    private final String filter;
     private final ObjectMapper objectMapper;
+    private Predicate<RepoFile> repoFilter;
 
     public int print() {
         Result<Repos, Integer> init = init();
@@ -32,33 +35,52 @@ public class CreateDiffProcess {
         RepoManager sourceRepo = init.value().source();
         RepoManager targetRepo = init.value().target();
 
-        sourceRepo.stream().filter(repoFile -> !repoFile.missing()).forEach(r -> {
-            List<RepoFile> byHash = targetRepo.getByHashAndSize(r.hash(), r.size());
-            if (byHash.isEmpty()) {
-                System.out.println("New: " + r.relativePath());
-            } else {
-                Optional<RepoFile> exsting = byHash.stream().filter(repoFile -> !repoFile.missing()).findAny();
-                if (exsting.isPresent()) {
-                    // File exists
-                    if (cliParameter.isVerbose()) {
-                        System.out.println("Equal: " + r.relativePath() + " = " + exsting.get().relativePath());
+        sourceRepo.stream()
+                .filter(repoFile -> !repoFile.missing())
+                .filter(repoFilter)
+                .forEach(r -> {
+                    List<RepoFile> byHash = targetRepo.getByHashAndSize(r.hash(), r.size());
+                    if (byHash.isEmpty()) {
+                        System.out.println("New: " + r.relativePath());
+                    } else {
+                        Optional<RepoFile> exsting = byHash.stream().filter(repoFile -> !repoFile.missing()).findAny();
+                        if (exsting.isPresent()) {
+                            // File exists
+                            if (cliParameter.isVerbose()) {
+                                System.out.println("Equal: " + r.relativePath() + " = " + exsting.get().relativePath());
+                            }
+                        } else {
+                            System.out.println("Deleted in target: " + r.relativePath());
+                        }
                     }
-                } else {
-                    System.out.println("Deleted in target: " + r.relativePath());
-                }
-            }
-        });
+                });
         return 0;
     }
 
 
     private Result<Repos, Integer> init() {
+        createFilter();
+
         Result<RepoManager, Integer> sourcceRepo = openRepo(source, -70);
         if (sourcceRepo.hasFailed()) {
             return sourcceRepo.mapError(Function.identity());
         }
         return openRepo(target, -80)
                 .map(target -> new Repos(sourcceRepo.value(), target), Function.identity());
+    }
+
+    private void createFilter() {
+        if (filter == null || filter.isBlank())
+            repoFilter = a -> true;
+        else if (filter.startsWith("mime:")) {
+            String substring = filter.substring(5);
+            System.out.println(substring);
+            repoFilter = a -> {
+                if (a.mimeType() == null) return false;
+                return a.mimeType().startsWith(substring);
+            };
+        } else
+            repoFilter = a -> false;
     }
 
     private Result<RepoManager, Integer> openRepo(String name, int errOffset) {
