@@ -9,11 +9,13 @@ import paxel.dedup.model.Repo;
 import paxel.dedup.model.RepoFile;
 import paxel.dedup.model.Statistics;
 import paxel.dedup.model.errors.CloseError;
+import paxel.dedup.model.errors.IoError;
 import paxel.dedup.model.errors.LoadError;
 import paxel.dedup.model.errors.WriteError;
 import paxel.dedup.model.utils.BinaryFormatter;
 import paxel.dedup.model.utils.FileHasher;
 import paxel.dedup.model.utils.HexFormatter;
+import paxel.dedup.model.utils.MimetypeProvider;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -108,15 +110,15 @@ public class RepoManager {
         return list.getLast();
     }
 
-    public Result<Boolean, WriteError> addRepoFile(RepoFile repoFile) {
+    public Result<RepoFile, WriteError> addRepoFile(RepoFile repoFile) {
         return indices.get((int) (repoFile.size() % repo.indices()))
                 .add(repoFile)
-                .map(f -> true, Function.identity());
+                .map(f -> repoFile, Function.identity());
     }
 
-    public CompletableFuture<Result<Boolean, WriteError>> addPath(Path absolutePath, FileHasher fileHasher) {
+    public CompletableFuture<Result<RepoFile, WriteError>> addPath(Path absolutePath, FileHasher fileHasher, MimetypeProvider mimetypeProvider) {
         if (!Files.exists(absolutePath)) {
-            return CompletableFuture.completedFuture(Result.ok(false));
+            return CompletableFuture.completedFuture(Result.ok(null));
         }
         Path relativize = Paths.get(repo.absolutePath()).relativize(absolutePath);
         RepoFile oldRepoFile = getByPath(relativize.toString());
@@ -137,7 +139,7 @@ public class RepoManager {
             if (Objects.equals(oldRepoFile.size(), size)) {
                 if (fileTime.toMillis() <= oldRepoFile.lastModified()) {
                     if (!oldRepoFile.missing()) {
-                        return CompletableFuture.completedFuture(Result.ok(false));
+                        return CompletableFuture.completedFuture(Result.ok(null));
                     } else {
                         // repapeared
                         return CompletableFuture.completedFuture(addRepoFile(oldRepoFile.withMissing(false)));
@@ -150,11 +152,13 @@ public class RepoManager {
             if (hashResult.hasFailed())
                 return hashResult.mapError(l -> new WriteError(null, absolutePath, l.ioException()));
 
+            Result<String, IoError> stringIoErrorResult = mimetypeProvider.get(absolutePath);
             RepoFile repoFile = RepoFile.builder()
                     .size(size)
                     .relativePath(relativize.toString())
                     .lastModified(fileTime.toMillis())
                     .hash(hashResult.value())
+                    .mimeType(stringIoErrorResult.getValueOr(null))
                     .build();
 
             return addRepoFile(repoFile);

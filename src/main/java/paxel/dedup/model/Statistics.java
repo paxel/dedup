@@ -22,8 +22,8 @@ public class Statistics {
         this.name = name;
     }
 
-    public void inc(String key) {
-        counter.computeIfAbsent(key, k -> new AtomicLong()).incrementAndGet();
+    public long inc(String key) {
+        return counter.computeIfAbsent(key, k -> new AtomicLong()).incrementAndGet();
     }
 
     public void set(String key, long value) {

@@ -6,6 +6,7 @@ import paxel.dedup.model.Statistics;
 import paxel.dedup.model.utils.BetterPrediction;
 import paxel.dedup.model.utils.FileHasher;
 import paxel.dedup.model.utils.FileObserver;
+import paxel.dedup.model.utils.MimetypeProvider;
 import paxel.dedup.terminal.StatisticPrinter;
 
 import java.nio.file.Path;
@@ -39,7 +40,6 @@ class UpdateProgressPrinter implements FileObserver {
     private final Instant start = Instant.now();
     private final AtomicBoolean scanFinished = new AtomicBoolean();
 
-
     public UpdateProgressPrinter(Map<Path, RepoFile> remainingPaths, StatisticPrinter progressPrinter,
                                  RepoManager repoManager, Statistics statistics, FileHasher fileHasher) {
         this.remainingPaths = remainingPaths;
@@ -52,59 +52,62 @@ class UpdateProgressPrinter implements FileObserver {
     @Override
     public void file(Path absolutePath) {
         remainingPaths.remove(absolutePath);
-        progressPrinter.put("files", files.incrementAndGet() + " last: " + absolutePath);
-        progressPrinter.put("deleted", "" + remainingPaths.size());
-        repoManager.addPath(absolutePath, fileHasher).thenApply(add -> {
+        progressPrinter.setFiles(files.incrementAndGet() + " last: " + absolutePath);
+        progressPrinter.setDeleted("" + remainingPaths.size());
+        repoManager.addPath(absolutePath, fileHasher, new MimetypeProvider()).thenApply(add -> {
             betterPrediction.trigger();
-            if (add.isSuccess()) if (add.value() == Boolean.TRUE) {
-                statistics.inc("added");
-                hash.incrementAndGet();
-                logHash(progressPrinter, hash, files, unchanged);
-                calcUpdate(start, progressPrinter, betterPrediction, files.get(), hash.get() + unchanged.get());
-            } else {
-                unchanged.incrementAndGet();
-                statistics.inc("unchanged");
-                logHash(progressPrinter, hash, files, unchanged);
-                calcUpdate(start, progressPrinter, betterPrediction, files.get(), hash.get() + unchanged.get());
-            }
+            if (add.isSuccess())
+                if (add.value() != null) {
+                    statistics.inc("added");
+                    long v = statistics.inc(add.value().mimeType());
+                    progressPrinter.addMimeType(add.value().mimeType(), v);
+                    hash.incrementAndGet();
+                    logHash(progressPrinter, hash, files, unchanged);
+                    calcUpdate(start, progressPrinter, betterPrediction, files.get(), hash.get() + unchanged.get());
+                } else {
+                    unchanged.incrementAndGet();
+                    statistics.inc("unchanged");
+                    logHash(progressPrinter, hash, files, unchanged);
+                    calcUpdate(start, progressPrinter, betterPrediction, files.get(), hash.get() + unchanged.get());
+                }
             return null;
         });
         news.incrementAndGet();
     }
 
     private void logHash(StatisticPrinter progressPrinter, AtomicLong hash, AtomicLong files, AtomicLong unchanged) {
-        progressPrinter.put("hashed", hash + " / " + (files.get() - unchanged.get()));
-        progressPrinter.put("unchanged", unchanged + " / " + (files.get() - hash.get()));
-        progressPrinter.put("duration", DurationFormatUtils.formatDurationWords(Duration.between(start, Instant.now()).toMillis(), true, true));
+        progressPrinter.setHashed(hash + " / " + (files.get() - unchanged.get()));
+        progressPrinter.setUnchanged(unchanged + " / " + (files.get() - hash.get()));
+        progressPrinter.setDuration(DurationFormatUtils.formatDurationWords(Duration.between(start, Instant.now()).toMillis(), true, true));
     }
 
     @Override
     public void addDir(Path f) {
         allDirs.incrementAndGet();
-        progressPrinter.put("directories", finishedDirs + " / " + allDirs);
+        progressPrinter.setDirectories(finishedDirs + " / " + allDirs);
     }
 
     @Override
     public void finishedDir(Path f) {
         finishedDirs.incrementAndGet();
-        progressPrinter.put("directories", finishedDirs + " / " + allDirs);
+        progressPrinter.setDirectories(finishedDirs + " / " + allDirs);
     }
 
     @Override
     public void scanFinished() {
         scanFinished.set(true);
-        progressPrinter.put("directories", finishedDirs + ". scan finished after " + DurationFormatUtils.formatDurationWords(Duration.between(start, Instant.now()).toMillis(), true, true));
+        progressPrinter.setDirectories(finishedDirs + ". scan finished after " + DurationFormatUtils.formatDurationWords(Duration.between(start, Instant.now()).toMillis(), true, true));
     }
 
     @Override
     public void fail(Path root, Throwable e) {
-        progressPrinter.put("errors", errors.incrementAndGet() + " last:" + e.getMessage());
+        progressPrinter.setErrors(errors.incrementAndGet() + " last:" + e.getMessage());
     }
 
     @Override
     public void close() {
-        progressPrinter.put("files", files.incrementAndGet() + " finished");
-        progressPrinter.put("deleted", remainingPaths.size() + " finished");
+        progressPrinter.setFiles(files.incrementAndGet() + " finished");
+        progressPrinter.setDeleted(remainingPaths.size() + " finished");
         statistics.set("deleted", remainingPaths.size());
     }
 
@@ -118,7 +121,7 @@ class UpdateProgressPrinter implements FileObserver {
                 if (estimation.minusMillis(30000).isPositive()) {
                     estimation = getBetterDuration(betterPrediction, estimation.multipliedBy((long) (remainingPercent)), total, remaining);
                     ZonedDateTime eta = ZonedDateTime.now().plus(estimation);
-                    progressPrinter.put("progress", "%.2f %% estimated remaining duration: %s ETA: %s".formatted((1.0 - remainingPercent) * 100,
+                    progressPrinter.setProgress("%.2f %% estimated remaining duration: %s ETA: %s".formatted((1.0 - remainingPercent) * 100,
                             DurationFormatUtils.formatDurationWords(estimation.toMillis(), true, true),
                             dateTimeFormatter.format(eta)));
                 }

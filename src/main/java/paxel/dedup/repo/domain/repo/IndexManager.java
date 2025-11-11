@@ -105,8 +105,8 @@ public class IndexManager {
         RepoFile repoFile = objectReader.readValue(s, RepoFile.class);
         if (repoFile.size() == null)
             repoFile = repoFile.withSize(0L);
-        if (repoFile.meta() == null)
-            repoFile = repoFile.withMeta("");
+        if (repoFile.mimeType() == null)
+            repoFile = repoFile.withMimeType("");
         if (repoFile.hash() == null)
             repoFile = repoFile.withHash("");
         if (repoFile.relativePath() == null)

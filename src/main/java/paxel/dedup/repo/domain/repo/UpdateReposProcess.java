@@ -10,6 +10,7 @@ import paxel.dedup.model.errors.LoadError;
 import paxel.dedup.model.errors.OpenRepoError;
 import paxel.dedup.model.errors.UpdateRepoError;
 import paxel.dedup.model.utils.HexFormatter;
+import paxel.dedup.model.utils.MimetypeProvider;
 import paxel.dedup.model.utils.ResilientFileWalker;
 import paxel.dedup.model.utils.Sha1Hasher;
 import paxel.dedup.parameter.CliParameter;
@@ -76,8 +77,8 @@ public class UpdateReposProcess {
         TerminalProgress terminalProgress = TerminalProgress.init(progressPrinter);
         Sha1Hasher sha1Hasher = new Sha1Hasher(new HexFormatter(), Executors.newFixedThreadPool(threads));
         try {
-            progressPrinter.put(repoManager.getRepo().name(), repoManager.getRepo().absolutePath());
-            progressPrinter.put("progress", "...stand by... collecting info");
+            progressPrinter.set(repoManager.getRepo().name(), repoManager.getRepo().absolutePath());
+            progressPrinter.setProgress( "...stand by... collecting info");
             Statistics statistics = new Statistics(repoManager.getRepo().absolutePath());
             new ResilientFileWalker(new UpdateProgressPrinter(remainingPaths, progressPrinter, repoManager, statistics, sha1Hasher))
                     .walk(Paths.get(repoManager.getRepo().absolutePath()));

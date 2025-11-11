@@ -15,5 +15,5 @@ public record RepoFile(
         @With @JsonProperty(value = "s", defaultValue = "0") Long size,
         @With @JsonProperty(value = "l") long lastModified,
         @With @JsonProperty(value = "d", defaultValue = "false") boolean missing,
-        @With @JsonProperty(value = "m", defaultValue = "") String meta) {
+        @With @JsonProperty(value = "m", defaultValue = "") String mimeType) {
 }

@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.time.DurationFormatUtils;
 import paxel.dedup.config.DedupConfig;
 import paxel.dedup.model.Repo;
+import paxel.dedup.model.RepoFile;
 import paxel.dedup.model.Statistics;
 import paxel.dedup.model.errors.*;
 import paxel.dedup.parameter.CliParameter;
@@ -123,9 +124,9 @@ public class PruneReposProcess {
             return loadNew.mapError(f -> UpdateRepoError.ioException(repoManager.getRepoDir(), loadNew.error().ioException()));
         }
         repoManager.stream().filter(f -> !f.missing()).forEach(repoFile -> {
-            Result<Boolean, WriteError> booleanWriteErrorResult = temp.addRepoFile(repoFile);
-            if (booleanWriteErrorResult.isSuccess()) {
-                if (booleanWriteErrorResult.value())
+            Result<RepoFile, WriteError> result = temp.addRepoFile(repoFile);
+            if (result.isSuccess()) {
+                if (result.value() != null)
                     statistics.inc("files");
                 else {
                     statistics.inc("pruned");
