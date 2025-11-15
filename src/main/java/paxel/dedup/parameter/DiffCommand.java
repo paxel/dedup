@@ -17,16 +17,43 @@ public class DiffCommand {
     CliParameter cliParameter;
     private DedupConfig dedupConfig;
 
-    @Command(name = "print", description = "prints differences between source and target")
-    public int create(
+    @Command(name = "print", description = "prints differences between source and reference")
+    public int print(
             @Parameters(description = "Source repo or dir") String source,
+            @Parameters(description = "Reference repo or dir") String reference,
+            @Option(names = {"-f", "--filter"}) String filter) {
+        int i = initDefaultConfig();
+        if (i != 0)
+            return i;
+
+        return new CreateDiffProcess(cliParameter, source, reference, dedupConfig, filter, new ObjectMapper()).print();
+    }
+
+    @Command(name = "copy", description = "copies files in source and not in reference to a target")
+    public int copy(
+            @Parameters(description = "Source repo or dir") String source,
+            @Parameters(description = "Reference repo or dir") String reference,
             @Parameters(description = "Target repo or dir") String target,
             @Option(names = {"-f", "--filter"}) String filter) {
         int i = initDefaultConfig();
         if (i != 0)
             return i;
 
-        return new CreateDiffProcess(cliParameter, source, target, dedupConfig,filter, new ObjectMapper()).print();
+        return new CreateDiffProcess(cliParameter, source, reference, dedupConfig, filter, new ObjectMapper()).copy(target,false);
+    }
+
+
+    @Command(name = "move", description = "Moves files in source and not in reference to a target")
+    public int move(
+            @Parameters(description = "Source repo or dir") String source,
+            @Parameters(description = "Reference repo or dir") String reference,
+            @Parameters(description = "Target repo or dir") String target,
+            @Option(names = {"-f", "--filter"}) String filter) {
+        int i = initDefaultConfig();
+        if (i != 0)
+            return i;
+
+        return new CreateDiffProcess(cliParameter, source, reference, dedupConfig, filter, new ObjectMapper()).copy(target,true);
     }
 
 
