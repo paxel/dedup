@@ -5,6 +5,7 @@ import paxel.dedup.config.DedupConfig;
 import paxel.dedup.config.DedupConfigFactory;
 import paxel.dedup.parameter.CliParameter;
 import paxel.dedup.parameter.DiffCommand;
+import paxel.dedup.parameter.FilesCommand;
 import paxel.dedup.parameter.RepoCommand;
 import paxel.lib.Result;
 import picocli.CommandLine;
@@ -17,6 +18,7 @@ public class DedupCli {
 
         CommandLine commandLine = new CommandLine(new CliParameter())
                 .addSubcommand(new DiffCommand())
+                .addSubcommand(new FilesCommand())
                 .addSubcommand(new RepoCommand());
 
 

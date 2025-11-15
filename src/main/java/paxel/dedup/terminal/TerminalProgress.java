@@ -19,6 +19,8 @@ public interface TerminalProgress {
 
             System.err.println(e.getMessage());
 
+            progressPrinter.registerChangeListener(() -> {
+            });
             // the dummy will not print anything
             return new TerminalProgress() {
                 @Override

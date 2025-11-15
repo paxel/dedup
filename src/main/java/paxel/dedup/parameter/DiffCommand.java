@@ -5,7 +5,7 @@ import paxel.dedup.config.DedupConfig;
 import paxel.dedup.config.DedupConfigFactory;
 import paxel.dedup.model.errors.CreateConfigError;
 import paxel.dedup.model.errors.DedupConfigErrorHandler;
-import paxel.dedup.repo.domain.diff.CreateDiffProcess;
+import paxel.dedup.repo.domain.diff.DiffProcess;
 import paxel.lib.Result;
 import picocli.CommandLine;
 import picocli.CommandLine.*;
@@ -26,7 +26,7 @@ public class DiffCommand {
         if (i != 0)
             return i;
 
-        return new CreateDiffProcess(cliParameter, source, reference, dedupConfig, filter, new ObjectMapper()).print();
+        return new DiffProcess(cliParameter, source, reference, dedupConfig, filter, new ObjectMapper()).print();
     }
 
     @Command(name = "copy", description = "copies files in source and not in reference to a target")
@@ -39,7 +39,7 @@ public class DiffCommand {
         if (i != 0)
             return i;
 
-        return new CreateDiffProcess(cliParameter, source, reference, dedupConfig, filter, new ObjectMapper()).copy(target,false);
+        return new DiffProcess(cliParameter, source, reference, dedupConfig, filter, new ObjectMapper()).copy(target, false);
     }
 
 
@@ -53,7 +53,18 @@ public class DiffCommand {
         if (i != 0)
             return i;
 
-        return new CreateDiffProcess(cliParameter, source, reference, dedupConfig, filter, new ObjectMapper()).copy(target,true);
+        return new DiffProcess(cliParameter, source, reference, dedupConfig, filter, new ObjectMapper()).copy(target, true);
+    }
+
+    @Command(name = "delete", description = "Delete files in source that are already in reference")
+    public int move(
+            @Parameters(description = "Source repo or dir") String source,
+            @Parameters(description = "Reference repo or dir") String reference,
+            @Option(names = {"-f", "--filter"}) String filter) {
+        int i = initDefaultConfig();
+        if (i != 0) return i;
+
+        return new DiffProcess(cliParameter, source, reference, dedupConfig, filter, new ObjectMapper()).delete();
     }
 
 

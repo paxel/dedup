@@ -8,6 +8,7 @@ import paxel.dedup.model.RepoFile;
 import paxel.dedup.model.Statistics;
 import paxel.dedup.model.errors.LoadError;
 import paxel.dedup.model.errors.OpenRepoError;
+import paxel.dedup.model.utils.FilterFactory;
 import paxel.dedup.model.utils.TunneledIoException;
 import paxel.dedup.parameter.CliParameter;
 import paxel.dedup.repo.domain.repo.RepoManager;
@@ -24,7 +25,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 @RequiredArgsConstructor
-public class CreateDiffProcess {
+public class DiffProcess {
     private final CliParameter cliParameter;
     private final String source;
     private final String target;
@@ -32,6 +33,7 @@ public class CreateDiffProcess {
     private final String filter;
     private final ObjectMapper objectMapper;
     private Predicate<RepoFile> repoFilter;
+    private final FilterFactory filterFactory = new FilterFactory();
 
     public int print() {
         Result<Repos, Integer> init = init();
@@ -90,13 +92,51 @@ public class CreateDiffProcess {
                             try {
                                 if (move) {
                                     Files.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                                    if (cliParameter.isVerbose()) {
+                                        System.out.println("Moved " + r.relativePath());
+                                    }
                                 } else {
                                     Files.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                                    if (cliParameter.isVerbose()) {
+                                        System.out.println("Copied " + r.relativePath());
+                                    }
                                 }
-                                if (cliParameter.isVerbose())
-                                    System.out.println("Copied " + r.relativePath());
                             } catch (IOException e) {
-                                throw new TunneledIoException("Could not copy " + sourceFile + " to " + targetFile, e);
+                                throw new TunneledIoException("Could not copy/move " + sourceFile + " to " + targetFile, e);
+                            }
+                        }
+                    });
+        } catch (TunneledIoException e) {
+            System.err.println(e.getMessage() + " " + e.getCause().getClass().getSimpleName());
+            return -200;
+        }
+        return 0;
+    }
+
+    public int delete() {
+        Result<Repos, Integer> init = init();
+        if (init.hasFailed()) {
+            return init.error();
+        }
+        RepoManager sourceRepo = init.value().source();
+        RepoManager targetRepo = init.value().target();
+
+        try {
+            sourceRepo.stream()
+                    .filter(repoFile -> !repoFile.missing())
+                    .filter(repoFilter)
+                    .forEach(r -> {
+                        List<RepoFile> byHash = targetRepo.getByHashAndSize(r.hash(), r.size());
+                        if (!byHash.isEmpty()) {
+
+                            Path sourceFile = Paths.get(sourceRepo.getRepo().absolutePath()).resolve(r.relativePath());
+                            try {
+                                Files.delete(sourceFile);
+                                if (cliParameter.isVerbose()) {
+                                    System.out.println("Deleted " + r.relativePath());
+                                }
+                            } catch (IOException e) {
+                                throw new TunneledIoException("Could not delete " + sourceFile, e);
                             }
                         }
                     });
@@ -108,7 +148,7 @@ public class CreateDiffProcess {
     }
 
     private Result<Repos, Integer> init() {
-        createFilter();
+        this.repoFilter = filterFactory.createFilter(filter);
 
         Result<RepoManager, Integer> sourcceRepo = openRepo(source, -70);
         if (sourcceRepo.hasFailed()) {
@@ -118,19 +158,6 @@ public class CreateDiffProcess {
                 .map(target -> new Repos(sourcceRepo.value(), target), Function.identity());
     }
 
-    private void createFilter() {
-        if (filter == null || filter.isBlank())
-            repoFilter = a -> true;
-        else if (filter.startsWith("mime:")) {
-            String substring = filter.substring(5);
-            System.out.println(substring);
-            repoFilter = a -> {
-                if (a.mimeType() == null) return false;
-                return a.mimeType().startsWith(substring);
-            };
-        } else
-            repoFilter = a -> false;
-    }
 
     private Result<RepoManager, Integer> openRepo(String name, int errOffset) {
         Result<Repo, OpenRepoError> repo = dedupConfig.getRepo(name);
