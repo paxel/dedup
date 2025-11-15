@@ -7,6 +7,7 @@ import java.io.IOException;
 
 public interface TerminalProgress {
     static TerminalProgress init(ProgressPrinter progressPrinter) {
+
         try {
             Terminal terminal = new DefaultTerminalFactory().createTerminal();
 
