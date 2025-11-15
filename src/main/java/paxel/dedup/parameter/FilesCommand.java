@@ -40,6 +40,30 @@ public class FilesCommand {
         return new FilesProcess(cliParameter, repo, dedupConfig, filter, new ObjectMapper()).rm();
     }
 
+    @CommandLine.Command(name = "cp", description = "copies files in source and not in reference to a target")
+    public int copy(
+            @CommandLine.Parameters(description = "Source repo or dir") String source,
+            @CommandLine.Parameters(description = "Target repo or dir") String target,
+            @CommandLine.Option(names = {"-f", "--filter"}) String filter) {
+        int i = initDefaultConfig();
+        if (i != 0)
+            return i;
+
+        return new FilesProcess(cliParameter, source, dedupConfig, filter, new ObjectMapper()).copy(target, false);
+    }
+
+
+    @CommandLine.Command(name = "mv", description = "Moves files in source and not in reference to a target")
+    public int move(
+            @CommandLine.Parameters(description = "Source repo or dir") String source,
+            @CommandLine.Parameters(description = "Target repo or dir") String target,
+            @CommandLine.Option(names = {"-f", "--filter"}) String filter) {
+        int i = initDefaultConfig();
+        if (i != 0)
+            return i;
+
+        return new FilesProcess(cliParameter, source,  dedupConfig, filter, new ObjectMapper()).copy(target, true);
+    }
 
     @CommandLine.Command(name = "types", description = "Lists the mime types in a repo")
     public int types(

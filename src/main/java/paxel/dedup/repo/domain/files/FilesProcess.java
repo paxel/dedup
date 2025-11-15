@@ -16,7 +16,9 @@ import paxel.lib.Result;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.concurrent.atomic.AtomicReference;
@@ -79,6 +81,49 @@ public class FilesProcess {
         } catch (TunneledIoException e) {
             System.err.println(e.getMessage() + " " + e.getCause().getClass().getSimpleName());
             return -213;
+        }
+        return 0;
+    }
+
+    public int copy(String target, boolean move) {
+        Result<RepoManager, Integer> result = openRepo(source);
+        if (result.hasFailed()) {
+            return result.error();
+        }
+        repoFilter = filterFactory.createFilter(filter);
+        try {
+            result.value().stream()
+                    .filter(repoFile -> !repoFile.missing())
+                    .filter(repoFilter)
+                    .forEach(r -> {
+                        Path targetFile = Paths.get(target).resolve(r.relativePath());
+                        if (!Files.exists(targetFile.getParent())) {
+                            try {
+                                Files.createDirectories(targetFile.getParent());
+                            } catch (IOException e) {
+                                throw new TunneledIoException("Could not create " + targetFile.getParent(), e);
+                            }
+                        }
+                        Path sourceFile = Paths.get(result.value().getRepo().absolutePath()).resolve(r.relativePath());
+                        try {
+                            if (move) {
+                                Files.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
+                                if (cliParameter.isVerbose()) {
+                                    System.out.println("Moved " + r.relativePath());
+                                }
+                            } else {
+                                Files.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                                if (cliParameter.isVerbose()) {
+                                    System.out.println("Copied " + r.relativePath());
+                                }
+                            }
+                        } catch (IOException e) {
+                            throw new TunneledIoException("Could not copy/move " + sourceFile + " to " + targetFile, e);
+                        }
+                    });
+        } catch (TunneledIoException e) {
+            System.err.println(e.getMessage() + " " + e.getCause().getClass().getSimpleName());
+            return -200;
         }
         return 0;
     }

@@ -91,7 +91,7 @@ public class DiffProcess {
                             Path sourceFile = Paths.get(sourceRepo.getRepo().absolutePath()).resolve(r.relativePath());
                             try {
                                 if (move) {
-                                    Files.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                                    Files.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
                                     if (cliParameter.isVerbose()) {
                                         System.out.println("Moved " + r.relativePath());
                                     }
