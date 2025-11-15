@@ -85,7 +85,7 @@ public class FilesProcess {
         return 0;
     }
 
-    public int copy(String target, boolean move) {
+    public int copy(String target, boolean move, String appendix) {
         Result<RepoManager, Integer> result = openRepo(source);
         if (result.hasFailed()) {
             return result.error();
@@ -96,7 +96,7 @@ public class FilesProcess {
                     .filter(repoFile -> !repoFile.missing())
                     .filter(repoFilter)
                     .forEach(r -> {
-                        Path targetFile = Paths.get(target).resolve(r.relativePath());
+                        Path targetFile = replaceSuffix(Paths.get(target).resolve(r.relativePath()), appendix);
                         if (!Files.exists(targetFile.getParent())) {
                             try {
                                 Files.createDirectories(targetFile.getParent());
@@ -166,4 +166,19 @@ public class FilesProcess {
         return Result.ok(repoManager);
     }
 
+    private Path replaceSuffix(Path path, String newSuffix) {
+        if (newSuffix == null) {
+            return path;
+        }
+        if (!newSuffix.startsWith("."))
+            newSuffix = "." + newSuffix;
+        String file = path.getFileName().toString();
+        int index = file.lastIndexOf(".");
+
+        if (index > 0) {
+            return path.getParent().resolve(file.substring(0, index) + newSuffix);
+        } else {
+            return path.getParent().resolve(file + newSuffix);
+        }
+    }
 }

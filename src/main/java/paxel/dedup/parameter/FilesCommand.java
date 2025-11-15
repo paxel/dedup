@@ -44,12 +44,13 @@ public class FilesCommand {
     public int copy(
             @CommandLine.Parameters(description = "Source repo or dir") String source,
             @CommandLine.Parameters(description = "Target repo or dir") String target,
+            @CommandLine.Option(names = {"--appendix"}) String appendix,
             @CommandLine.Option(names = {"-f", "--filter"}) String filter) {
         int i = initDefaultConfig();
         if (i != 0)
             return i;
 
-        return new FilesProcess(cliParameter, source, dedupConfig, filter, new ObjectMapper()).copy(target, false);
+        return new FilesProcess(cliParameter, source, dedupConfig, filter, new ObjectMapper()).copy(target, false, appendix);
     }
 
 
@@ -57,12 +58,13 @@ public class FilesCommand {
     public int move(
             @CommandLine.Parameters(description = "Source repo or dir") String source,
             @CommandLine.Parameters(description = "Target repo or dir") String target,
+            @CommandLine.Option(names = {"--appendix"}) String appendix,
             @CommandLine.Option(names = {"-f", "--filter"}) String filter) {
         int i = initDefaultConfig();
         if (i != 0)
             return i;
 
-        return new FilesProcess(cliParameter, source,  dedupConfig, filter, new ObjectMapper()).copy(target, true);
+        return new FilesProcess(cliParameter, source, dedupConfig, filter, new ObjectMapper()).copy(target, true, appendix);
     }
 
     @CommandLine.Command(name = "types", description = "Lists the mime types in a repo")
