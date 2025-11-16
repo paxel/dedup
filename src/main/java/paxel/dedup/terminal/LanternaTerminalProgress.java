@@ -4,8 +4,8 @@ import com.googlecode.lanterna.SGR;
 import com.googlecode.lanterna.TerminalPosition;
 import com.googlecode.lanterna.TerminalSize;
 import com.googlecode.lanterna.TextColor;
+import com.googlecode.lanterna.graphics.TextGraphics;
 import com.googlecode.lanterna.input.KeyStroke;
-import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
 import com.googlecode.lanterna.terminal.Terminal;
 import lombok.RequiredArgsConstructor;
 
@@ -15,7 +15,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 @RequiredArgsConstructor
-public class TerminalProgressImpl implements TerminalProgress {
+public class LanternaTerminalProgress implements TerminalProgress {
     private final ProgressPrinter progressPrinter;
     private final Terminal terminal;
 
@@ -44,7 +44,6 @@ public class TerminalProgressImpl implements TerminalProgress {
                 int stringSize = s.length();
                 int columns = terminalSize.getColumns();
                 int toEndOfLine = columns - stringSize;
-                terminal.setForegroundColor(TextColor.ANSI.WHITE_BRIGHT);
                 if (toEndOfLine >= 0) {
                     String fullLine = s + (" ".repeat(toEndOfLine));
                     terminal.putString(fullLine);

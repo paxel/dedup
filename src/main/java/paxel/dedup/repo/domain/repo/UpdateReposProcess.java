@@ -10,7 +10,6 @@ import paxel.dedup.model.errors.LoadError;
 import paxel.dedup.model.errors.OpenRepoError;
 import paxel.dedup.model.errors.UpdateRepoError;
 import paxel.dedup.model.utils.HexFormatter;
-import paxel.dedup.model.utils.MimetypeProvider;
 import paxel.dedup.model.utils.ResilientFileWalker;
 import paxel.dedup.model.utils.Sha1Hasher;
 import paxel.dedup.parameter.CliParameter;
@@ -37,6 +36,8 @@ public class UpdateReposProcess {
     private final int threads;
     private final DedupConfig dedupConfig;
     private final ObjectMapper objectMapper;
+    private final boolean progress;
+    private final boolean lanterna;
 
     public int update() {
 
@@ -70,18 +71,15 @@ public class UpdateReposProcess {
         if (load.hasFailed()) {
             return load.mapError(f -> UpdateRepoError.ioException(repoManager.getRepoDir(), load.error().ioException()));
         }
-        Map<Path, RepoFile> remainingPaths = repoManager.stream()
-                .filter(r -> !r.missing())
-                .collect(Collectors.toMap(r -> Paths.get(repoManager.getRepo().absolutePath(), r.relativePath()), Function.identity(), (old, update) -> update));
+        Map<Path, RepoFile> remainingPaths = repoManager.stream().filter(r -> !r.missing()).collect(Collectors.toMap(r -> Paths.get(repoManager.getRepo().absolutePath(), r.relativePath()), Function.identity(), (old, update) -> update));
         StatisticPrinter progressPrinter = new StatisticPrinter();
-        TerminalProgress terminalProgress = TerminalProgress.init(progressPrinter);
+        TerminalProgress terminalProgress = prepProgress(progressPrinter);
         Sha1Hasher sha1Hasher = new Sha1Hasher(new HexFormatter(), Executors.newFixedThreadPool(threads));
         try {
             progressPrinter.set(repoManager.getRepo().name(), repoManager.getRepo().absolutePath());
-            progressPrinter.setProgress( "...stand by... collecting info");
+            progressPrinter.setProgress("...stand by... collecting info");
             Statistics statistics = new Statistics(repoManager.getRepo().absolutePath());
-            new ResilientFileWalker(new UpdateProgressPrinter(remainingPaths, progressPrinter, repoManager, statistics, sha1Hasher))
-                    .walk(Paths.get(repoManager.getRepo().absolutePath()));
+            new ResilientFileWalker(new UpdateProgressPrinter(remainingPaths, progressPrinter, repoManager, statistics, sha1Hasher)).walk(Paths.get(repoManager.getRepo().absolutePath()));
 
             for (RepoFile value : remainingPaths.values()) {
                 repoManager.addRepoFile(value.withMissing(true));
@@ -91,5 +89,15 @@ public class UpdateReposProcess {
             sha1Hasher.close();
             terminalProgress.deactivate();
         }
+    }
+
+    private TerminalProgress prepProgress(StatisticPrinter progressPrinter) {
+        if (progress) {
+            if (lanterna) {
+                return TerminalProgress.initLanterna(progressPrinter);
+            }
+            return TerminalProgress.initJline(progressPrinter);
+        }
+        return TerminalProgress.initDummy(progressPrinter);
     }
 }
