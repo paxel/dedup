@@ -37,7 +37,6 @@ public class UpdateReposProcess {
     private final DedupConfig dedupConfig;
     private final ObjectMapper objectMapper;
     private final boolean progress;
-    private final boolean lanterna;
 
     public int update() {
 
@@ -93,10 +92,7 @@ public class UpdateReposProcess {
 
     private TerminalProgress prepProgress(StatisticPrinter progressPrinter) {
         if (progress) {
-            if (lanterna) {
                 return TerminalProgress.initLanterna(progressPrinter);
-            }
-            return TerminalProgress.initJline(progressPrinter);
         }
         return TerminalProgress.initDummy(progressPrinter);
     }

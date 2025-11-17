@@ -58,14 +58,13 @@ public class RepoCommand {
             @Option(names = {"-R"}, description = "Repos") List<String> names,
             @Option(names = {"-t", "--threads"}, description = "Number of threads used for hashing", defaultValue = "2") int threads,
             @Option(names = {"-a", "--all"}, description = "All repos") boolean all,
-            @Option(names = {"--no-progress"}, description = "Don't show progress page") boolean noProgress,
-            @Option(names = {"--lanterna"}, description = "Use lanterna progress") boolean lanterna) {
+            @Option(names = {"--no-progress"}, description = "Don't show progress page") boolean noProgress) {
         int i = initDefaultConfig();
         if (i != 0)
             return i;
 
         return (new UpdateReposProcess(cliParameter, names, all, threads, dedupConfig, new ObjectMapper(),
-                !noProgress, lanterna).update());
+                !noProgress).update());
     }
 
     @Command(name = "prune", description = "Prunes the DB removing all old versions and deleted files")
