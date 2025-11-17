@@ -29,7 +29,7 @@ public class DiffCommand {
         return new DiffProcess(cliParameter, source, reference, dedupConfig, filter, new ObjectMapper()).print();
     }
 
-    @Command(name = "copy", description = "copies files in source and not in reference to a target")
+    @Command(name = "cp", description = "copies files in source and not in reference to a target")
     public int copy(
             @Parameters(description = "Source repo or dir") String source,
             @Parameters(description = "Reference repo or dir") String reference,
@@ -43,7 +43,7 @@ public class DiffCommand {
     }
 
 
-    @Command(name = "move", description = "Moves files in source and not in reference to a target")
+    @Command(name = "mv", description = "Moves files in source and not in reference to a target")
     public int move(
             @Parameters(description = "Source repo or dir") String source,
             @Parameters(description = "Reference repo or dir") String reference,
@@ -56,7 +56,7 @@ public class DiffCommand {
         return new DiffProcess(cliParameter, source, reference, dedupConfig, filter, new ObjectMapper()).copy(target, true);
     }
 
-    @Command(name = "delete", description = "Delete files in source that are already in reference")
+    @Command(name = "rm", description = "Delete files in source that are already in reference")
     public int move(
             @Parameters(description = "Source repo or dir") String source,
             @Parameters(description = "Reference repo or dir") String reference,
