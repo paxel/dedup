@@ -4,12 +4,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import lombok.RequiredArgsConstructor;
-import paxel.dedup.model.RepoFile;
-import paxel.dedup.model.Statistics;
-import paxel.dedup.model.errors.CloseError;
-import paxel.dedup.model.errors.LoadError;
-import paxel.dedup.model.errors.WriteError;
-import paxel.dedup.model.utils.TunneledIoException;
+import paxel.dedup.domain.model.RepoFile;
+import paxel.dedup.domain.model.Statistics;
+import paxel.dedup.domain.model.errors.CloseError;
+import paxel.dedup.domain.model.errors.LoadError;
+import paxel.dedup.domain.model.errors.WriteError;
+import paxel.dedup.domain.model.TunneledIoException;
+import paxel.dedup.domain.port.out.FileSystem;
 import paxel.lib.Result;
 
 import java.io.BufferedOutputStream;
@@ -17,7 +18,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
@@ -44,6 +44,7 @@ public class IndexManager {
     private final Path indexFile;
     private final ObjectReader objectReader;
     private final ObjectWriter objectWriter;
+    private final FileSystem fileSystem;
 
     public Stream<RepoFile> stream() {
         return paths.values().stream();
@@ -53,7 +54,7 @@ public class IndexManager {
         // MVP: we load everything to memory
         Statistics statistics = new Statistics(indexFile.toAbsolutePath().toString());
         statistics.start(LOAD);
-        try (BufferedReader bufferedReader = Files.newBufferedReader(indexFile)) {
+        try (BufferedReader bufferedReader = fileSystem.newBufferedReader(indexFile)) {
             for (; ; ) {
                 String s = bufferedReader.readLine();
                 if (s == null)
@@ -137,7 +138,7 @@ public class IndexManager {
                 else {
                     try {
                         //        return new BufferedOutputStream(new GZIPOutputStream(Files.newOutputStream(indexFile, StandardOpenOption.APPEND)));
-                        return new BufferedOutputStream(Files.newOutputStream(indexFile, StandardOpenOption.APPEND));
+                        return new BufferedOutputStream(fileSystem.newOutputStream(indexFile, StandardOpenOption.APPEND));
                     } catch (IOException e) {
                         throw new TunneledIoException(e);
                     }

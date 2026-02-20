@@ -2,20 +2,21 @@ package paxel.dedup.repo.domain.diff;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
-import paxel.dedup.config.DedupConfig;
-import paxel.dedup.model.Repo;
-import paxel.dedup.model.RepoFile;
-import paxel.dedup.model.Statistics;
-import paxel.dedup.model.errors.LoadError;
-import paxel.dedup.model.errors.OpenRepoError;
-import paxel.dedup.model.utils.FilterFactory;
-import paxel.dedup.model.utils.TunneledIoException;
-import paxel.dedup.parameter.CliParameter;
+import paxel.dedup.infrastructure.config.DedupConfig;
+import paxel.dedup.domain.model.Repo;
+import paxel.dedup.domain.model.RepoFile;
+import paxel.dedup.domain.model.Statistics;
+import paxel.dedup.domain.model.errors.LoadError;
+import paxel.dedup.domain.model.errors.OpenRepoError;
+import paxel.dedup.domain.model.FilterFactory;
+import paxel.dedup.domain.model.TunneledIoException;
+import paxel.dedup.domain.port.out.FileSystem;
+import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.repo.domain.repo.RepoManager;
+import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.lib.Result;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -32,6 +33,7 @@ public class DiffProcess {
     private final DedupConfig dedupConfig;
     private final String filter;
     private final ObjectMapper objectMapper;
+    private final FileSystem fileSystem;
     private Predicate<RepoFile> repoFilter;
     private final FilterFactory filterFactory = new FilterFactory();
 
@@ -81,9 +83,9 @@ public class DiffProcess {
                         List<RepoFile> byHash = targetRepo.getByHashAndSize(r.hash(), r.size());
                         if (byHash.isEmpty()) {
                             Path targetFile = Paths.get(target).resolve(r.relativePath());
-                            if (!Files.exists(targetFile.getParent())) {
+                            if (!fileSystem.exists(targetFile.getParent())) {
                                 try {
-                                    Files.createDirectories(targetFile.getParent());
+                                    fileSystem.createDirectories(targetFile.getParent());
                                 } catch (IOException e) {
                                     throw new TunneledIoException("Could not create " + targetFile.getParent(), e);
                                 }
@@ -91,12 +93,12 @@ public class DiffProcess {
                             Path sourceFile = Paths.get(sourceRepo.getRepo().absolutePath()).resolve(r.relativePath());
                             try {
                                 if (move) {
-                                    Files.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
+                                    fileSystem.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
                                     if (cliParameter.isVerbose()) {
                                         System.out.println("Moved " + r.relativePath());
                                     }
                                 } else {
-                                    Files.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                                    fileSystem.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
                                     if (cliParameter.isVerbose()) {
                                         System.out.println("Copied " + r.relativePath());
                                     }
@@ -131,7 +133,7 @@ public class DiffProcess {
 
                             Path sourceFile = Paths.get(sourceRepo.getRepo().absolutePath()).resolve(r.relativePath());
                             try {
-                                Files.delete(sourceFile);
+                                fileSystem.delete(sourceFile);
                                 if (cliParameter.isVerbose()) {
                                     System.out.println("Deleted " + r.relativePath());
                                 }
@@ -165,7 +167,7 @@ public class DiffProcess {
             System.err.println("Could not open " + name + " " + repo.error());
             return Result.err(errOffset - 1);
         }
-        RepoManager repoManager = new RepoManager(repo.value(), dedupConfig, objectMapper);
+        RepoManager repoManager = new RepoManager(repo.value(), dedupConfig, objectMapper, fileSystem);
         Result<Statistics, LoadError> loadResult = repoManager.load();
         if (loadResult.hasFailed()) {
             System.err.println("Could not load " + name + " " + loadResult.error());

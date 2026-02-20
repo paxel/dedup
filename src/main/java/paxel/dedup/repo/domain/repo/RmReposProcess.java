@@ -1,9 +1,9 @@
 package paxel.dedup.repo.domain.repo;
 
 import lombok.RequiredArgsConstructor;
-import paxel.dedup.config.DedupConfig;
-import paxel.dedup.model.errors.DeleteRepoError;
-import paxel.dedup.parameter.CliParameter;
+import paxel.dedup.infrastructure.config.DedupConfig;
+import paxel.dedup.domain.model.errors.DeleteRepoError;
+import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.lib.Result;
 
 import java.util.List;

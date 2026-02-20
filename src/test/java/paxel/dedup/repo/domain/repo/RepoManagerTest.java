@@ -3,11 +3,12 @@ package paxel.dedup.repo.domain.repo;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import paxel.dedup.config.DedupConfig;
-import paxel.dedup.model.Repo;
-import paxel.dedup.model.RepoFile;
-import paxel.dedup.model.Statistics;
-import paxel.dedup.model.errors.*;
+import paxel.dedup.infrastructure.config.DedupConfig;
+import paxel.dedup.domain.model.Repo;
+import paxel.dedup.domain.model.RepoFile;
+import paxel.dedup.domain.model.Statistics;
+import paxel.dedup.domain.model.errors.*;
+import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -49,7 +50,7 @@ class RepoManagerTest {
         DedupConfig config = new StubDedupConfig(repoBaseDir);
         
         ObjectMapper mapper = new ObjectMapper();
-        RepoManager repoManager = new RepoManager(repo, config, mapper);
+        RepoManager repoManager = new RepoManager(repo, config, mapper, new NioFileSystemAdapter());
         
         Path indexDir = repoBaseDir.resolve("testRepo");
         Files.createDirectories(indexDir);

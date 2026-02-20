@@ -1,12 +1,12 @@
 package paxel.dedup.repo.domain.repo;
 
 import org.apache.commons.lang3.time.DurationFormatUtils;
-import paxel.dedup.model.RepoFile;
-import paxel.dedup.model.Statistics;
-import paxel.dedup.model.utils.BetterPrediction;
-import paxel.dedup.model.utils.FileHasher;
-import paxel.dedup.model.utils.FileObserver;
-import paxel.dedup.model.utils.MimetypeProvider;
+import paxel.dedup.domain.model.RepoFile;
+import paxel.dedup.domain.model.Statistics;
+import paxel.dedup.domain.model.BetterPrediction;
+import paxel.dedup.domain.model.FileHasher;
+import paxel.dedup.domain.model.FileObserver;
+import paxel.dedup.domain.model.MimetypeProvider;
 import paxel.dedup.terminal.StatisticPrinter;
 
 import java.nio.file.Path;
@@ -18,7 +18,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static paxel.dedup.model.utils.BetterPrediction.COUNT;
+import static paxel.dedup.domain.model.BetterPrediction.COUNT;
 
 class UpdateProgressPrinter implements FileObserver {
     private final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss (dd.MM.yyyy)");

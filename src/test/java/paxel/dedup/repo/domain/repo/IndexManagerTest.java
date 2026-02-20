@@ -4,9 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import paxel.dedup.model.RepoFile;
-import paxel.dedup.model.Statistics;
-import paxel.dedup.model.errors.LoadError;
+import paxel.dedup.domain.model.RepoFile;
+import paxel.dedup.domain.model.Statistics;
+import paxel.dedup.domain.model.errors.LoadError;
+import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -29,7 +30,8 @@ class IndexManagerTest {
     void setUp() {
         indexFile = tempDir.resolve("test.idx");
         objectMapper = new ObjectMapper();
-        indexManager = new IndexManager(indexFile, objectMapper.readerFor(RepoFile.class), objectMapper.writerFor(RepoFile.class));
+        // Default to real FS for most tests, or we can use the mock
+        indexManager = new IndexManager(indexFile, objectMapper.readerFor(RepoFile.class), objectMapper.writerFor(RepoFile.class), new NioFileSystemAdapter());
     }
 
     @Test
