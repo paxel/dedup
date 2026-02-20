@@ -47,15 +47,18 @@ public class RepoManager {
         repoDir = dedupConfig.getRepoDir().resolve(repo.name());
     }
 
+    private static String nameIndexFile(int index) {
+        return index + ".idx";
+    }
 
     public Result<Statistics, LoadError> load() {
         for (IndexManager index : indices.values()) {
             Result<Boolean, CloseError> close = index.close();
             if (close.hasFailed()) {
-                return close.mapError(f -> new LoadError(close.error().path(), close.error().ioException(), "Failed closing the IndexManager"));
+                return close.mapError(f -> new LoadError(f.path(), f.ioException(), "Failed closing the IndexManager"));
             }
-            indices.clear();
         }
+        indices.clear();
         Statistics sum = new Statistics(repoDir.toString());
 
         for (int index = 0; index < repo.indices(); index++) {
@@ -73,11 +76,6 @@ public class RepoManager {
 
     public Stream<RepoFile> stream() {
         return indices.values().stream().flatMap(IndexManager::stream);
-    }
-
-
-    private static String nameIndexFile(int index) {
-        return index + ".idx";
     }
 
     public List<RepoFile> getByHash(String hash) {
@@ -129,7 +127,7 @@ public class RepoManager {
         }
         Result<FileTime, LoadError> lastModifiedResult = getLastModifiedTime(absolutePath);
         if (lastModifiedResult.hasFailed()) {
-            return CompletableFuture.completedFuture(sizeResult.mapError(f -> new WriteError(null, f.path(), f.ioException())));
+            return CompletableFuture.completedFuture(lastModifiedResult.mapError(f -> new WriteError(null, f.path(), f.ioException())));
         }
 
         Long size = sizeResult.value();
