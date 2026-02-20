@@ -115,11 +115,13 @@ class UpdateProgressPrinter implements FileObserver {
         try {
             if (total != 0 && scanFinished.get()) {
                 long remaining = total - processed;
-                double remainingPercent = (double) (remaining) / total;
+                double remainingPercent = (double) remaining / total;
                 Duration estimation = Duration.between(start, Instant.now());
 
                 if (estimation.minusMillis(30000).isPositive()) {
-                    estimation = getBetterDuration(betterPrediction, estimation.multipliedBy((long) (remainingPercent)), total, remaining);
+                    // Scale baseline proportionally to remaining work without truncation to zero
+                    estimation = estimation.multipliedBy(remaining).dividedBy(total);
+                    estimation = getBetterDuration(betterPrediction, estimation, total, remaining);
                     ZonedDateTime eta = ZonedDateTime.now().plus(estimation);
                     progressPrinter.setProgress("%.2f %% estimated remaining duration: %s ETA: %s".formatted((1.0 - remainingPercent) * 100,
                             DurationFormatUtils.formatDurationWords(estimation.toMillis(), true, true),
@@ -134,7 +136,8 @@ class UpdateProgressPrinter implements FileObserver {
     private Duration getBetterDuration(BetterPrediction betterPrediction, Duration estimation, long total, long remaining) {
         Duration duartionLast1000 = betterPrediction.get();
         if (duartionLast1000 != null) {
-            Duration recentEta = duartionLast1000.multipliedBy(remaining / COUNT);
+            // Use proportional scaling avoiding integer truncation to zero
+            Duration recentEta = duartionLast1000.multipliedBy(remaining).dividedBy(COUNT);
             if (recentEta.minus(estimation).isPositive()) return recentEta;
         }
         return estimation;
