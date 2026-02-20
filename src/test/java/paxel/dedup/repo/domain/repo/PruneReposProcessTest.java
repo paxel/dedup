@@ -6,6 +6,7 @@ import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.errors.*;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
+import paxel.dedup.infrastructure.adapter.out.serialization.JacksonLineCodec;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -40,7 +41,7 @@ class PruneReposProcessTest {
         cfg.reposResult = Result.err(OpenRepoError.ioError(errPath, ioEx));
 
         // Act
-        int code = new PruneReposProcess(cli, List.of(), true, 2, cfg, new com.fasterxml.jackson.databind.ObjectMapper()).prune();
+        int code = new PruneReposProcess(cli, List.of(), true, 2, cfg, new JacksonLineCodec<>(new com.fasterxml.jackson.databind.ObjectMapper(), paxel.dedup.domain.model.RepoFile.class)).prune();
 
         // Assert
         assertThat(code).isEqualTo(-30);
@@ -55,7 +56,7 @@ class PruneReposProcessTest {
         cfg.repoByName = Result.err(OpenRepoError.ioError(Path.of("/x"), new IOException("nf")));
 
         // Act
-        int code = new PruneReposProcess(cli, new ArrayList<>(List.of("missing1", "missing2")), false, 2, cfg, new com.fasterxml.jackson.databind.ObjectMapper()).prune();
+        int code = new PruneReposProcess(cli, new ArrayList<>(List.of("missing1", "missing2")), false, 2, cfg, new JacksonLineCodec<>(new com.fasterxml.jackson.databind.ObjectMapper(), paxel.dedup.domain.model.RepoFile.class)).prune();
 
         // Assert
         assertThat(code).isEqualTo(0);

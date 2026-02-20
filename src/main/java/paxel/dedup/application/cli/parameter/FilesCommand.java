@@ -1,6 +1,4 @@
 package paxel.dedup.application.cli.parameter;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import paxel.dedup.infrastructure.config.DedupConfig;
@@ -29,7 +27,7 @@ public class FilesCommand {
             @CommandLine.Option(names = {"-f", "--filter"}) String filter) {
         initDefaultConfig();
 
-        return new FilesProcess(cliParameter, repo, dedupConfig, filter, infrastructureConfig.getObjectMapper(), infrastructureConfig.getFileSystem()).ls();
+        return new FilesProcess(cliParameter, repo, dedupConfig, filter, infrastructureConfig.getRepoFileCodec(), infrastructureConfig.getFileSystem()).ls();
     }
 
 
@@ -39,7 +37,7 @@ public class FilesCommand {
             @CommandLine.Option(names = {"-f", "--filter"}) String filter) {
         initDefaultConfig();
 
-        return new FilesProcess(cliParameter, repo, dedupConfig, filter, infrastructureConfig.getObjectMapper(), infrastructureConfig.getFileSystem()).rm();
+        return new FilesProcess(cliParameter, repo, dedupConfig, filter, infrastructureConfig.getRepoFileCodec(), infrastructureConfig.getFileSystem()).rm();
     }
 
     @CommandLine.Command(name = "cp", description = "copies files in source and not in reference to a target")
@@ -50,7 +48,7 @@ public class FilesCommand {
             @CommandLine.Option(names = {"-f", "--filter"}) String filter) {
         initDefaultConfig();
 
-        return new FilesProcess(cliParameter, source, dedupConfig, filter, infrastructureConfig.getObjectMapper(), infrastructureConfig.getFileSystem()).copy(target, false, appendix);
+        return new FilesProcess(cliParameter, source, dedupConfig, filter, infrastructureConfig.getRepoFileCodec(), infrastructureConfig.getFileSystem()).copy(target, false, appendix);
     }
 
 
@@ -62,7 +60,7 @@ public class FilesCommand {
             @CommandLine.Option(names = {"-f", "--filter"}) String filter) {
         initDefaultConfig();
 
-        return new FilesProcess(cliParameter, source, dedupConfig, filter, infrastructureConfig.getObjectMapper(), infrastructureConfig.getFileSystem()).copy(target, true, appendix);
+        return new FilesProcess(cliParameter, source, dedupConfig, filter, infrastructureConfig.getRepoFileCodec(), infrastructureConfig.getFileSystem()).copy(target, true, appendix);
     }
 
     @CommandLine.Command(name = "types", description = "Lists the mime types in a repo")
@@ -71,7 +69,7 @@ public class FilesCommand {
     ) {
         initDefaultConfig();
 
-        return new FilesProcess(cliParameter, repo, dedupConfig, null, infrastructureConfig.getObjectMapper(), infrastructureConfig.getFileSystem()).types();
+        return new FilesProcess(cliParameter, repo, dedupConfig, null, infrastructureConfig.getRepoFileCodec(), infrastructureConfig.getFileSystem()).types();
     }
 
 

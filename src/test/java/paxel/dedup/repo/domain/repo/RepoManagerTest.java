@@ -9,6 +9,7 @@ import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
 import paxel.dedup.domain.model.errors.*;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
+import paxel.dedup.infrastructure.adapter.out.serialization.JacksonLineCodec;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -50,15 +51,15 @@ class RepoManagerTest {
         DedupConfig config = new StubDedupConfig(repoBaseDir);
         
         ObjectMapper mapper = new ObjectMapper();
-        RepoManager repoManager = new RepoManager(repo, config, mapper, new NioFileSystemAdapter());
+        RepoManager repoManager = new RepoManager(repo, config, new JacksonLineCodec<>(mapper, RepoFile.class), new NioFileSystemAdapter());
         
         Path indexDir = repoBaseDir.resolve("testRepo");
         Files.createDirectories(indexDir);
         
-        // Create 0.idx and 1.idx
+        // Create 0.idx and 1.idx (plain JSON lines)
         RepoFile file0 = RepoFile.builder().hash("h0").relativePath("p0").size(0L).build();
         RepoFile file1 = RepoFile.builder().hash("h1").relativePath("p1").size(1L).build();
-        
+
         Files.writeString(indexDir.resolve("0.idx"), mapper.writeValueAsString(file0) + "\n");
         Files.writeString(indexDir.resolve("1.idx"), mapper.writeValueAsString(file1) + "\n");
         

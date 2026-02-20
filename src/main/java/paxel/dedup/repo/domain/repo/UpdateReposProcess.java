@@ -1,6 +1,4 @@
 package paxel.dedup.repo.domain.repo;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.domain.model.Repo;
@@ -16,6 +14,7 @@ import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.terminal.StatisticPrinter;
 import paxel.dedup.terminal.TerminalProgress;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
+import paxel.dedup.domain.port.out.LineCodec;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -36,7 +35,7 @@ public class UpdateReposProcess {
     private final boolean all;
     private final int threads;
     private final DedupConfig dedupConfig;
-    private final ObjectMapper objectMapper;
+    private final LineCodec<RepoFile> repoFileCodec;
     private final boolean progress;
 
     public int update() {
@@ -51,7 +50,7 @@ public class UpdateReposProcess {
                 return -50;
             }
             for (Repo repo : lsResult.value()) {
-                updateRepo(new RepoManager(repo, dedupConfig, objectMapper, new NioFileSystemAdapter()));
+                updateRepo(new RepoManager(repo, dedupConfig, repoFileCodec, new NioFileSystemAdapter()));
             }
             return 0;
         }
@@ -59,7 +58,7 @@ public class UpdateReposProcess {
         for (String name : names) {
             Result<Repo, OpenRepoError> getRepoResult = dedupConfig.getRepo(name);
             if (getRepoResult.isSuccess()) {
-                Result<Statistics, UpdateRepoError> statisticsUpdateRepoErrorResult = updateRepo(new RepoManager(getRepoResult.value(), dedupConfig, objectMapper, new NioFileSystemAdapter()));
+                Result<Statistics, UpdateRepoError> statisticsUpdateRepoErrorResult = updateRepo(new RepoManager(getRepoResult.value(), dedupConfig, repoFileCodec, new NioFileSystemAdapter()));
             }
         }
         return 0;

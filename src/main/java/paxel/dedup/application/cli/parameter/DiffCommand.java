@@ -1,6 +1,4 @@
 package paxel.dedup.application.cli.parameter;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import paxel.dedup.infrastructure.config.DedupConfig;
@@ -30,7 +28,7 @@ public class DiffCommand {
             @Option(names = {"-f", "--filter"}) String filter) {
         initDefaultConfig();
 
-        return new DiffProcess(cliParameter, source, reference, dedupConfig, filter, infrastructureConfig.getObjectMapper(), infrastructureConfig.getFileSystem()).print();
+        return new DiffProcess(cliParameter, source, reference, dedupConfig, filter, infrastructureConfig.getRepoFileCodec(), infrastructureConfig.getFileSystem()).print();
     }
 
     @Command(name = "cp", description = "copies files in source and not in reference to a target")
@@ -41,7 +39,7 @@ public class DiffCommand {
             @Option(names = {"-f", "--filter"}) String filter) {
         initDefaultConfig();
 
-        return new DiffProcess(cliParameter, source, reference, dedupConfig, filter, infrastructureConfig.getObjectMapper(), infrastructureConfig.getFileSystem()).copy(target, false);
+        return new DiffProcess(cliParameter, source, reference, dedupConfig, filter, infrastructureConfig.getRepoFileCodec(), infrastructureConfig.getFileSystem()).copy(target, false);
     }
 
 
@@ -53,7 +51,7 @@ public class DiffCommand {
             @Option(names = {"-f", "--filter"}) String filter) {
         initDefaultConfig();
 
-        return new DiffProcess(cliParameter, source, reference, dedupConfig, filter, infrastructureConfig.getObjectMapper(), infrastructureConfig.getFileSystem()).copy(target, true);
+        return new DiffProcess(cliParameter, source, reference, dedupConfig, filter, infrastructureConfig.getRepoFileCodec(), infrastructureConfig.getFileSystem()).copy(target, true);
     }
 
     @Command(name = "rm", description = "Delete files in source that are already in reference")
@@ -63,7 +61,7 @@ public class DiffCommand {
             @Option(names = {"-f", "--filter"}) String filter) {
         initDefaultConfig();
 
-        return new DiffProcess(cliParameter, source, reference, dedupConfig, filter, infrastructureConfig.getObjectMapper(), infrastructureConfig.getFileSystem()).delete();
+        return new DiffProcess(cliParameter, source, reference, dedupConfig, filter, infrastructureConfig.getRepoFileCodec(), infrastructureConfig.getFileSystem()).delete();
     }
 
 

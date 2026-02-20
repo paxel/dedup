@@ -1,8 +1,4 @@
 package paxel.dedup.repo.domain.repo;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectReader;
-import com.fasterxml.jackson.databind.ObjectWriter;
 import lombok.Getter;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.domain.model.Repo;
@@ -17,6 +13,7 @@ import paxel.dedup.domain.model.FileHasher;
 import paxel.dedup.domain.model.HexFormatter;
 import paxel.dedup.domain.model.MimetypeProvider;
 import paxel.dedup.domain.port.out.FileSystem;
+import paxel.dedup.domain.port.out.LineCodec;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -34,19 +31,17 @@ public class RepoManager {
     @Getter
     private final Repo repo;
     private final Map<Integer, IndexManager> indices = new ConcurrentHashMap<>();
-    private final ObjectReader objectReader;
-    private final ObjectWriter objectWriter;
+    private final LineCodec<RepoFile> lineCodec;
     private final FileSystem fileSystem;
     @Getter
     private final Path repoDir;
     private final BinaryFormatter binaryFormatter = new HexFormatter();
 
 
-    public RepoManager(Repo repo, DedupConfig dedupConfig, ObjectMapper objectMapper, FileSystem fileSystem) {
+    public RepoManager(Repo repo, DedupConfig dedupConfig, LineCodec<RepoFile> lineCodec, FileSystem fileSystem) {
         this.repo = repo;
         this.fileSystem = fileSystem;
-        objectReader = objectMapper.readerFor(RepoFile.class);
-        objectWriter = objectMapper.writerFor(RepoFile.class);
+        this.lineCodec = lineCodec;
         repoDir = dedupConfig.getRepoDir().resolve(repo.name());
     }
 
@@ -78,7 +73,7 @@ public class RepoManager {
                 return Result.err(new LoadError(indexPath, e, "Could not initialize index file"));
             }
 
-            IndexManager indexManager = new IndexManager(indexPath, objectReader, objectWriter, fileSystem);
+            IndexManager indexManager = new IndexManager(indexPath, lineCodec, fileSystem);
             Result<Statistics, LoadError> load = indexManager.load();
             if (load.hasFailed()) {
                 return load;

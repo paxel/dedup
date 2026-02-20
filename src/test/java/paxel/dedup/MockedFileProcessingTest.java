@@ -6,6 +6,7 @@ import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.port.out.FileSystem;
+import paxel.dedup.infrastructure.adapter.out.serialization.JacksonLineCodec;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.repo.domain.repo.UpdateReposProcess;
 import paxel.lib.Result;
@@ -68,7 +69,7 @@ class MockedFileProcessingTest {
                 true, // all
                 1,    // threads
                 new StubDedupConfig(),
-                new ObjectMapper(),
+              new JacksonLineCodec<>( new ObjectMapper(),RepoFile.class),
                 false // progress
         );
 

@@ -1,6 +1,4 @@
 package paxel.dedup.repo.domain.diff;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.domain.model.Repo;
@@ -11,6 +9,7 @@ import paxel.dedup.domain.model.errors.OpenRepoError;
 import paxel.dedup.domain.model.FilterFactory;
 import paxel.dedup.domain.model.TunneledIoException;
 import paxel.dedup.domain.port.out.FileSystem;
+import paxel.dedup.domain.port.out.LineCodec;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.repo.domain.repo.RepoManager;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
@@ -32,7 +31,7 @@ public class DiffProcess {
     private final String target;
     private final DedupConfig dedupConfig;
     private final String filter;
-    private final ObjectMapper objectMapper;
+    private final LineCodec<RepoFile> repoFileCodec;
     private final FileSystem fileSystem;
     private Predicate<RepoFile> repoFilter;
     private final FilterFactory filterFactory = new FilterFactory();
@@ -167,7 +166,7 @@ public class DiffProcess {
             System.err.println("Could not open " + name + " " + repo.error());
             return Result.err(errOffset - 1);
         }
-        RepoManager repoManager = new RepoManager(repo.value(), dedupConfig, objectMapper, fileSystem);
+        RepoManager repoManager = new RepoManager(repo.value(), dedupConfig, repoFileCodec, fileSystem);
         Result<Statistics, LoadError> loadResult = repoManager.load();
         if (loadResult.hasFailed()) {
             System.err.println("Could not load " + name + " " + loadResult.error());

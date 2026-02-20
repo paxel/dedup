@@ -1,6 +1,4 @@
 package paxel.dedup.application.cli.parameter;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import paxel.dedup.infrastructure.config.DedupConfig;
@@ -61,7 +59,7 @@ public class RepoCommand {
             @Option(names = {"--no-progress"}, description = "Don't show progress page") boolean noProgress) {
         initDefaultConfig();
 
-        return (new UpdateReposProcess(cliParameter, names, all, threads, dedupConfig, infrastructureConfig.getObjectMapper(),
+        return (new UpdateReposProcess(cliParameter, names, all, threads, dedupConfig, infrastructureConfig.getRepoFileCodec(),
                 !noProgress).update());
     }
 
@@ -72,7 +70,7 @@ public class RepoCommand {
             @Option(defaultValue = "10", names = {"--indices", "-i"}, description = "Number of index files") int indices) {
         initDefaultConfig();
 
-        return (new PruneReposProcess(cliParameter, names, all, indices, dedupConfig, infrastructureConfig.getObjectMapper()).prune());
+        return (new PruneReposProcess(cliParameter, names, all, indices, dedupConfig, infrastructureConfig.getRepoFileCodec()).prune());
     }
 
     @Command(name = "cp", description = "Copies the Repo into a new one with a new path, keeping all the entries from the original. The original is unmodified")
@@ -109,7 +107,7 @@ public class RepoCommand {
             @Option(names = {"-a", "--all"}, description = "All repos") boolean all) {
         initDefaultConfig();
 
-        return (new DuplicateRepoProcess(cliParameter, names, all, dedupConfig).dupes());
+        return (new DuplicateRepoProcess(cliParameter, names, all, dedupConfig, infrastructureConfig.getRepoFileCodec()).dupes());
     }
 
 

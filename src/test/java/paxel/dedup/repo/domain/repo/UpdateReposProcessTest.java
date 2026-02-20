@@ -9,6 +9,7 @@ import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
+import paxel.dedup.infrastructure.adapter.out.serialization.JacksonLineCodec;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
@@ -61,7 +62,7 @@ class UpdateReposProcessTest {
                 false,
                 1,
                 dedupConfig,
-                objectMapper,
+           new JacksonLineCodec<>( objectMapper,RepoFile.class),
                 false
         );
 

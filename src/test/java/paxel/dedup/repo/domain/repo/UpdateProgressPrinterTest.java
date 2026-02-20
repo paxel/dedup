@@ -9,6 +9,7 @@ import paxel.dedup.domain.model.Statistics;
 import paxel.dedup.domain.model.errors.LoadError;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
+import paxel.dedup.infrastructure.adapter.out.serialization.JacksonLineCodec;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.terminal.StatisticPrinter;
 import paxel.lib.Result;
@@ -57,7 +58,7 @@ class UpdateProgressPrinterTest {
         DedupConfig config = new StubDedupConfig(configRoot);
         ObjectMapper mapper = new ObjectMapper();
         FileSystem fs = new NioFileSystemAdapter();
-        RepoManager repoManager = new RepoManager(repo, config, mapper, fs);
+        RepoManager repoManager = new RepoManager(repo, config,new JacksonLineCodec<>( mapper,RepoFile.class), fs);
 
         // Ensure index dir exists; RepoManager.load() will also create 0.idx if missing.
         Files.createDirectories(configRoot.resolve("r1"));

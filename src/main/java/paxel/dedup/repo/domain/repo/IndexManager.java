@@ -1,8 +1,4 @@
 package paxel.dedup.repo.domain.repo;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectReader;
-import com.fasterxml.jackson.databind.ObjectWriter;
 import lombok.RequiredArgsConstructor;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
@@ -10,6 +6,7 @@ import paxel.dedup.domain.model.errors.CloseError;
 import paxel.dedup.domain.model.errors.LoadError;
 import paxel.dedup.domain.model.errors.WriteError;
 import paxel.dedup.domain.model.TunneledIoException;
+import paxel.dedup.domain.port.out.LineCodec;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.lib.Result;
 
@@ -18,6 +15,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
@@ -26,6 +24,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.Base64;
 
 @RequiredArgsConstructor
 public class IndexManager {
@@ -42,8 +41,7 @@ public class IndexManager {
 
 
     private final Path indexFile;
-    private final ObjectReader objectReader;
-    private final ObjectWriter objectWriter;
+    private final LineCodec<RepoFile> lineCodec;
     private final FileSystem fileSystem;
 
     public Stream<RepoFile> stream() {
@@ -103,7 +101,9 @@ public class IndexManager {
     }
 
     private RepoFile readValid(String s) throws IOException {
-        RepoFile repoFile = objectReader.readValue(s, RepoFile.class);
+        // Interpret the line as UTF-8 JSON bytes and delegate to codec
+        byte[] data = s.getBytes(StandardCharsets.UTF_8);
+        RepoFile repoFile = lineCodec.decode(ByteBuffer.wrap(data));
         if (repoFile.size() == null)
             repoFile = repoFile.withSize(0L);
         if (repoFile.mimeType() == null)
@@ -145,13 +145,24 @@ public class IndexManager {
                 }
             });
 
-            outputStream.write((objectWriter.writeValueAsString(repoFile) + "\n").getBytes(StandardCharsets.UTF_8));
+            ByteBuffer encoded = lineCodec.encode(repoFile);
+            byte[] arr;
+            if (encoded.hasArray()) {
+                int offset = encoded.arrayOffset() + encoded.position();
+                int len = encoded.remaining();
+                arr = new byte[len];
+                System.arraycopy(encoded.array(), offset, arr, 0, len);
+            } else {
+                arr = new byte[encoded.remaining()];
+                encoded.duplicate().get(arr);
+            }
+            // Write the JSON line directly (UTF-8), followed by newline
+            outputStream.write(arr);
+            outputStream.write('\n');
             outputStream.flush();
             return Result.ok(null);
         } catch (TunneledIoException e) {
             return Result.err(WriteError.ioException(indexFile, e.getCause()));
-        } catch (JsonProcessingException e) {
-            return Result.err(WriteError.jsonException(repoFile, e));
         } catch (IOException e) {
             return Result.err(WriteError.ioException(indexFile, e));
         }

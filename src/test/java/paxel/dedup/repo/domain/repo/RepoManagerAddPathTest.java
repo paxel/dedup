@@ -12,6 +12,7 @@ import paxel.dedup.domain.model.errors.WriteError;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.dedup.infrastructure.config.DedupConfig;
+import paxel.dedup.infrastructure.adapter.out.serialization.JacksonLineCodec;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -54,7 +55,7 @@ class RepoManagerAddPathTest {
         DedupConfig cfg = new StubDedupConfig(configRoot);
         ObjectMapper mapper = new ObjectMapper();
         FileSystem fs = new NioFileSystemAdapter();
-        RepoManager repoManager = new RepoManager(repo, cfg, mapper, fs);
+        RepoManager repoManager = new RepoManager(repo, cfg, new JacksonLineCodec<>(mapper, RepoFile.class), fs);
 
         // Load will create 0.idx and 1.idx
         Result<Statistics, LoadError> load = repoManager.load();

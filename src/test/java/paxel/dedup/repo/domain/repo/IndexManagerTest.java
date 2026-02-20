@@ -8,6 +8,7 @@ import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
 import paxel.dedup.domain.model.errors.LoadError;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
+import paxel.dedup.infrastructure.adapter.out.serialization.JacksonLineCodec;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -31,7 +32,7 @@ class IndexManagerTest {
         indexFile = tempDir.resolve("test.idx");
         objectMapper = new ObjectMapper();
         // Default to real FS for most tests, or we can use the mock
-        indexManager = new IndexManager(indexFile, objectMapper.readerFor(RepoFile.class), objectMapper.writerFor(RepoFile.class), new NioFileSystemAdapter());
+        indexManager = new IndexManager(indexFile, new JacksonLineCodec<>(objectMapper, RepoFile.class), new NioFileSystemAdapter());
     }
 
     @Test
@@ -56,7 +57,7 @@ class IndexManagerTest {
         // Arrange
         RepoFile file1 = RepoFile.builder().hash("h1").relativePath("p1").size(10L).build();
         RepoFile file2 = RepoFile.builder().hash("h2").relativePath("p2").size(20L).build();
-        
+
         Files.writeString(indexFile, objectMapper.writeValueAsString(file1) + "\n" + objectMapper.writeValueAsString(file2) + "\n");
 
         // Act
@@ -73,7 +74,7 @@ class IndexManagerTest {
         // Arrange
         RepoFile file1 = RepoFile.builder().hash("h1").relativePath("p1").size(10L).build();
         RepoFile file1Updated = RepoFile.builder().hash("h1-new").relativePath("p1").size(15L).build();
-        
+
         Files.writeString(indexFile, objectMapper.writeValueAsString(file1) + "\n" + objectMapper.writeValueAsString(file1Updated) + "\n");
 
         // Act
@@ -95,7 +96,7 @@ class IndexManagerTest {
         // Arrange
         RepoFile file1 = RepoFile.builder().hash("common").relativePath("p1").size(10L).build();
         RepoFile file2 = RepoFile.builder().hash("common").relativePath("p2").size(10L).build();
-        
+
         Files.writeString(indexFile, objectMapper.writeValueAsString(file1) + "\n" + objectMapper.writeValueAsString(file2) + "\n");
 
         // Act

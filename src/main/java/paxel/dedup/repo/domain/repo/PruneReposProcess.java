@@ -1,6 +1,4 @@
 package paxel.dedup.repo.domain.repo;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.time.DurationFormatUtils;
 import paxel.dedup.infrastructure.config.DedupConfig;
@@ -10,6 +8,7 @@ import paxel.dedup.domain.model.Statistics;
 import paxel.dedup.domain.model.errors.*;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
+import paxel.dedup.domain.port.out.LineCodec;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -23,7 +22,7 @@ public class PruneReposProcess {
     private final boolean all;
     private final int indices;
     private final DedupConfig dedupConfig;
-    private final ObjectMapper objectMapper;
+    private final LineCodec<RepoFile> repoFileCodec;
 
     public int prune() {
         if (all) {
@@ -63,7 +62,7 @@ public class PruneReposProcess {
             System.out.println("Pruning " + repo.name());
         }
 
-        Result<Statistics, UpdateRepoError> result = pruneRepo(new RepoManager(repo, dedupConfig, objectMapper, new NioFileSystemAdapter()), indices);
+        Result<Statistics, UpdateRepoError> result = pruneRepo(new RepoManager(repo, dedupConfig, repoFileCodec, new NioFileSystemAdapter()), indices);
 
         if (result.hasFailed()) {
             System.err.println("Could not prune " + repo.name() + " " + result.error());
@@ -119,7 +118,7 @@ public class PruneReposProcess {
     }
 
     private Result<Statistics, UpdateRepoError> streamRepo(RepoManager repoManager, Statistics statistics, Repo newRepo) {
-        RepoManager temp = new RepoManager(newRepo, dedupConfig, new ObjectMapper(), new NioFileSystemAdapter());
+        RepoManager temp = new RepoManager(newRepo, dedupConfig, repoFileCodec, new NioFileSystemAdapter());
         Result<Statistics, LoadError> loadNew = temp.load();
         if (loadNew.hasFailed()) {
             return loadNew.mapError(f -> UpdateRepoError.ioException(repoManager.getRepoDir(), loadNew.error().ioException()));
