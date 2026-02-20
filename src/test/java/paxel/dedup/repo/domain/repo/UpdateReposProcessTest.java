@@ -19,7 +19,6 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -31,14 +30,13 @@ class UpdateReposProcessTest {
     private DedupConfig dedupConfig;
     private ObjectMapper objectMapper;
     private CliParameter cliParameter;
-    private FileSystem fileSystem;
 
     @BeforeEach
     void setUp() {
         dedupConfig = mock(DedupConfig.class);
         objectMapper = new ObjectMapper();
         cliParameter = new CliParameter();
-        fileSystem = new NioFileSystemAdapter();
+        FileSystem fileSystem = new NioFileSystemAdapter();
         when(dedupConfig.getRepoDir()).thenReturn(tempDir.resolve("config"));
     }
 
@@ -81,6 +79,6 @@ class UpdateReposProcessTest {
         
         List<String> lines = Files.readAllLines(indexPath);
         assertThat(lines).hasSize(1);
-        assertThat(lines.get(0)).contains("file1.txt");
+        assertThat(lines.getFirst()).contains("file1.txt");
     }
 }

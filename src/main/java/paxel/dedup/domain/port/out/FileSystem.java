@@ -1,14 +1,10 @@
 package paxel.dedup.domain.port.out;
 
-import paxel.dedup.domain.model.errors.LoadError;
-import paxel.lib.Result;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.CopyOption;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;

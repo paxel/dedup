@@ -15,7 +15,6 @@ import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.infrastructure.adapter.out.serialization.JacksonLineCodec;
 import paxel.lib.Result;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;

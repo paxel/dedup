@@ -12,15 +12,12 @@ public interface TerminalProgress {
         return terminalProgress;
     }
 
-    public static TerminalProgress initDummy(ProgressPrinter progressPrinter) {
+    static TerminalProgress initDummy(ProgressPrinter progressPrinter) {
         progressPrinter.registerChangeListener(() -> {
         });
         // the dummy will not print anything
-        return new TerminalProgress() {
-            @Override
-            public void deactivate() {
+        return () -> {
 
-            }
         };
     }
 

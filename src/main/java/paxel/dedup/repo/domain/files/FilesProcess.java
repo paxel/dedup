@@ -12,7 +12,6 @@ import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.domain.port.out.LineCodec;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.repo.domain.repo.RepoManager;
-import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -54,7 +53,7 @@ public class FilesProcess {
                         System.out.println(path);
                         last.set(path);
                     }
-                    System.out.println("  %-50s %-12s %s".formatted(Paths.get(r.relativePath()).getFileName().toString(), r.size(), new Date(r.lastModified())));
+                    System.out.printf("  %-50s %-12s %s%n", Paths.get(r.relativePath()).getFileName().toString(), r.size(), new Date(r.lastModified()));
                 });
         return 0;
     }
@@ -142,9 +141,7 @@ public class FilesProcess {
                     .map(RepoFile::mimeType)
                     .distinct()
                     .sorted()
-                    .forEach(r -> {
-                        System.out.println(r);
-                    });
+                    .forEach(System.out::println);
         } catch (TunneledIoException e) {
             System.err.println(e.getMessage() + " " + e.getCause().getClass().getSimpleName());
             return -213;

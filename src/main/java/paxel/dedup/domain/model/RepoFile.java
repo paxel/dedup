@@ -10,10 +10,10 @@ import lombok.extern.jackson.Jacksonized;
 @Jacksonized
 @JsonInclude(JsonInclude.Include.NON_EMPTY)
 public record RepoFile(
-        @With @JsonProperty(value = "h", required = true, defaultValue = "") String hash,
+        @With @JsonProperty(value = "h", required = true) String hash,
         @With @JsonProperty(value = "p") String relativePath,
         @With @JsonProperty(value = "s", defaultValue = "0") Long size,
         @With @JsonProperty(value = "l") long lastModified,
         @With @JsonProperty(value = "d", defaultValue = "false") boolean missing,
-        @With @JsonProperty(value = "m", defaultValue = "") String mimeType) {
+        @With @JsonProperty(value = "m") String mimeType) {
 }

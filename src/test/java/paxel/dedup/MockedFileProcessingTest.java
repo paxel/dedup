@@ -12,7 +12,6 @@ import paxel.dedup.repo.domain.repo.UpdateReposProcess;
 import paxel.lib.Result;
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.StringReader;
@@ -30,23 +29,23 @@ class MockedFileProcessingTest {
 
     static class StubFileSystem implements FileSystem {
         @Override public boolean exists(Path path) { return true; }
-        @Override public Stream<Path> list(Path dir) throws IOException { return Stream.empty(); }
-        @Override public Stream<Path> walk(Path start) throws IOException { return Stream.empty(); }
+        @Override public Stream<Path> list(Path dir) { return Stream.empty(); }
+        @Override public Stream<Path> walk(Path start) { return Stream.empty(); }
         @Override public boolean isRegularFile(Path path) { return false; }
         @Override public boolean isDirectory(Path path) { return true; }
         @Override public boolean isSymbolicLink(Path path) { return false; }
-        @Override public long size(Path path) throws IOException { return 0; }
-        @Override public FileTime getLastModifiedTime(Path path) throws IOException { return FileTime.fromMillis(0); }
-        @Override public InputStream newInputStream(Path path, StandardOpenOption... options) throws IOException { return null; }
-        @Override public OutputStream newOutputStream(Path path, StandardOpenOption... options) throws IOException { return null; }
-        @Override public BufferedReader newBufferedReader(Path path) throws IOException { return new BufferedReader(new StringReader("")); }
-        @Override public byte[] readAllBytes(Path path) throws IOException { return new byte[0]; }
-        @Override public void write(Path path, byte[] bytes, StandardOpenOption... options) throws IOException {}
-        @Override public void delete(Path path) throws IOException {}
-        @Override public boolean deleteIfExists(Path path) throws IOException { return false; }
-        @Override public void createDirectories(Path path) throws IOException {}
-        @Override public void copy(Path source, Path target, CopyOption... options) throws IOException {}
-        @Override public void move(Path source, Path target, CopyOption... options) throws IOException {}
+        @Override public long size(Path path) { return 0; }
+        @Override public FileTime getLastModifiedTime(Path path) { return FileTime.fromMillis(0); }
+        @Override public InputStream newInputStream(Path path, StandardOpenOption... options) { return null; }
+        @Override public OutputStream newOutputStream(Path path, StandardOpenOption... options) { return null; }
+        @Override public BufferedReader newBufferedReader(Path path) { return new BufferedReader(new StringReader("")); }
+        @Override public byte[] readAllBytes(Path path) { return new byte[0]; }
+        @Override public void write(Path path, byte[] bytes, StandardOpenOption... options) {}
+        @Override public void delete(Path path) {}
+        @Override public boolean deleteIfExists(Path path) { return false; }
+        @Override public void createDirectories(Path path) {}
+        @Override public void copy(Path source, Path target, CopyOption... options) {}
+        @Override public void move(Path source, Path target, CopyOption... options) {}
     }
 
     static class StubDedupConfig implements DedupConfig {
@@ -62,7 +61,7 @@ class MockedFileProcessingTest {
     }
 
     @Test
-    void testUpdateProcessWithStubbedFS() throws IOException {
+    void testUpdateProcessWithStubbedFS() {
         UpdateReposProcess process = new UpdateReposProcess(
                 new CliParameter(),
                 List.of("testRepo"),

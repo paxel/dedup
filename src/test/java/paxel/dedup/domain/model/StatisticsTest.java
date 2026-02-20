@@ -4,8 +4,6 @@ import org.junit.jupiter.api.Test;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.within;
-import java.time.temporal.ChronoUnit;
 
 class StatisticsTest {
 

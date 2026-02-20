@@ -11,7 +11,6 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 @RequiredArgsConstructor
@@ -49,7 +48,6 @@ public class Sha1Hasher implements FileHasher {
     public void close() {
         executorService.shutdown();
         while (!executorService.awaitTermination(1, TimeUnit.HOURS)) {
-            ;
         }
     }
 }

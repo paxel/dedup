@@ -1,15 +1,10 @@
 package paxel.dedup.application.cli;
 
-import paxel.dedup.domain.model.errors.CreateConfigError;
-import paxel.dedup.infrastructure.config.DedupConfig;
-import paxel.dedup.infrastructure.config.DedupConfigFactory;
-import lombok.RequiredArgsConstructor;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.application.cli.parameter.DiffCommand;
 import paxel.dedup.application.cli.parameter.FilesCommand;
 import paxel.dedup.application.cli.parameter.RepoCommand;
 import paxel.dedup.infrastructure.config.InfrastructureConfig;
-import paxel.lib.Result;
 import picocli.CommandLine;
 
 

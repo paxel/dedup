@@ -29,12 +29,7 @@ public class StatisticPrinter implements ProgressPrinter {
         lines.add(() -> "     Hashed: " + hashed);
         lines.add(() -> "  Unchanged: " + unchanged);
         lines.add(() -> "     Errors: " + errors);
-        lines.add(() -> " Mime-Types: " + mimetypes.entrySet().stream().sorted(new Comparator<Map.Entry<String, Long>>() {
-            @Override
-            public int compare(Map.Entry<String, Long> o1, Map.Entry<String, Long> o2) {
-                return Long.compare(o1.getValue(), o2.getValue()) * -1;
-            }
-        }).map(e -> e.getKey() + ":" + e.getValue()).collect(Collectors.joining(", ")));
+        lines.add(() -> " Mime-Types: " + mimetypes.entrySet().stream().sorted((o1, o2) -> Long.compare(o1.getValue(), o2.getValue()) * -1).map(e -> e.getKey() + ":" + e.getValue()).collect(Collectors.joining(", ")));
     }
 
     @Override

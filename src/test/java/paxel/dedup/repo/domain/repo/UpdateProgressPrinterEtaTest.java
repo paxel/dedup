@@ -1,7 +1,6 @@
 package paxel.dedup.repo.domain.repo;
 
 import org.junit.jupiter.api.Test;
-import paxel.dedup.domain.model.BetterPrediction;
 import paxel.dedup.domain.model.FileHasher;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;

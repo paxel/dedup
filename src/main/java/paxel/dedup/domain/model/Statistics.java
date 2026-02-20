@@ -51,11 +51,11 @@ public class Statistics {
     }
 
     public void forCounter(BiConsumer<String, Long> consumer) {
-        counter.entrySet().stream().sorted(Comparator.comparing(Map.Entry::getKey)).forEach(e -> consumer.accept(e.getKey(), e.getValue().get()));
+        counter.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> consumer.accept(e.getKey(), e.getValue().get()));
     }
 
     public void forTimer(BiConsumer<String, Duration> consumer) {
-        timer.entrySet().stream().sorted(Comparator.comparing(Map.Entry::getKey)).forEach(e -> consumer.accept(e.getKey(), e.getValue()));
+        timer.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> consumer.accept(e.getKey(), e.getValue()));
     }
 
     public void add(Statistics value) {

@@ -7,7 +7,6 @@ import paxel.dedup.domain.model.errors.*;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.lib.Result;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -23,7 +22,7 @@ class DefaultDedupConfigTest {
     }
 
     @Test
-    void createRepo_writesYaml_andIdxFiles_and_getRepo_reads_values() throws IOException {
+    void createRepo_writesYaml_andIdxFiles_and_getRepo_reads_values() {
         // Arrange
         DefaultDedupConfig cfg = newConfig();
 

@@ -7,7 +7,6 @@ import org.junit.jupiter.api.io.TempDir;
 import paxel.dedup.domain.model.errors.LoadError;
 import paxel.lib.Result;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.Executors;

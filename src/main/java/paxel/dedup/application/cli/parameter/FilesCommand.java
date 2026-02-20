@@ -2,12 +2,8 @@ package paxel.dedup.application.cli.parameter;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import paxel.dedup.infrastructure.config.DedupConfig;
-import paxel.dedup.infrastructure.config.DedupConfigFactory;
-import paxel.dedup.domain.model.errors.CreateConfigError;
-import paxel.dedup.domain.model.errors.DedupConfigErrorHandler;
 import paxel.dedup.infrastructure.config.InfrastructureConfig;
 import paxel.dedup.repo.domain.files.FilesProcess;
-import paxel.lib.Result;
 import picocli.CommandLine;
 
 @CommandLine.Command(name = "files", description = "Manages files in a repo")

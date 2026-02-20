@@ -12,7 +12,6 @@ import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.domain.port.out.LineCodec;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.repo.domain.repo.RepoManager;
-import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.lib.Result;
 
 import java.io.IOException;
