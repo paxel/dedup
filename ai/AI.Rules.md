@@ -38,6 +38,23 @@ This file defines the rules for development and testing in this project. These r
 * **Regression Tests:** When fixing a bug, always create a test that reproduces the error.
 * **Coverage:** Critical logic (such as the `UpdateReposProcess` or `IndexManager`) must have high test coverage.
 
+### Meaningful Assertions
+* Tests must assert specific, meaningful outcomes — avoid assertions that only check non-nullity or emptiness when richer expectations are known.
+    * Prefer exact values over existence checks (e.g., file counts, hash strings, sizes, flags like `missing`, ordering of results).
+    * Validate side effects and persisted artifacts (e.g., index file names created, file contents/lines written, JSON fields) rather than just success codes.
+    * When asserting collections, check size and relevant contents (contains exactly, order when important) instead of `isNotEmpty()`.
+    * For errors, assert the precise error type and key fields/messages, not just that an operation "failed".
+    * Cover at least one positive path and one negative/edge case per public behavior when feasible.
+* Example (before → after):
+    * Before: `assertThat(stats).isNotNull();`
+    * After: 
+      - `assertThat(stats.get("files")).isEqualTo(1L);`
+      - `assertThat(indexPath).exists();`
+      - `assertThat(Files.readAllLines(indexPath)).singleElement().contains("file1.txt");`
+* Use AssertJ features:
+    * `containsExactly`, `containsOnly`, `containsExactlyInAnyOrder`, `singleElement`, `extracting`, `usingRecursiveComparison()` for nested objects.
+* Test data must be deterministic. Avoid time- and randomness-based flakiness; inject clocks/executors or fix seeds where needed.
+
 ## 3. CLI Development
 * **Picocli:** Use Picocli for defining CLI commands and parameters.
 * **Consistency:** New commands should fit into the existing structure (`repo`, `files`, `diff`).

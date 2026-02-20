@@ -22,6 +22,7 @@ import paxel.lib.Result;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -64,7 +65,20 @@ public class RepoManager {
         Statistics sum = new Statistics(repoDir.toString());
 
         for (int index = 0; index < repo.indices(); index++) {
-            IndexManager indexManager = new IndexManager(repoDir.resolve(nameIndexFile(index)), objectReader, objectWriter, fileSystem);
+            Path indexPath = repoDir.resolve(nameIndexFile(index));
+            // Ensure index file exists for a freshly initialized repo
+            try {
+                if (!fileSystem.exists(indexPath)) {
+                    // Ensure parent directory exists (defensive)
+                    fileSystem.createDirectories(indexPath.getParent());
+                    // Create an empty index file
+                    fileSystem.write(indexPath, new byte[0], StandardOpenOption.CREATE);
+                }
+            } catch (IOException e) {
+                return Result.err(new LoadError(indexPath, e, "Could not initialize index file"));
+            }
+
+            IndexManager indexManager = new IndexManager(indexPath, objectReader, objectWriter, fileSystem);
             Result<Statistics, LoadError> load = indexManager.load();
             if (load.hasFailed()) {
                 return load;
