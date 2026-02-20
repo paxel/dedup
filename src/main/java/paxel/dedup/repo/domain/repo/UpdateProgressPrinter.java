@@ -10,6 +10,7 @@ import paxel.dedup.domain.model.MimetypeProvider;
 import paxel.dedup.terminal.StatisticPrinter;
 
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZonedDateTime;
@@ -23,8 +24,7 @@ import static paxel.dedup.domain.model.BetterPrediction.COUNT;
 class UpdateProgressPrinter implements FileObserver {
     private final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss (dd.MM.yyyy)");
 
-
-    private final BetterPrediction betterPrediction = new BetterPrediction();
+    private final BetterPrediction betterPrediction;
     private final Map<Path, RepoFile> remainingPaths;
     private final StatisticPrinter progressPrinter;
     private final AtomicLong files = new AtomicLong();
@@ -37,16 +37,26 @@ class UpdateProgressPrinter implements FileObserver {
     private final AtomicLong hash = new AtomicLong();
     private final AtomicLong unchanged = new AtomicLong();
     private final AtomicLong errors = new AtomicLong();
-    private final Instant start = Instant.now();
+    private final Instant start;
     private final AtomicBoolean scanFinished = new AtomicBoolean();
+    private final Clock clock;
 
     public UpdateProgressPrinter(Map<Path, RepoFile> remainingPaths, StatisticPrinter progressPrinter,
                                  RepoManager repoManager, Statistics statistics, FileHasher fileHasher) {
+        this(remainingPaths, progressPrinter, repoManager, statistics, fileHasher, Clock.systemUTC());
+    }
+
+    public UpdateProgressPrinter(Map<Path, RepoFile> remainingPaths, StatisticPrinter progressPrinter,
+                                 RepoManager repoManager, Statistics statistics, FileHasher fileHasher,
+                                 Clock clock) {
         this.remainingPaths = remainingPaths;
         this.progressPrinter = progressPrinter;
         this.repoManager = repoManager;
         this.statistics = statistics;
         this.fileHasher = fileHasher;
+        this.clock = clock;
+        this.start = clock.instant();
+        this.betterPrediction = new BetterPrediction(clock);
     }
 
     @Override
@@ -78,7 +88,7 @@ class UpdateProgressPrinter implements FileObserver {
     private void logHash(StatisticPrinter progressPrinter, AtomicLong hash, AtomicLong files, AtomicLong unchanged) {
         progressPrinter.setHashed(hash + " / " + (files.get() - unchanged.get()));
         progressPrinter.setUnchanged(unchanged + " / " + (files.get() - hash.get()));
-        progressPrinter.setDuration(DurationFormatUtils.formatDurationWords(Duration.between(start, Instant.now()).toMillis(), true, true));
+        progressPrinter.setDuration(DurationFormatUtils.formatDurationWords(Duration.between(start, clock.instant()).toMillis(), true, true));
     }
 
     @Override
@@ -96,7 +106,7 @@ class UpdateProgressPrinter implements FileObserver {
     @Override
     public void scanFinished() {
         scanFinished.set(true);
-        progressPrinter.setDirectories(finishedDirs + ". scan finished after " + DurationFormatUtils.formatDurationWords(Duration.between(start, Instant.now()).toMillis(), true, true));
+        progressPrinter.setDirectories(finishedDirs + ". scan finished after " + DurationFormatUtils.formatDurationWords(Duration.between(start, clock.instant()).toMillis(), true, true));
     }
 
     @Override
@@ -116,13 +126,13 @@ class UpdateProgressPrinter implements FileObserver {
             if (total != 0 && scanFinished.get()) {
                 long remaining = total - processed;
                 double remainingPercent = (double) remaining / total;
-                Duration estimation = Duration.between(start, Instant.now());
+                Duration estimation = Duration.between(start, clock.instant());
 
                 if (estimation.minusMillis(30000).isPositive()) {
                     // Scale baseline proportionally to remaining work without truncation to zero
                     estimation = estimation.multipliedBy(remaining).dividedBy(total);
                     estimation = getBetterDuration(betterPrediction, estimation, total, remaining);
-                    ZonedDateTime eta = ZonedDateTime.now().plus(estimation);
+                    ZonedDateTime eta = ZonedDateTime.now(clock).plus(estimation);
                     progressPrinter.setProgress("%.2f %% estimated remaining duration: %s ETA: %s".formatted((1.0 - remainingPercent) * 100,
                             DurationFormatUtils.formatDurationWords(estimation.toMillis(), true, true),
                             dateTimeFormatter.format(eta)));
