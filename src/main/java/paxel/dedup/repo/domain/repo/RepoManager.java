@@ -4,22 +4,22 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import lombok.Getter;
-import paxel.dedup.config.DedupConfig;
-import paxel.dedup.model.Repo;
-import paxel.dedup.model.RepoFile;
-import paxel.dedup.model.Statistics;
-import paxel.dedup.model.errors.CloseError;
-import paxel.dedup.model.errors.IoError;
-import paxel.dedup.model.errors.LoadError;
-import paxel.dedup.model.errors.WriteError;
-import paxel.dedup.model.utils.BinaryFormatter;
-import paxel.dedup.model.utils.FileHasher;
-import paxel.dedup.model.utils.HexFormatter;
-import paxel.dedup.model.utils.MimetypeProvider;
+import paxel.dedup.infrastructure.config.DedupConfig;
+import paxel.dedup.domain.model.Repo;
+import paxel.dedup.domain.model.RepoFile;
+import paxel.dedup.domain.model.Statistics;
+import paxel.dedup.domain.model.errors.CloseError;
+import paxel.dedup.domain.model.errors.IoError;
+import paxel.dedup.domain.model.errors.LoadError;
+import paxel.dedup.domain.model.errors.WriteError;
+import paxel.dedup.domain.model.BinaryFormatter;
+import paxel.dedup.domain.model.FileHasher;
+import paxel.dedup.domain.model.HexFormatter;
+import paxel.dedup.domain.model.MimetypeProvider;
+import paxel.dedup.domain.port.out.FileSystem;
 import paxel.lib.Result;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
@@ -35,13 +35,15 @@ public class RepoManager {
     private final Map<Integer, IndexManager> indices = new ConcurrentHashMap<>();
     private final ObjectReader objectReader;
     private final ObjectWriter objectWriter;
+    private final FileSystem fileSystem;
     @Getter
     private final Path repoDir;
     private final BinaryFormatter binaryFormatter = new HexFormatter();
 
 
-    public RepoManager(Repo repo, DedupConfig dedupConfig, ObjectMapper objectMapper) {
+    public RepoManager(Repo repo, DedupConfig dedupConfig, ObjectMapper objectMapper, FileSystem fileSystem) {
         this.repo = repo;
+        this.fileSystem = fileSystem;
         objectReader = objectMapper.readerFor(RepoFile.class);
         objectWriter = objectMapper.writerFor(RepoFile.class);
         repoDir = dedupConfig.getRepoDir().resolve(repo.name());
@@ -62,7 +64,7 @@ public class RepoManager {
         Statistics sum = new Statistics(repoDir.toString());
 
         for (int index = 0; index < repo.indices(); index++) {
-            IndexManager indexManager = new IndexManager(repoDir.resolve(nameIndexFile(index)), objectReader, objectWriter);
+            IndexManager indexManager = new IndexManager(repoDir.resolve(nameIndexFile(index)), objectReader, objectWriter, fileSystem);
             Result<Statistics, LoadError> load = indexManager.load();
             if (load.hasFailed()) {
                 return load;
@@ -115,7 +117,7 @@ public class RepoManager {
     }
 
     public CompletableFuture<Result<RepoFile, WriteError>> addPath(Path absolutePath, FileHasher fileHasher, MimetypeProvider mimetypeProvider) {
-        if (!Files.exists(absolutePath)) {
+        if (!fileSystem.exists(absolutePath)) {
             return CompletableFuture.completedFuture(Result.ok(null));
         }
         Path relativize = Paths.get(repo.absolutePath()).relativize(absolutePath);
@@ -166,7 +168,7 @@ public class RepoManager {
     private CompletableFuture<Result<String, LoadError>> calcHash(Path absolutePath, long size, FileHasher fileHasher) {
         if (size < 20) {
             try {
-                return CompletableFuture.completedFuture(Result.ok(binaryFormatter.format(Files.readAllBytes(absolutePath))));
+                return CompletableFuture.completedFuture(Result.ok(binaryFormatter.format(fileSystem.readAllBytes(absolutePath))));
             } catch (IOException e) {
                 return CompletableFuture.completedFuture(Result.err(new LoadError(absolutePath, e, e.toString())));
             }
@@ -176,7 +178,7 @@ public class RepoManager {
 
     private Result<FileTime, LoadError> getLastModifiedTime(Path absolutePath) {
         try {
-            return Result.ok(Files.getLastModifiedTime(absolutePath));
+            return Result.ok(fileSystem.getLastModifiedTime(absolutePath));
         } catch (IOException e) {
             return Result.err(new LoadError(absolutePath, e, "Could not get last modified"));
         }
@@ -184,7 +186,7 @@ public class RepoManager {
 
     private Result<Long, LoadError> getSize(Path absolutePath) {
         try {
-            return Result.ok(Files.size(absolutePath));
+            return Result.ok(fileSystem.size(absolutePath));
         } catch (IOException e) {
             return Result.err(new LoadError(absolutePath, e, "Could not get size"));
         }

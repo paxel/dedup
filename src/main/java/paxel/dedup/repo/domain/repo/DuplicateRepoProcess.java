@@ -2,13 +2,14 @@ package paxel.dedup.repo.domain.repo;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
-import paxel.dedup.config.DedupConfig;
-import paxel.dedup.model.Repo;
-import paxel.dedup.model.RepoFile;
-import paxel.dedup.model.Statistics;
-import paxel.dedup.model.errors.LoadError;
-import paxel.dedup.model.errors.OpenRepoError;
-import paxel.dedup.parameter.CliParameter;
+import paxel.dedup.infrastructure.config.DedupConfig;
+import paxel.dedup.domain.model.Repo;
+import paxel.dedup.domain.model.RepoFile;
+import paxel.dedup.domain.model.Statistics;
+import paxel.dedup.domain.model.errors.LoadError;
+import paxel.dedup.domain.model.errors.OpenRepoError;
+import paxel.dedup.application.cli.parameter.CliParameter;
+import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.lib.Result;
 
 import java.util.*;
@@ -46,7 +47,7 @@ public class DuplicateRepoProcess {
         Map<UniqueHash, List<RepoRepoFile>> all = new HashMap<>();
 
         for (Repo repo : repos) {
-            RepoManager r = new RepoManager(repo, dedupConfig, objectMapper);
+            RepoManager r = new RepoManager(repo, dedupConfig, objectMapper, new NioFileSystemAdapter());
             Result<Statistics, LoadError> load = r.load();
             if (load.hasFailed()) {
                 return -81;

@@ -1,9 +1,8 @@
-image: ubuntu/lts
+image: openjdk:21
 packages:
   - maven
-  - openjdk-21-jre-headless
 sources:
-  - https://git.sr.ht/~taum/dedup
+  - https://git.sr.ht/~paxel/dedup
 tasks:
   - dependencies: |
       cd dedup

@@ -2,19 +2,20 @@ package paxel.dedup.repo.domain.repo;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
-import paxel.dedup.config.DedupConfig;
-import paxel.dedup.model.Repo;
-import paxel.dedup.model.RepoFile;
-import paxel.dedup.model.Statistics;
-import paxel.dedup.model.errors.LoadError;
-import paxel.dedup.model.errors.OpenRepoError;
-import paxel.dedup.model.errors.UpdateRepoError;
-import paxel.dedup.model.utils.HexFormatter;
-import paxel.dedup.model.utils.ResilientFileWalker;
-import paxel.dedup.model.utils.Sha1Hasher;
-import paxel.dedup.parameter.CliParameter;
+import paxel.dedup.infrastructure.config.DedupConfig;
+import paxel.dedup.domain.model.Repo;
+import paxel.dedup.domain.model.RepoFile;
+import paxel.dedup.domain.model.Statistics;
+import paxel.dedup.domain.model.errors.LoadError;
+import paxel.dedup.domain.model.errors.OpenRepoError;
+import paxel.dedup.domain.model.errors.UpdateRepoError;
+import paxel.dedup.domain.model.HexFormatter;
+import paxel.dedup.domain.model.ResilientFileWalker;
+import paxel.dedup.domain.model.Sha1Hasher;
+import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.terminal.StatisticPrinter;
 import paxel.dedup.terminal.TerminalProgress;
+import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -50,7 +51,7 @@ public class UpdateReposProcess {
                 return -50;
             }
             for (Repo repo : lsResult.value()) {
-                updateRepo(new RepoManager(repo, dedupConfig, objectMapper));
+                updateRepo(new RepoManager(repo, dedupConfig, objectMapper, new NioFileSystemAdapter()));
             }
             return 0;
         }
@@ -58,7 +59,7 @@ public class UpdateReposProcess {
         for (String name : names) {
             Result<Repo, OpenRepoError> getRepoResult = dedupConfig.getRepo(name);
             if (getRepoResult.isSuccess()) {
-                Result<Statistics, UpdateRepoError> statisticsUpdateRepoErrorResult = updateRepo(new RepoManager(getRepoResult.value(), dedupConfig, objectMapper));
+                Result<Statistics, UpdateRepoError> statisticsUpdateRepoErrorResult = updateRepo(new RepoManager(getRepoResult.value(), dedupConfig, objectMapper, new NioFileSystemAdapter()));
             }
         }
         return 0;
@@ -78,7 +79,7 @@ public class UpdateReposProcess {
             progressPrinter.set(repoManager.getRepo().name(), repoManager.getRepo().absolutePath());
             progressPrinter.setProgress("...stand by... collecting info");
             Statistics statistics = new Statistics(repoManager.getRepo().absolutePath());
-            new ResilientFileWalker(new UpdateProgressPrinter(remainingPaths, progressPrinter, repoManager, statistics, sha1Hasher)).walk(Paths.get(repoManager.getRepo().absolutePath()));
+            new ResilientFileWalker(new UpdateProgressPrinter(remainingPaths, progressPrinter, repoManager, statistics, sha1Hasher), new NioFileSystemAdapter()).walk(Paths.get(repoManager.getRepo().absolutePath()));
 
             for (RepoFile value : remainingPaths.values()) {
                 repoManager.addRepoFile(value.withMissing(true));

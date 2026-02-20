@@ -5,6 +5,61 @@ Treats your files as repositories and allows finding duplicates in the repositor
 
 
 
+## Usage: Dedup CLI
+
+The `dedup` CLI allows managing repositories and finding/processing duplicates.
+
+### 1. Repository Management (`repo`)
+
+Repositories are logical groupings of files at a specific path.
+
+*   **Create:** `dedup repo create <name> <path> [-i <indices>]`
+    *   Creates a new repository with the name `<name>` for the path `<path>`.
+    *   `-i`: Number of index files (default: 10).
+*   **List:** `dedup repo ls`
+    *   Lists all registered repositories.
+*   **Remove:** `dedup repo rm <name>`
+    *   Deletes the repository configuration (not the files on disk).
+*   **Update:** `dedup repo update [-R <repo> | -a] [-t <threads>] [--no-progress]`
+    *   Scans the file system and updates the index.
+    *   `-R`: Update specific repo.
+    *   `-a`: Update all repos.
+    *   `-t`: Number of threads for hashing (default: 2).
+*   **Prune:** `dedup repo prune [-R <repo> | -a] [-i <indices>]`
+    *   Cleans the index from old entries and deleted files.
+*   **Copy/Move:**
+    *   `cp <source> <dest> <path>`: Copies a repo profile to a new path.
+    *   `rel <repo> <path>`: Changes the base path of a repo.
+    *   `mv <source> <dest>`: Renames a repo.
+*   **Find Duplicates:** `dedup repo dupes [-R <repo> | -a]`
+    *   Finds duplicates within the specified repositories.
+
+### 2. File Operations (`files`)
+
+Allows operations on files within a repository based on the index.
+
+*   **List:** `dedup files ls <repo> [-f <filter>]`
+*   **Remove:** `dedup files rm <repo> [-f <filter>]`
+*   **Copy/Move:**
+    *   `cp <source> <target> [--appendix <ext>] [-f <filter>]`
+    *   `mv <source> <target> [--appendix <ext>] [-f <filter>]`
+*   **Types:** `dedup files types <repo>`
+    *   Lists the MIME types occurring in the repo.
+
+### 3. Difference Analysis (`diff`)
+
+Compares repositories or directories.
+
+*   **Print:** `dedup diff print <source> <reference> [-f <filter>]`
+    *   Shows files present in `source` but not in `reference`.
+*   **Copy/Move:**
+    *   `cp <source> <reference> <target> [-f <filter>]`: Copies differences to `target`.
+    *   `mv <source> <reference> <target> [-f <filter>]`: Moves differences to `target`.
+*   **Remove:** `dedup diff rm <source> <reference> [-f <filter>]`
+    *   Deletes files in `source` that already exist in `reference`.
+
+---
+
 ## Config dir
 
 **config:** ~/.config/dedup/

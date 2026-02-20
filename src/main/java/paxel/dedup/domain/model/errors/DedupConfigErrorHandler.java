@@ -1,0 +1,14 @@
+package paxel.dedup.domain.model.errors;
+
+import java.io.IOException;
+
+public class DedupConfigErrorHandler {
+
+    public void dump(CreateConfigError error) {
+        IOException ioException = error.ioException();
+        if (ioException != null) {
+            System.err.println(error.path() + " not a valid config relativePath");
+            ioException.printStackTrace();
+        }
+    }
+}
