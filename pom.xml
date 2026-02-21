@@ -137,27 +137,23 @@
                     </compilerArgs>
                 </configuration>
             </plugin>
-            <!-- JaCoCo: code coverage instrumentation, report and enforcement -->
+            <!-- GraalVM Native Image build tools (activated via -Pnative) -->
             <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.11</version>
-                <executions>
-                    <!-- Add the agent to tests to collect coverage -->
-                    <execution>
-                        <goals>
-                            <goal>prepare-agent</goal>
-                        </goals>
-                    </execution>
-                    <!-- Create HTML and XML reports after tests -->
-                    <execution>
-                        <id>report</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>report</goal>
-                        </goals>
-                    </execution>
-                </executions>
+                <groupId>org.graalvm.buildtools</groupId>
+                <artifactId>native-maven-plugin</artifactId>
+                <version>0.10.3</version>
+                <configuration>
+                    <imageName>dedup</imageName>
+                    <mainClass>paxel.dedup.application.cli.DedupCli</mainClass>
+                    <!-- Use dockerized GraalVM to build native image locally as default config hint -->
+                    <imageBuilder>docker</imageBuilder>
+                    <!-- Community builder image for JDK 21 native-image -->
+                    <builderImage>ghcr.io/graalvm/native-image-community:21</builderImage>
+                    <buildArgs>
+                        <arg>--no-fallback</arg>
+                        <arg>-H:+ReportExceptionStackTraces</arg>
+                    </buildArgs>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -171,9 +167,7 @@
                         <configuration>
                             <archive>
                                 <manifest>
-                                    <mainClass>
-                                        paxel.dedup.DedupCli
-                                    </mainClass>
+                                    <mainClass>paxel.dedup.application.cli.DedupCli</mainClass>
                                 </manifest>
                             </archive>
                             <descriptorRefs>
@@ -187,4 +181,38 @@
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <profile>
+            <id>native</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.graalvm.buildtools</groupId>
+                        <artifactId>native-maven-plugin</artifactId>
+                        <version>0.10.3</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <imageName>dedup</imageName>
+                            <mainClass>paxel.dedup.application.cli.DedupCli</mainClass>
+                            <!-- Force containerized build when running with -Pnative -->
+                            <imageBuilder>docker</imageBuilder>
+                            <builderImage>ghcr.io/graalvm/native-image-community:21</builderImage>
+                            <buildArgs>
+                                <arg>--no-fallback</arg>
+                                <arg>-H:+ReportExceptionStackTraces</arg>
+                            </buildArgs>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>build-native</id>
+                                <goals>
+                                    <goal>compile-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
