@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
-import paxel.dedup.domain.model.errors.LoadError;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.dedup.infrastructure.adapter.out.serialization.JsonLineCodec;
 import paxel.lib.Result;
@@ -45,7 +45,7 @@ class IndexManagerTest {
         }
 
         // Act
-        Result<Statistics, LoadError> result = indexManager.load();
+        Result<Statistics, DedupError> result = indexManager.load();
 
         // Assert
         assertThat(result.hasFailed()).isFalse();
@@ -100,7 +100,7 @@ class IndexManagerTest {
         Files.writeString(indexFile, objectMapper.writeValueAsString(file1) + "\n" + objectMapper.writeValueAsString(file2) + "\n");
 
         // Act
-        Result<Statistics, LoadError> loadResult = indexManager.load();
+        Result<Statistics, DedupError> loadResult = indexManager.load();
 
         // Assert
         assertThat(indexManager.getByHash("common")).hasSize(2);

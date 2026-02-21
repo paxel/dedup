@@ -2,7 +2,7 @@ package paxel.dedup.infrastructure.config;
 
 import lombok.NonNull;
 import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.errors.*;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.lib.Result;
 
 import java.nio.file.Path;
@@ -17,7 +17,7 @@ public interface DedupConfig {
      * @return the repos
      */
     @NonNull
-    Result<List<Repo>, OpenRepoError> getRepos();
+    Result<List<Repo>, DedupError> getRepos();
 
     /**
      * Provide a {@link Repo} by name
@@ -25,28 +25,28 @@ public interface DedupConfig {
      * @return the {@link Repo} or {@link  Optional#empty()}
      */
     @NonNull
-    Result<Repo, OpenRepoError> getRepo(@NonNull String name);
+    Result<Repo, DedupError> getRepo(@NonNull String name);
 
     /**
      * Creates a Repo with given name or explains the reason why not.
      *
      * @param name The name of the new repo.
-     * @return The new {@link Repo} or {@link CreateRepoError} if the repo could not be read.
+     * @return The new {@link Repo} or an error if the repo could not be created.
      */
     @NonNull
-    Result<Repo, CreateRepoError> createRepo(@NonNull String name, @NonNull Path path, int indices);
+    Result<Repo, DedupError> createRepo(@NonNull String name, @NonNull Path path, int indices);
 
     @NonNull
-    Result<Repo, ModifyRepoError> changePath(@NonNull String name, @NonNull Path path);
+    Result<Repo, DedupError> changePath(@NonNull String name, @NonNull Path path);
 
     /**
      * Deletes a Repo with given name or explains the reason why not.
      *
      * @param name The repo to be deleted.
-     * @return {@code true} if the repo existed and was deleted. {@code false} if the repo did not exist. {@link DeleteRepoError} if the repo could not be deleted.
+     * @return {@code true} if the repo existed and was deleted; {@code false} if the repo did not exist; or an error when the repo could not be deleted.
      */
     @NonNull
-    Result<Boolean, DeleteRepoError> deleteRepo(@NonNull String name);
+    Result<Boolean, DedupError> deleteRepo(@NonNull String name);
 
     /**
      * Retrieve the repo root dir
@@ -61,15 +61,16 @@ public interface DedupConfig {
      *
      * @param oldName the current name of the repo
      * @param newName the new name of the repo
-     * @return {@code true} if the repo existed and was moved. {@code false} if the repo did not exist or was not moved. {@link RenameRepoError} if the repo could not be moved.
+     * @return {@code true} if the repo existed and was moved; {@code false} if the repo did not exist or was not moved; or an error when the repo could not be moved.
      */
-    Result<Boolean, RenameRepoError> renameRepo(String oldName, String newName);
+    Result<Boolean, DedupError> renameRepo(String oldName, String newName);
 
     /**
      * Updates the codec of the repo YAML while keeping name, path, and indices the same.
      */
     @NonNull
-    default Result<Repo, ModifyRepoError> setCodec(@NonNull String name, @NonNull Repo.Codec codec) {
-        return Result.err(new ModifyRepoError(getRepoDir().resolve(name).resolve("dedup_repo.yml"), null));
+    default Result<Repo, DedupError> setCodec(@NonNull String name, @NonNull Repo.Codec codec) {
+        return Result.err(DedupError.of(paxel.dedup.domain.model.errors.ErrorType.MODIFY_REPO,
+                getRepoDir().resolve(name).resolve("dedup_repo.yml") + ": failed persisting codec"));
     }
 }

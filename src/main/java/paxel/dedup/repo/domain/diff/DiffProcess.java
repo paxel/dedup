@@ -4,8 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.*;
-import paxel.dedup.domain.model.errors.LoadError;
-import paxel.dedup.domain.model.errors.OpenRepoError;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.repo.domain.repo.RepoManager;
@@ -157,13 +156,13 @@ public class DiffProcess {
 
 
     private Result<RepoManager, Integer> openRepo(String name, int errOffset) {
-        Result<Repo, OpenRepoError> repo = dedupConfig.getRepo(name);
+        Result<Repo, DedupError> repo = dedupConfig.getRepo(name);
         if (repo.hasFailed()) {
             log.error("Could not open {} {}", name, repo.error());
             return Result.err(errOffset - 1);
         }
         RepoManager repoManager = RepoManager.forRepo(repo.value(), dedupConfig, fileSystem);
-        Result<Statistics, LoadError> loadResult = repoManager.load();
+        Result<Statistics, DedupError> loadResult = repoManager.load();
         if (loadResult.hasFailed()) {
             log.error("Could not load {} {}", name, loadResult.error());
             return Result.err(errOffset - 2);

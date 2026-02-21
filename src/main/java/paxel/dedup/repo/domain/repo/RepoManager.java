@@ -4,10 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.domain.model.*;
-import paxel.dedup.domain.model.errors.CloseError;
-import paxel.dedup.domain.model.errors.IoError;
-import paxel.dedup.domain.model.errors.LoadError;
-import paxel.dedup.domain.model.errors.WriteError;
+import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.domain.model.errors.ErrorType;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.domain.port.out.LineCodec;
 import paxel.dedup.infrastructure.adapter.out.serialization.JsonLineCodec;
@@ -68,11 +66,12 @@ public class RepoManager {
         return index + ".idx";
     }
 
-    public Result<Statistics, LoadError> load() {
+    public Result<Statistics, DedupError> load() {
         for (IndexManager index : indices.values()) {
-            Result<Boolean, CloseError> close = index.close();
+            Result<Boolean, DedupError> close = index.close();
             if (close.hasFailed()) {
-                return close.mapError(f -> new LoadError(f.path(), f.ioException(), "Failed closing the IndexManager"));
+                return close.mapError(f -> DedupError.of(ErrorType.LOAD, "Failed closing the IndexManager: " + f.describe(),
+                        f.exception()));
             }
         }
         indices.clear();
@@ -89,11 +88,11 @@ public class RepoManager {
                     fileSystem.write(indexPath, new byte[0], StandardOpenOption.CREATE);
                 }
             } catch (IOException e) {
-                return Result.err(new LoadError(indexPath, e, "Could not initialize index file"));
+                return Result.err(DedupError.of(ErrorType.LOAD, indexPath + ": Could not initialize index file", e));
             }
 
             IndexManager indexManager = new IndexManager(indexPath, lineCodec, fileSystem);
-            Result<Statistics, LoadError> load = indexManager.load();
+            Result<Statistics, DedupError> load = indexManager.load();
             if (load.hasFailed()) {
                 return load;
             }
@@ -138,26 +137,26 @@ public class RepoManager {
         return list.getLast();
     }
 
-    public Result<RepoFile, WriteError> addRepoFile(RepoFile repoFile) {
+    public Result<RepoFile, DedupError> addRepoFile(RepoFile repoFile) {
         return indices.get((int) (repoFile.size() % repo.indices()))
                 .add(repoFile)
                 .map(f -> repoFile, Function.identity());
     }
 
-    public CompletableFuture<Result<RepoFile, WriteError>> addPath(Path absolutePath, FileHasher fileHasher, MimetypeProvider mimetypeProvider) {
+    public CompletableFuture<Result<RepoFile, DedupError>> addPath(Path absolutePath, FileHasher fileHasher, MimetypeProvider mimetypeProvider) {
         if (!fileSystem.exists(absolutePath)) {
             return CompletableFuture.completedFuture(Result.ok(null));
         }
         Path relativize = Paths.get(repo.absolutePath()).relativize(absolutePath);
         RepoFile oldRepoFile = getByPath(relativize.toString());
 
-        Result<Long, LoadError> sizeResult = getSize(absolutePath);
+        Result<Long, DedupError> sizeResult = getSize(absolutePath);
         if (sizeResult.hasFailed()) {
-            return CompletableFuture.completedFuture(sizeResult.mapError(f -> new WriteError(null, f.path(), f.ioException())));
+            return CompletableFuture.completedFuture(sizeResult.mapError(f -> DedupError.of(ErrorType.WRITE, f.describe(), f.exception())));
         }
-        Result<FileTime, LoadError> lastModifiedResult = getLastModifiedTime(absolutePath);
+        Result<FileTime, DedupError> lastModifiedResult = getLastModifiedTime(absolutePath);
         if (lastModifiedResult.hasFailed()) {
-            return CompletableFuture.completedFuture(lastModifiedResult.mapError(f -> new WriteError(null, f.path(), f.ioException())));
+            return CompletableFuture.completedFuture(lastModifiedResult.mapError(f -> DedupError.of(ErrorType.WRITE, f.describe(), f.exception())));
         }
 
         Long size = sizeResult.value();
@@ -178,9 +177,9 @@ public class RepoManager {
 
         return calcHash(absolutePath, size, fileHasher).thenApply(hashResult -> {
             if (hashResult.hasFailed())
-                return hashResult.mapError(l -> new WriteError(null, absolutePath, l.ioException()));
+                return hashResult.mapError(l -> DedupError.of(ErrorType.WRITE, absolutePath + ": hashing failed", l.exception()));
 
-            Result<String, IoError> stringIoErrorResult = mimetypeProvider.get(absolutePath);
+            Result<String, DedupError> stringIoErrorResult = mimetypeProvider.get(absolutePath);
             RepoFile repoFile = RepoFile.builder()
                     .size(size)
                     .relativePath(relativize.toString())
@@ -193,30 +192,30 @@ public class RepoManager {
         });
     }
 
-    private CompletableFuture<Result<String, LoadError>> calcHash(Path absolutePath, long size, FileHasher fileHasher) {
+    private CompletableFuture<Result<String, DedupError>> calcHash(Path absolutePath, long size, FileHasher fileHasher) {
         if (size < 20) {
             try {
                 return CompletableFuture.completedFuture(Result.ok(binaryFormatter.format(fileSystem.readAllBytes(absolutePath))));
             } catch (IOException e) {
-                return CompletableFuture.completedFuture(Result.err(new LoadError(absolutePath, e, e.toString())));
+                return CompletableFuture.completedFuture(Result.err(DedupError.of(ErrorType.LOAD, absolutePath + ": " + e, e)));
             }
         }
         return fileHasher.hash(absolutePath);
     }
 
-    private Result<FileTime, LoadError> getLastModifiedTime(Path absolutePath) {
+    private Result<FileTime, DedupError> getLastModifiedTime(Path absolutePath) {
         try {
             return Result.ok(fileSystem.getLastModifiedTime(absolutePath));
         } catch (IOException e) {
-            return Result.err(new LoadError(absolutePath, e, "Could not get last modified"));
+            return Result.err(DedupError.of(ErrorType.LOAD, absolutePath + ": Could not get last modified", e));
         }
     }
 
-    private Result<Long, LoadError> getSize(Path absolutePath) {
+    private Result<Long, DedupError> getSize(Path absolutePath) {
         try {
             return Result.ok(fileSystem.size(absolutePath));
         } catch (IOException e) {
-            return Result.err(new LoadError(absolutePath, e, "Could not get size"));
+            return Result.err(DedupError.of(ErrorType.LOAD, absolutePath + ": Could not get size", e));
         }
     }
 

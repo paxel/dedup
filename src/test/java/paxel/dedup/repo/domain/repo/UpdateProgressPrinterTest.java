@@ -6,7 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
-import paxel.dedup.domain.model.errors.LoadError;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.dedup.infrastructure.adapter.out.serialization.JsonLineCodec;
@@ -40,27 +40,27 @@ class UpdateProgressPrinterTest {
         }
 
         @Override
-        public Result<List<Repo>, paxel.dedup.domain.model.errors.OpenRepoError> getRepos() {
+        public Result<List<Repo>, DedupError> getRepos() {
             return Result.ok(List.of());
         }
 
         @Override
-        public Result<Repo, paxel.dedup.domain.model.errors.OpenRepoError> getRepo(String name) {
+        public Result<Repo, DedupError> getRepo(String name) {
             return Result.err(null);
         }
 
         @Override
-        public Result<Repo, paxel.dedup.domain.model.errors.CreateRepoError> createRepo(String name, Path path, int indices) {
+        public Result<Repo, DedupError> createRepo(String name, Path path, int indices) {
             return Result.err(null);
         }
 
         @Override
-        public Result<Repo, paxel.dedup.domain.model.errors.ModifyRepoError> changePath(String name, Path path) {
+        public Result<Repo, DedupError> changePath(String name, Path path) {
             return Result.err(null);
         }
 
         @Override
-        public Result<Boolean, paxel.dedup.domain.model.errors.DeleteRepoError> deleteRepo(String name) {
+        public Result<Boolean, DedupError> deleteRepo(String name) {
             return Result.ok(false);
         }
 
@@ -70,7 +70,7 @@ class UpdateProgressPrinterTest {
         }
 
         @Override
-        public Result<Boolean, paxel.dedup.domain.model.errors.RenameRepoError> renameRepo(String oldName, String newName) {
+        public Result<Boolean, DedupError> renameRepo(String oldName, String newName) {
             return Result.ok(false);
         }
     }
@@ -94,7 +94,7 @@ class UpdateProgressPrinterTest {
 
         // Ensure index dir exists; RepoManager.load() will also create 0.idx if missing.
         Files.createDirectories(configRoot.resolve("r1"));
-        Result<Statistics, LoadError> load = repoManager.load();
+        Result<Statistics, DedupError> load = repoManager.load();
         assertThat(load.hasFailed()).isFalse();
 
         // Remaining paths map: include the file (will be removed) and a second leftover
@@ -113,7 +113,7 @@ class UpdateProgressPrinterTest {
         // FileHasher stub that returns a completed future immediately
         paxel.dedup.domain.model.FileHasher hasher = new paxel.dedup.domain.model.FileHasher() {
             @Override
-            public CompletableFuture<paxel.lib.Result<String, LoadError>> hash(Path path) {
+            public CompletableFuture<paxel.lib.Result<String, DedupError>> hash(Path path) {
                 return CompletableFuture.completedFuture(Result.ok("HASH-OK"));
             }
 

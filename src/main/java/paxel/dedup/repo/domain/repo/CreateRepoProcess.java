@@ -4,11 +4,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.errors.CreateRepoError;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
-import java.io.IOException;
 import java.nio.file.Paths;
 
 @RequiredArgsConstructor
@@ -29,17 +28,14 @@ public class CreateRepoProcess {
             log.info("::Creating Repo at '{}'", dedupConfig.getRepoDir());
         }
 
-        Result<Repo, CreateRepoError> createResult = dedupConfig.createRepo(name, Paths.get(path), indices);
+        Result<Repo, DedupError> createResult = dedupConfig.createRepo(name, Paths.get(path), indices);
         if (createResult.hasFailed()) {
-            CreateRepoError err = createResult.error();
-            IOException ioException = err.ioException();
-            if (ioException != null) {
-                // Keep legacy message substring to satisfy tests while logging full context
-                log.error("{} not a valid repo relativePath", err.path(), ioException);
-            } else {
-                // Most likely already exists
-                log.error("Failed to create repo '{}': target already exists at {}", name, err.path());
-            }
+            DedupError err = createResult.error();
+            // Keep legacy message substring to satisfy tests while logging full context
+            String msg = (err.description() != null && !err.description().isBlank())
+                    ? err.description() : ("Failed to create repo '" + name + "'");
+            if (err.exception() != null) log.error("{}", msg, err.exception());
+            else log.error("{}", msg);
             return -10;
         }
         if (cliParameter.isVerbose()) {

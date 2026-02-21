@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import paxel.dedup.domain.model.FileHasher;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
-import paxel.dedup.domain.model.errors.LoadError;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.terminal.StatisticPrinter;
 import paxel.lib.Result;
 
@@ -36,11 +36,24 @@ class UpdateProgressPrinterEtaTest {
             this.zone = zone;
         }
 
-        void tick(Duration d) { this.current = this.current.plus(d); }
+        void tick(Duration d) {
+            this.current = this.current.plus(d);
+        }
 
-        @Override public ZoneId getZone() { return zone; }
-        @Override public Clock withZone(ZoneId zone) { return new MutableClock(current, zone); }
-        @Override public Instant instant() { return current; }
+        @Override
+        public ZoneId getZone() {
+            return zone;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return new MutableClock(current, zone);
+        }
+
+        @Override
+        public Instant instant() {
+            return current;
+        }
     }
 
     @Test
@@ -67,11 +80,13 @@ class UpdateProgressPrinterEtaTest {
         // FileHasher is not used because addPath is mocked; provide a trivial stub
         FileHasher stubHasher = new FileHasher() {
             @Override
-            public CompletableFuture<Result<String, LoadError>> hash(Path path) {
+            public CompletableFuture<Result<String, DedupError>> hash(Path path) {
                 return CompletableFuture.completedFuture(Result.ok("hash"));
             }
+
             @Override
-            public void close() { }
+            public void close() {
+            }
         };
 
         Statistics stats = new Statistics("test");

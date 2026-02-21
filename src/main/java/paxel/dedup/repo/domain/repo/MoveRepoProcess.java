@@ -3,7 +3,7 @@ package paxel.dedup.repo.domain.repo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
-import paxel.dedup.domain.model.errors.RenameRepoError;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
@@ -20,7 +20,7 @@ public class MoveRepoProcess {
         if (cliParameter.isVerbose()) {
             log.info("Renaming repo {} to {}", sourceRepo, destinationRepo);
         }
-        Result<Boolean, RenameRepoError> result = dedupConfig.renameRepo(sourceRepo, destinationRepo);
+        Result<Boolean, DedupError> result = dedupConfig.renameRepo(sourceRepo, destinationRepo);
         if (result.hasFailed()) {
             log.error("Renaming repo {} to {} has failed: {}", sourceRepo, destinationRepo, result.error());
             return -90;

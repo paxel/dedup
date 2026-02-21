@@ -4,11 +4,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.errors.OpenRepoError;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
-import java.io.IOException;
 import java.util.Comparator;
 import java.util.List;
 
@@ -21,11 +20,16 @@ public class ListReposProcess {
 
     public int list() {
 
-        Result<List<Repo>, OpenRepoError> getReposResult = dedupConfig.getRepos();
+        Result<List<Repo>, DedupError> getReposResult = dedupConfig.getRepos();
         if (!getReposResult.isSuccess()) {
-            IOException ioException = getReposResult.error().ioException();
-            if (ioException != null) {
-                log.error("{} Invalid", getReposResult.error().path(), ioException);
+            DedupError err = getReposResult.error();
+            // Preserve legacy substring "Invalid" to keep test expectations
+            String desc = err.description();
+            String msg = (desc != null && !desc.isBlank()) ? desc : "Invalid";
+            if (err.exception() != null) {
+                log.error("{} {}", msg, "Invalid", err.exception());
+            } else {
+                log.error("{}", msg);
             }
             return -20;
         }

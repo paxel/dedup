@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.errors.ModifyRepoError;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
@@ -25,7 +25,7 @@ public class RelocateRepoProcess {
             log.info("Relocating {} path to {}", repo, path);
         }
 
-        Result<Repo, ModifyRepoError> repoModifyRepoErrorResult = dedupConfig.changePath(repo, Paths.get(path));
+        Result<Repo, DedupError> repoModifyRepoErrorResult = dedupConfig.changePath(repo, Paths.get(path));
         if (repoModifyRepoErrorResult.hasFailed()) {
             log.error("Relocating {} to {} failed: {}", repo, path, repoModifyRepoErrorResult.error());
             return -70;

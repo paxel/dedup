@@ -1,21 +1,21 @@
 package paxel.dedup.repo.domain.repo;
+
 import lombok.RequiredArgsConstructor;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
-import paxel.dedup.domain.model.errors.CloseError;
-import paxel.dedup.domain.model.errors.LoadError;
-import paxel.dedup.domain.model.errors.WriteError;
 import paxel.dedup.domain.model.TunneledIoException;
-import paxel.dedup.domain.port.out.LineCodec;
+import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.domain.model.errors.ErrorType;
 import paxel.dedup.domain.port.out.FileSystem;
+import paxel.dedup.domain.port.out.LineCodec;
 import paxel.lib.Result;
 
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
@@ -47,7 +47,7 @@ public class IndexManager {
         return paths.values().stream();
     }
 
-    public Result<Statistics, LoadError> load() {
+    public Result<Statistics, DedupError> load() {
         // MVP: we load everything to memory
         Statistics statistics = new Statistics(indexFile.toAbsolutePath().toString());
         statistics.start(LOAD);
@@ -95,7 +95,7 @@ public class IndexManager {
             statistics.stop(LOAD);
             return Result.ok(statistics);
         } catch (IOException e) {
-            return Result.err(LoadError.ioException(indexFile, e));
+            return Result.err(DedupError.of(ErrorType.LOAD, indexFile + ": load failed", e));
         }
     }
 
@@ -128,7 +128,7 @@ public class IndexManager {
         return paths.get(relative);
     }
 
-    public synchronized Result<Void, WriteError> add(RepoFile repoFile) {
+    public synchronized Result<Void, DedupError> add(RepoFile repoFile) {
         try {
 
             BufferedOutputStream outputStream = out.updateAndGet(o -> {
@@ -161,13 +161,13 @@ public class IndexManager {
             outputStream.flush();
             return Result.ok(null);
         } catch (TunneledIoException e) {
-            return Result.err(WriteError.ioException(indexFile, e.getCause()));
+            return Result.err(DedupError.of(ErrorType.WRITE, indexFile + ": write failed", e.getCause() instanceof Exception ex ? ex : new Exception(e.getCause())));
         } catch (IOException e) {
-            return Result.err(WriteError.ioException(indexFile, e));
+            return Result.err(DedupError.of(ErrorType.WRITE, indexFile + ": write failed", e));
         }
     }
 
-    public Result<Boolean, CloseError> close() {
+    public Result<Boolean, DedupError> close() {
         OutputStream outputStream = out.getAndSet(null);
         if (outputStream == null) {
             return Result.ok(false);
@@ -176,7 +176,7 @@ public class IndexManager {
             outputStream.close();
             return Result.ok(true);
         } catch (IOException e) {
-            return Result.err(CloseError.ioException(indexFile, e));
+            return Result.err(DedupError.of(ErrorType.CLOSE, indexFile + ": close failed", e));
         }
     }
 }

@@ -3,16 +3,13 @@ package paxel.dedup.repo.domain.repo;
 import lombok.RequiredArgsConstructor;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.*;
-import paxel.dedup.domain.model.errors.LoadError;
-import paxel.dedup.domain.model.errors.OpenRepoError;
-import paxel.dedup.domain.model.errors.UpdateRepoError;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.terminal.StatisticPrinter;
 import paxel.dedup.terminal.TerminalProgress;
 import paxel.lib.Result;
 
-import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
@@ -20,7 +17,6 @@ import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-
 
 @RequiredArgsConstructor
 public class UpdateReposProcess {
@@ -35,12 +31,9 @@ public class UpdateReposProcess {
     public int update() {
 
         if (all) {
-            Result<List<Repo>, OpenRepoError> lsResult = dedupConfig.getRepos();
+            Result<List<Repo>, DedupError> lsResult = dedupConfig.getRepos();
             if (lsResult.hasFailed()) {
-                IOException ioException = lsResult.error().ioException();
-                if (ioException != null) {
-                    ioException.printStackTrace();
-                }
+                if (lsResult.error().exception() != null) lsResult.error().exception().printStackTrace();
                 return -50;
             }
             for (Repo repo : lsResult.value()) {
@@ -50,20 +43,20 @@ public class UpdateReposProcess {
         }
 
         for (String name : names) {
-            Result<Repo, OpenRepoError> getRepoResult = dedupConfig.getRepo(name);
+            Result<Repo, DedupError> getRepoResult = dedupConfig.getRepo(name);
             if (getRepoResult.isSuccess()) {
                 Repo repo = getRepoResult.value();
-                Result<Statistics, UpdateRepoError> statisticsUpdateRepoErrorResult = updateRepo(RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter()));
+                Result<Statistics, DedupError> statisticsUpdateRepoErrorResult = updateRepo(RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter()));
             }
         }
         return 0;
     }
 
 
-    private Result<Statistics, UpdateRepoError> updateRepo(RepoManager repoManager) {
-        Result<Statistics, LoadError> load = repoManager.load();
+    private Result<Statistics, DedupError> updateRepo(RepoManager repoManager) {
+        Result<Statistics, DedupError> load = repoManager.load();
         if (load.hasFailed()) {
-            return load.mapError(f -> UpdateRepoError.ioException(repoManager.getRepoDir(), load.error().ioException()));
+            return load.mapError(f -> DedupError.of(paxel.dedup.domain.model.errors.ErrorType.UPDATE_REPO, repoManager.getRepoDir() + ": load failed", f.exception()));
         }
         Map<Path, RepoFile> remainingPaths = repoManager.stream().filter(r -> !r.missing()).collect(Collectors.toMap(r -> Paths.get(repoManager.getRepo().absolutePath(), r.relativePath()), Function.identity(), (old, update) -> update));
         StatisticPrinter progressPrinter = new StatisticPrinter();

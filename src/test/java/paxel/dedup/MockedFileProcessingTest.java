@@ -3,6 +3,7 @@ package paxel.dedup;
 import org.junit.jupiter.api.Test;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.repo.domain.repo.UpdateReposProcess;
@@ -113,27 +114,27 @@ class MockedFileProcessingTest {
 
     static class StubDedupConfig implements DedupConfig {
         @Override
-        public Result<List<Repo>, paxel.dedup.domain.model.errors.OpenRepoError> getRepos() {
+        public Result<List<Repo>, DedupError> getRepos() {
             return Result.ok(List.of(new Repo("testRepo", "/mock", 1)));
         }
 
         @Override
-        public Result<Repo, paxel.dedup.domain.model.errors.OpenRepoError> getRepo(String name) {
+        public Result<Repo, DedupError> getRepo(String name) {
             return Result.err(null);
         }
 
         @Override
-        public Result<Repo, paxel.dedup.domain.model.errors.CreateRepoError> createRepo(String name, Path path, int indices) {
+        public Result<Repo, DedupError> createRepo(String name, Path path, int indices) {
             return Result.err(null);
         }
 
         @Override
-        public Result<Repo, paxel.dedup.domain.model.errors.ModifyRepoError> changePath(String name, Path path) {
+        public Result<Repo, DedupError> changePath(String name, Path path) {
             return Result.err(null);
         }
 
         @Override
-        public Result<Boolean, paxel.dedup.domain.model.errors.DeleteRepoError> deleteRepo(String name) {
+        public Result<Boolean, DedupError> deleteRepo(String name) {
             return Result.ok(false);
         }
 
@@ -143,13 +144,13 @@ class MockedFileProcessingTest {
         }
 
         @Override
-        public Result<Boolean, paxel.dedup.domain.model.errors.RenameRepoError> renameRepo(String oldName, String newName) {
+        public Result<Boolean, DedupError> renameRepo(String oldName, String newName) {
             return Result.ok(false);
         }
 
         @Override
-        public Result<Repo, paxel.dedup.domain.model.errors.ModifyRepoError> setCodec(String name, Repo.Codec codec) {
-            return Result.err(null);
+        public Result<Repo, DedupError> setCodec(String name, Repo.Codec codec) {
+            return Result.err(paxel.dedup.domain.model.errors.DedupError.of(paxel.dedup.domain.model.errors.ErrorType.MODIFY_REPO, "not implemented"));
         }
     }
 

@@ -3,11 +3,9 @@ package paxel.dedup.repo.domain.repo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
-import paxel.dedup.domain.model.errors.DeleteRepoError;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
-
-import java.util.List;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -22,11 +20,14 @@ public class RmReposProcess {
             log.info("Deleting {} from {}", name, dedupConfig.getRepoDir());
         }
 
-        Result<Boolean, DeleteRepoError> deleteResult = dedupConfig.deleteRepo(name);
+        Result<Boolean, DedupError> deleteResult = dedupConfig.deleteRepo(name);
         if (deleteResult.hasFailed()) {
-            List<Exception> exceptions = deleteResult.error().ioExceptions();
-            log.error("While deleting {} {} exceptions happened", name, exceptions.size());
-            exceptions.forEach(ex -> log.error("Delete {} failed due to:", name, ex));
+            // Keep legacy style message if description contains count; otherwise, use generic description
+            DedupError err = deleteResult.error();
+            log.error("{}", err.describe());
+            if (err.exception() != null) {
+                log.error("Delete {} failed due to:", name, err.exception());
+            }
             return -40;
         }
 

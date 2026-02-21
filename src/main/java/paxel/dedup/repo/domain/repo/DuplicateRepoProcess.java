@@ -6,8 +6,7 @@ import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
-import paxel.dedup.domain.model.errors.LoadError;
-import paxel.dedup.domain.model.errors.OpenRepoError;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
@@ -25,7 +24,7 @@ public class DuplicateRepoProcess {
 
     public int dupes() {
         if (all) {
-            Result<List<Repo>, OpenRepoError> repos = dedupConfig.getRepos();
+            Result<List<Repo>, DedupError> repos = dedupConfig.getRepos();
             if (repos.hasFailed()) {
                 return -80;
             }
@@ -33,7 +32,7 @@ public class DuplicateRepoProcess {
         }
         List<Repo> repos = new ArrayList<>();
         for (String name : names) {
-            Result<Repo, OpenRepoError> repoResult = dedupConfig.getRepo(name);
+            Result<Repo, DedupError> repoResult = dedupConfig.getRepo(name);
             if (repoResult.isSuccess()) {
                 repos.add(repoResult.value());
             }
@@ -48,7 +47,7 @@ public class DuplicateRepoProcess {
 
         for (Repo repo : repos) {
             RepoManager r = RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter());
-            Result<Statistics, LoadError> load = r.load();
+            Result<Statistics, DedupError> load = r.load();
             if (load.hasFailed()) {
                 return -81;
             }

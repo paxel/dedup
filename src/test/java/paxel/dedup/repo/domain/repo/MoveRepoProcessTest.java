@@ -3,7 +3,8 @@ package paxel.dedup.repo.domain.repo;
 import org.junit.jupiter.api.Test;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.errors.*;
+import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.domain.model.errors.ErrorType;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
@@ -17,15 +18,42 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MoveRepoProcessTest {
 
     private static class StubConfig implements DedupConfig {
-        Result<Boolean, RenameRepoError> toReturn;
+        Result<Boolean, DedupError> toReturn;
 
-        @Override public Result<java.util.List<Repo>, OpenRepoError> getRepos() { return Result.ok(List.of()); }
-        @Override public Result<Repo, OpenRepoError> getRepo(String name) { return Result.err(null); }
-        @Override public Result<Repo, CreateRepoError> createRepo(String name, Path path, int indices) { return Result.err(null); }
-        @Override public Result<Repo, ModifyRepoError> changePath(String name, Path path) { return Result.err(null); }
-        @Override public Result<Boolean, DeleteRepoError> deleteRepo(String name) { return Result.ok(false); }
-        @Override public Path getRepoDir() { return Path.of("/tmp/config"); }
-        @Override public Result<Boolean, RenameRepoError> renameRepo(String oldName, String newName) { return toReturn; }
+        @Override
+        public Result<java.util.List<Repo>, DedupError> getRepos() {
+            return Result.ok(List.of());
+        }
+
+        @Override
+        public Result<Repo, DedupError> getRepo(String name) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Repo, DedupError> createRepo(String name, Path path, int indices) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Repo, DedupError> changePath(String name, Path path) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Boolean, DedupError> deleteRepo(String name) {
+            return Result.ok(false);
+        }
+
+        @Override
+        public Path getRepoDir() {
+            return Path.of("/tmp/config");
+        }
+
+        @Override
+        public Result<Boolean, DedupError> renameRepo(String oldName, String newName) {
+            return toReturn;
+        }
     }
 
     @Test
@@ -56,8 +84,7 @@ class MoveRepoProcessTest {
     void move_failure_prints_error_and_returns_minus90() {
         StubConfig cfg = new StubConfig();
         java.io.IOException io = new java.io.IOException("boom");
-        RenameRepoError err = RenameRepoError.ioError(Path.of("/tmp/config/newName"), io);
-        cfg.toReturn = Result.err(err);
+        cfg.toReturn = Result.err(DedupError.of(ErrorType.RENAME_REPO, Path.of("/tmp/config/newName") + " rename failed", io));
 
         CliParameter params = new CliParameter();
         params.setVerbose(false);
