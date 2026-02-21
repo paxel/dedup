@@ -167,101 +167,106 @@ public class DiffProcess {
 
         SyncCounters counters = new SyncCounters();
 
-        // Single-pass over source repo: decide copy or delete per entry
         sourceRepo.stream()
                 .filter(repoFilter)
-                .forEach(entry -> {
-                    try {
-                        List<RepoFile> matches = targetRepo.getByHashAndSize(entry.hash(), entry.size());
-                        boolean contentPresentInB = matches.stream().anyMatch(b -> !b.missing());
+                .forEach(entry -> syncEntry(entry, sourceRepo, targetRepo, copyNew, deleteMissing, counters));
 
-                        if (entry.missing()) {
-                            if (deleteMissing && contentPresentInB) {
-                                handleDelete(matches, targetRepo, counters);
-                            }
-                            return;
-                        }
-
-                        // entry is present in A
-                        if (!copyNew) {
-                            return;
-                        }
-                        if (contentPresentInB) {
-                            counters.equal++;
-                            return;
-                        }
-                        handleCopy(entry, sourceRepo, targetRepo, counters);
-                    } catch (RuntimeException e) {
-                        counters.errors++;
-                        log.error("Unexpected error in sync: {}", e.toString());
-                    }
-                });
-
-        log.info("Sync summary: equal={}, new={}, deleted={}, copied={}, removed={}, skipped={}, errors={}",
-                counters.equal, counters.newCount, counters.deletedCount, counters.copied, counters.removed, counters.skipped, counters.errors);
-
+        log.info(counters.summary());
         return 0;
     }
 
-    private void handleCopy(RepoFile r, RepoManager sourceRepo, RepoManager targetRepo, SyncCounters counters) {
-        counters.newCount++;
-        Path targetRoot = Paths.get(targetRepo.getRepo().absolutePath());
-        Path targetFile = targetRoot.resolve(r.relativePath());
+    private void syncEntry(RepoFile entry, RepoManager sourceRepo, RepoManager targetRepo, boolean copyNew, boolean deleteMissing, SyncCounters counters) {
+        try {
+            List<RepoFile> matches = targetRepo.getByHashAndSize(entry.hash(), entry.size());
+            boolean contentPresentInB = matches.stream().anyMatch(b -> !b.missing());
 
-        if (fileSystem.exists(targetFile)) { // never overwrite existing path
-            counters.skipped++;
+            if (entry.missing()) {
+                handleDeleteIfRequested(deleteMissing, contentPresentInB, matches, targetRepo, counters);
+                return;
+            }
+
+            handleCopyIfRequested(copyNew, contentPresentInB, entry, sourceRepo, targetRepo, counters);
+        } catch (RuntimeException e) {
+            counters.incrementErrors();
+            log.error("Unexpected error in sync for {}: {}", entry.relativePath(), e.toString());
+        }
+    }
+
+    private void handleDeleteIfRequested(boolean deleteMissing, boolean contentPresentInB, List<RepoFile> matches, RepoManager targetRepo, SyncCounters counters) {
+        if (deleteMissing && contentPresentInB) {
+            handleDelete(matches, targetRepo, counters);
+        }
+    }
+
+    private void handleCopyIfRequested(boolean copyNew, boolean contentPresentInB, RepoFile entry, RepoManager sourceRepo, RepoManager targetRepo, SyncCounters counters) {
+        if (!copyNew) {
+            return;
+        }
+        if (contentPresentInB) {
+            counters.incrementEqual();
+            return;
+        }
+        handleCopy(entry, sourceRepo, targetRepo, counters);
+    }
+
+    private void handleCopy(RepoFile r, RepoManager sourceRepo, RepoManager targetRepo, SyncCounters counters) {
+        counters.incrementNew();
+        Path targetFile = Paths.get(targetRepo.getRepo().absolutePath()).resolve(r.relativePath());
+
+        if (fileSystem.exists(targetFile)) {
+            counters.incrementSkipped();
             return;
         }
 
-        Path parent = targetFile.getParent();
-        if (parent != null && !fileSystem.exists(parent)) {
-            try {
-                fileSystem.createDirectories(parent);
-            } catch (IOException e) {
-                counters.errors++;
-                log.error("Could not create {} {}", parent, e.getClass().getSimpleName());
-                return;
-            }
+        if (ensureParentDirectory(targetFile, counters)) {
+            performCopy(r, sourceRepo, targetRepo, targetFile, counters);
         }
+    }
 
+    private boolean ensureParentDirectory(Path targetFile, SyncCounters counters) {
+        Path parent = targetFile.getParent();
+        if (parent == null || fileSystem.exists(parent)) {
+            return true;
+        }
+        try {
+            fileSystem.createDirectories(parent);
+            return true;
+        } catch (IOException e) {
+            counters.incrementErrors();
+            log.error("Could not create {} {}", parent, e.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    private void performCopy(RepoFile r, RepoManager sourceRepo, RepoManager targetRepo, Path targetFile, SyncCounters counters) {
         Path sourceFile = Paths.get(sourceRepo.getRepo().absolutePath()).resolve(r.relativePath());
         try {
             fileSystem.copy(sourceFile, targetFile, StandardCopyOption.COPY_ATTRIBUTES);
-            counters.copied++;
-            // Update target index using withMissing(false) per rule
+            counters.incrementCopied();
             targetRepo.addRepoFile(r.withMissing(false));
         } catch (IOException e) {
-            counters.errors++;
+            counters.incrementErrors();
             log.error("Could not copy {} to {} {}", sourceFile, targetFile, e.getClass().getSimpleName());
         }
     }
 
     private void handleDelete(List<RepoFile> matches, RepoManager targetRepo, SyncCounters counters) {
-        for (RepoFile b : matches) {
-            if (b.missing()) {
-                continue; // only present entries in B are candidates
-            }
-            counters.deletedCount++;
-            Path bFile = Paths.get(targetRepo.getRepo().absolutePath()).resolve(b.relativePath());
-            try {
-                fileSystem.delete(bFile);
-                counters.removed++;
-                targetRepo.addRepoFile(b.withMissing(true));
-            } catch (IOException e) {
-                counters.errors++;
-                log.error("Could not delete {} {}", bFile, e.getClass().getSimpleName());
-            }
-        }
+        matches.stream()
+                .filter(b -> !b.missing())
+                .forEach(b -> performDelete(b, targetRepo, counters));
     }
 
-    private static class SyncCounters {
-        long equal;
-        long newCount;
-        long deletedCount;
-        long copied;
-        long removed;
-        long skipped;
-        long errors;
+    private void performDelete(RepoFile b, RepoManager targetRepo, SyncCounters counters) {
+        counters.incrementDeleted();
+        Path bFile = Paths.get(targetRepo.getRepo().absolutePath()).resolve(b.relativePath());
+        try {
+            fileSystem.delete(bFile);
+            counters.incrementRemoved();
+            targetRepo.addRepoFile(b.withMissing(true));
+        } catch (IOException e) {
+            counters.incrementErrors();
+            log.error("Could not delete {} {}", bFile, e.getClass().getSimpleName());
+        }
     }
 
     private Result<Repos, Integer> init() {

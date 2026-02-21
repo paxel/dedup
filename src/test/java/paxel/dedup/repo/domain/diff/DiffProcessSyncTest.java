@@ -350,8 +350,6 @@ class DiffProcessSyncTest {
         DiffProcess process = new DiffProcess(new CliParameter(), "A", "B", cfg, null, fs);
         int rc = process.sync(false, true);
         assertThat(rc).isEqualTo(0);
-
-        // Verify delete interaction and index update
         assertThat(fs.ops()).anyMatch(s -> s.equals("delete " + bData.resolve("del.txt")));
         RepoManager bReload = RepoManager.forRepo(repoB, cfg, fs);
         assertThat(bReload.load().hasFailed()).isFalse();
@@ -360,5 +358,48 @@ class DiffProcessSyncTest {
         assertThat(inB.missing()).isTrue();
         assertThat(inB.hash()).isEqualTo("H3");
         assertThat(inB.size()).isEqualTo(3L);
+    }
+
+    @Test
+    void sync_skipsCopy_whenTargetPathAlreadyOccupiedByDifferentContent() {
+        MockRecordingFileSystem fs = new MockRecordingFileSystem();
+
+        Path repoDir = Paths.get("/repos");
+        Path aData = Paths.get("/Adata");
+        Path bData = Paths.get("/Bdata");
+        fs.createDirectories(repoDir);
+        fs.createDirectories(aData);
+        fs.createDirectories(bData);
+
+        Repo repoA = new Repo("A", aData.toString(), 1);
+        Repo repoB = new Repo("B", bData.toString(), 1);
+        DedupConfig cfg = new TestDedupConfig(repoDir, repoA, repoB);
+
+        RepoManager aMgr = RepoManager.forRepo(repoA, cfg, fs);
+        RepoManager bMgr = RepoManager.forRepo(repoB, cfg, fs);
+        assertThat(aMgr.load().hasFailed()).isFalse();
+        assertThat(bMgr.load().hasFailed()).isFalse();
+
+        // A has H2/S5 at x.txt. B doesn't have H2/S5 anywhere, but it already has some other file at x.txt
+        fs.putFile(aData.resolve("x.txt").toString(), "hello");
+        fs.putFile(bData.resolve("x.txt").toString(), "different");
+        RepoFile aEntry = RepoFile.builder().hash("H2").size(5L).relativePath("x.txt").lastModified(1L).missing(false).mimeType("text/plain").build();
+        RepoFile bEntryAtSamePath = RepoFile.builder().hash("H_OTHER").size(9L).relativePath("x.txt").lastModified(1L).missing(false).mimeType("text/plain").build();
+
+        assertThat(aMgr.addRepoFile(aEntry).hasFailed()).isFalse();
+        assertThat(bMgr.addRepoFile(bEntryAtSamePath).hasFailed()).isFalse();
+
+        DiffProcess process = new DiffProcess(new CliParameter(), "A", "B", cfg, null, fs);
+        int rc = process.sync(true, false);
+        assertThat(rc).isEqualTo(0);
+
+        // Should NOT copy because path is occupied
+        assertThat(fs.ops()).noneMatch(s -> s.startsWith("copy "));
+
+        // B's index for x.txt should still be the old one
+        RepoManager bReload = RepoManager.forRepo(repoB, cfg, fs);
+        assertThat(bReload.load().hasFailed()).isFalse();
+        RepoFile inB = bReload.getByPath("x.txt");
+        assertThat(inB.hash()).isEqualTo("H_OTHER");
     }
 }
