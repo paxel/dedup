@@ -4,9 +4,11 @@ import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.domain.model.Repo;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.infrastructure.config.InfrastructureConfig;
 import paxel.dedup.repo.domain.repo.*;
+import paxel.lib.Result;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -81,12 +83,48 @@ public class RepoCommand {
             @Parameters(description = "Repos", arity = "0..*") List<String> positionalNames,
             @Option(names = {"-t", "--threads"}, description = "Number of threads used for hashing", defaultValue = "2") int threads,
             @Option(names = {"-a", "--all"}, description = "All repos") boolean all,
-            @Option(names = {"--no-progress"}, description = "Don't show progress page") boolean noProgress) {
+            @Option(names = {"--no-progress"}, description = "Don't show progress page") boolean noProgress,
+            @Option(names = {"--refresh-fingerprints"}, description = "Refresh fingerprints for files that don't have one") boolean refreshFingerprints) {
         initDefaultConfig();
 
         List<String> allNames = combine(names, positionalNames);
         return new UpdateReposProcess(cliParameter, allNames, all, threads, dedupConfig,
-                !noProgress).update();
+                !noProgress, refreshFingerprints).update();
+    }
+
+    @Command(name = "config", description = "Configures a repo")
+    public int config(
+            @Parameters(description = "Name of the repo") String name,
+            @Option(names = {"--codec"}, description = "Line codec to use: json|messagepack") String codec) {
+        initDefaultConfig();
+
+        Result<Repo, DedupError> repoResult = dedupConfig.getRepo(name);
+        if (repoResult.hasFailed()) {
+            log.error("Repo '{}' not found: {}", name, repoResult.error().describe());
+            return -1;
+        }
+
+        Repo repo = repoResult.value();
+        Repo.Codec targetCodec = repo.codec();
+        if (codec != null) {
+            targetCodec = switch (codec.toLowerCase()) {
+                case "json" -> Repo.Codec.JSON;
+                case "messagepack" -> Repo.Codec.MESSAGEPACK;
+                default -> {
+                    log.warn("Unknown codec '{}' . Supported: json, messagepack. Keeping current.", codec);
+                    yield repo.codec();
+                }
+            };
+        }
+
+        Result<Repo, DedupError> result = dedupConfig.setRepoConfig(name, targetCodec);
+        if (result.isSuccess()) {
+            log.info("Updated config for repo '{}'", name);
+            return 0;
+        } else {
+            log.error("Failed to update config for repo '{}': {}", name, result.error().describe());
+            return -2;
+        }
     }
 
     @Command(name = "prune", description = "Prunes the DB removing all old versions and deleted files")
@@ -147,11 +185,12 @@ public class RepoCommand {
     public int move(
             @Option(names = {"-R"}, description = "Repos") List<String> names,
             @Parameters(description = "Repos", arity = "0..*") List<String> positionalNames,
-            @Option(names = {"-a", "--all"}, description = "All repos") boolean all) {
+            @Option(names = {"-a", "--all"}, description = "All repos") boolean all,
+            @Option(names = {"--threshold"}, description = "Threshold for image fingerprint similarity (0-100, default 0 for exact match)") Integer threshold) {
         initDefaultConfig();
 
         List<String> allNames = combine(names, positionalNames);
-        return new DuplicateRepoProcess(cliParameter, allNames, all, dedupConfig).dupes();
+        return new DuplicateRepoProcess(cliParameter, allNames, all, dedupConfig, threshold).dupes();
     }
 
 

@@ -179,13 +179,19 @@ public class RepoManager {
             if (hashResult.hasFailed())
                 return hashResult.mapError(l -> DedupError.of(ErrorType.WRITE, absolutePath + ": hashing failed", l.exception()));
 
-            Result<String, DedupError> stringIoErrorResult = mimetypeProvider.get(absolutePath);
+            String mimeType = mimetypeProvider.get(absolutePath).getValueOr(null);
+            String fingerprint = null;
+            if (mimeType != null && mimeType.startsWith("image/")) {
+                fingerprint = new ImageFingerprinter().calculateFingerprint(absolutePath);
+            }
+
             RepoFile repoFile = RepoFile.builder()
                     .size(size)
                     .relativePath(relativize.toString())
                     .lastModified(fileTime.toMillis())
                     .hash(hashResult.value())
-                    .mimeType(stringIoErrorResult.getValueOr(null))
+                    .mimeType(mimeType)
+                    .fingerprint(fingerprint)
                     .build();
 
             return addRepoFile(repoFile);

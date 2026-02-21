@@ -27,6 +27,7 @@ public class UpdateReposProcess {
     private final int threads;
     private final DedupConfig dedupConfig;
     private final boolean progress;
+    private final boolean refreshFingerprints;
 
     public int update() {
 
@@ -46,7 +47,7 @@ public class UpdateReposProcess {
             Result<Repo, DedupError> getRepoResult = dedupConfig.getRepo(name);
             if (getRepoResult.isSuccess()) {
                 Repo repo = getRepoResult.value();
-                Result<Statistics, DedupError> statisticsUpdateRepoErrorResult = updateRepo(RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter()));
+                updateRepo(RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter()));
             }
         }
         return 0;
@@ -66,7 +67,7 @@ public class UpdateReposProcess {
             progressPrinter.set(repoManager.getRepo().name(), repoManager.getRepo().absolutePath());
             progressPrinter.setProgress("...stand by... collecting info");
             Statistics statistics = new Statistics(repoManager.getRepo().absolutePath());
-            new ResilientFileWalker(new UpdateProgressPrinter(remainingPaths, progressPrinter, repoManager, statistics, sha1Hasher), new NioFileSystemAdapter()).walk(Paths.get(repoManager.getRepo().absolutePath()));
+            new ResilientFileWalker(new UpdateProgressPrinter(remainingPaths, progressPrinter, repoManager, statistics, sha1Hasher, refreshFingerprints), new NioFileSystemAdapter()).walk(Paths.get(repoManager.getRepo().absolutePath()));
 
             for (RepoFile value : remainingPaths.values()) {
                 repoManager.addRepoFile(value.withMissing(true));

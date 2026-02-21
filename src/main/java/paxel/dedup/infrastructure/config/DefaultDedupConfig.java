@@ -220,7 +220,7 @@ public final class DefaultDedupConfig implements DedupConfig {
     }
 
     @Override
-    public @NonNull Result<Repo, DedupError> setCodec(@NonNull String name, @NonNull Repo.Codec codec) {
+    public @NonNull Result<Repo, DedupError> setRepoConfig(@NonNull String name, @NonNull Repo.Codec codec) {
         Result<Repo, DedupError> repo = this.getRepo(name);
         if (repo.hasFailed()) {
             return repo.mapError(e -> DedupError.of(ErrorType.MODIFY_REPO, e.describe(), e.exception()));
@@ -238,6 +238,12 @@ public final class DefaultDedupConfig implements DedupConfig {
         } catch (IOException e) {
             return Result.err(DedupError.of(ErrorType.MODIFY_REPO, ymlFile + " write failed", e));
         }
+    }
+
+    @Override
+    @Deprecated
+    public @NonNull Result<Repo, DedupError> setCodec(@NonNull String name, @NonNull Repo.Codec codec) {
+        return setRepoConfig(name, codec);
     }
 
 

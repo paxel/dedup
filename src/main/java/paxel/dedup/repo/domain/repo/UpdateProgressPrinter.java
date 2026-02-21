@@ -1,12 +1,7 @@
 package paxel.dedup.repo.domain.repo;
 
 import org.apache.commons.lang3.time.DurationFormatUtils;
-import paxel.dedup.domain.model.RepoFile;
-import paxel.dedup.domain.model.Statistics;
-import paxel.dedup.domain.model.BetterPrediction;
-import paxel.dedup.domain.model.FileHasher;
-import paxel.dedup.domain.model.FileObserver;
-import paxel.dedup.domain.model.MimetypeProvider;
+import paxel.dedup.domain.model.*;
 import paxel.dedup.terminal.StatisticPrinter;
 
 import java.nio.file.Path;
@@ -40,15 +35,17 @@ class UpdateProgressPrinter implements FileObserver {
     private final Instant start;
     private final AtomicBoolean scanFinished = new AtomicBoolean();
     private final Clock clock;
+    private final boolean refreshFingerprints;
 
     public UpdateProgressPrinter(Map<Path, RepoFile> remainingPaths, StatisticPrinter progressPrinter,
-                                 RepoManager repoManager, Statistics statistics, FileHasher fileHasher) {
-        this(remainingPaths, progressPrinter, repoManager, statistics, fileHasher, Clock.systemUTC());
+                                 RepoManager repoManager, Statistics statistics, FileHasher fileHasher,
+                                 boolean refreshFingerprints) {
+        this(remainingPaths, progressPrinter, repoManager, statistics, fileHasher, Clock.systemUTC(), refreshFingerprints);
     }
 
     public UpdateProgressPrinter(Map<Path, RepoFile> remainingPaths, StatisticPrinter progressPrinter,
                                  RepoManager repoManager, Statistics statistics, FileHasher fileHasher,
-                                 Clock clock) {
+                                 Clock clock, boolean refreshFingerprints) {
         this.remainingPaths = remainingPaths;
         this.progressPrinter = progressPrinter;
         this.repoManager = repoManager;
@@ -57,32 +54,56 @@ class UpdateProgressPrinter implements FileObserver {
         this.clock = clock;
         this.start = clock.instant();
         this.betterPrediction = new BetterPrediction(clock);
+        this.refreshFingerprints = refreshFingerprints;
     }
 
     @Override
     public void file(Path absolutePath) {
-        remainingPaths.remove(absolutePath);
+        RepoFile existing = remainingPaths.remove(absolutePath);
         progressPrinter.setFiles(files.incrementAndGet() + " last: " + absolutePath);
         progressPrinter.setDeleted("" + remainingPaths.size());
-        repoManager.addPath(absolutePath, fileHasher, new MimetypeProvider()).thenApply(add -> {
-            betterPrediction.trigger();
-            if (add.isSuccess())
-                if (add.value() != null) {
-                    statistics.inc("added");
-                    long v = statistics.inc(add.value().mimeType());
-                    progressPrinter.addMimeType(add.value().mimeType(), v);
-                    hash.incrementAndGet();
-                    logHash(progressPrinter, hash, files, unchanged);
-                    calcUpdate(start, progressPrinter, betterPrediction, files.get(), hash.get() + unchanged.get());
-                } else {
-                    unchanged.incrementAndGet();
-                    statistics.inc("unchanged");
-                    logHash(progressPrinter, hash, files, unchanged);
-                    calcUpdate(start, progressPrinter, betterPrediction, files.get(), hash.get() + unchanged.get());
+
+        boolean forceUpdate = false;
+        if (refreshFingerprints && existing != null) {
+            if (existing.mimeType() != null && existing.mimeType().startsWith("image/")) {
+                if (existing.fingerprint() == null) {
+                    forceUpdate = true;
                 }
-            return null;
-        });
-        news.incrementAndGet();
+            }
+        }
+
+        if (forceUpdate) {
+            // Effectively ignore that we had it, to force re-indexing
+            existing = null;
+        }
+
+        if (existing == null) {
+            repoManager.addPath(absolutePath, fileHasher, new MimetypeProvider()).thenApply(add -> {
+                betterPrediction.trigger();
+                if (add.isSuccess())
+                    if (add.value() != null) {
+                        statistics.inc("added");
+                        long v = statistics.inc(add.value().mimeType());
+                        progressPrinter.addMimeType(add.value().mimeType(), v);
+                        hash.incrementAndGet();
+                        logHash(progressPrinter, hash, files, unchanged);
+                        calcUpdate(start, progressPrinter, betterPrediction, files.get(), hash.get() + unchanged.get());
+                    } else {
+                        unchanged.incrementAndGet();
+                        statistics.inc("unchanged");
+                        logHash(progressPrinter, hash, files, unchanged);
+                        calcUpdate(start, progressPrinter, betterPrediction, files.get(), hash.get() + unchanged.get());
+                    }
+                return null;
+            });
+            news.incrementAndGet();
+        } else {
+            // Already handled via remainingPaths.remove(absolutePath) but we should count it as unchanged/processed
+            unchanged.incrementAndGet();
+            statistics.inc("unchanged");
+            logHash(progressPrinter, hash, files, unchanged);
+            calcUpdate(start, progressPrinter, betterPrediction, files.get(), hash.get() + unchanged.get());
+        }
     }
 
     private void logHash(StatisticPrinter progressPrinter, AtomicLong hash, AtomicLong files, AtomicLong unchanged) {

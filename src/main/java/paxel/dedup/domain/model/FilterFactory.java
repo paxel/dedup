@@ -23,14 +23,30 @@ public class FilterFactory {
                 return a.relativePath().contains(substring);
             };
         } else if (filter.startsWith("size:")) {
-            String substring = filter.substring(5);
-            try {
-                long size = Long.parseLong(substring);
-                return a -> a.size() != null && a.size() == size;
-            } catch (NumberFormatException e) {
-                return a -> false;
+            String expression = filter.substring(5).trim();
+            if (expression.startsWith(">=")) {
+                return compareSize(expression.substring(2).trim(), (s, v) -> s >= v);
+            } else if (expression.startsWith("<=")) {
+                return compareSize(expression.substring(2).trim(), (s, v) -> s <= v);
+            } else if (expression.startsWith(">")) {
+                return compareSize(expression.substring(1).trim(), (s, v) -> s > v);
+            } else if (expression.startsWith("<")) {
+                return compareSize(expression.substring(1).trim(), (s, v) -> s < v);
+            } else if (expression.startsWith("=")) {
+                return compareSize(expression.substring(1).trim(), (s, v) -> s == v);
+            } else {
+                return compareSize(expression, (s, v) -> s == v);
             }
         } else {
+            return a -> false;
+        }
+    }
+
+    private Predicate<RepoFile> compareSize(String valueStr, java.util.function.BiPredicate<Long, Long> comparator) {
+        try {
+            long value = Long.parseLong(valueStr);
+            return a -> a.size() != null && comparator.test(a.size(), value);
+        } catch (NumberFormatException e) {
             return a -> false;
         }
     }

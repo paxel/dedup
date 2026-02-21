@@ -6,6 +6,7 @@ import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.config.DedupConfig;
+import paxel.dedup.repo.domain.repo.DuplicateRepoProcess;
 import paxel.dedup.repo.domain.repo.UpdateReposProcess;
 import paxel.lib.Result;
 
@@ -73,7 +74,7 @@ class MockedFileProcessingTest {
 
         @Override
         public OutputStream newOutputStream(Path path, StandardOpenOption... options) {
-            return null;
+            return new java.io.ByteArrayOutputStream();
         }
 
         @Override
@@ -120,7 +121,7 @@ class MockedFileProcessingTest {
 
         @Override
         public Result<Repo, DedupError> getRepo(String name) {
-            return Result.err(null);
+            return Result.ok(new Repo(name, "/mock", 1));
         }
 
         @Override
@@ -149,7 +150,7 @@ class MockedFileProcessingTest {
         }
 
         @Override
-        public Result<Repo, DedupError> setCodec(String name, Repo.Codec codec) {
+        public Result<Repo, DedupError> setRepoConfig(String name, Repo.Codec codec) {
             return Result.err(paxel.dedup.domain.model.errors.DedupError.of(paxel.dedup.domain.model.errors.ErrorType.MODIFY_REPO, "not implemented"));
         }
     }
@@ -162,10 +163,25 @@ class MockedFileProcessingTest {
                 true, // all
                 1,    // threads
                 new StubDedupConfig(),
-                false // progress
+                false, // progress
+                false  // refreshFingerprints
         );
 
         int result = process.update();
+        assertThat(result).isEqualTo(0);
+    }
+
+    @Test
+    void testDuplicateProcessWithStubbedConfig() {
+        DuplicateRepoProcess process = new DuplicateRepoProcess(
+                new CliParameter(),
+                List.of("testRepo"),
+                true,
+                new StubDedupConfig(),
+                null,
+                new StubFileSystem()
+        );
+        int result = process.dupes();
         assertThat(result).isEqualTo(0);
     }
 }

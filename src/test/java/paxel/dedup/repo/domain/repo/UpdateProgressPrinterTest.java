@@ -73,6 +73,11 @@ class UpdateProgressPrinterTest {
         public Result<Boolean, DedupError> renameRepo(String oldName, String newName) {
             return Result.ok(false);
         }
+
+        @Override
+        public Result<Repo, DedupError> setRepoConfig(String name, Repo.Codec codec) {
+            return Result.err(null);
+        }
     }
 
     @Test
@@ -121,11 +126,16 @@ class UpdateProgressPrinterTest {
             public void close() { /* nothing */ }
         };
 
-        UpdateProgressPrinter upp = new UpdateProgressPrinter(remaining, sp, repoManager, stats, hasher);
+        UpdateProgressPrinter upp = new UpdateProgressPrinter(remaining, sp, repoManager, stats, hasher, false);
 
         // Act: simulate traversal
         upp.addDir(dataDir);
         upp.file(file);         // processes and removes it from remaining
+        // The file processing is asynchronous. In tests we need to wait a bit.
+        try {
+            Thread.sleep(200);
+        } catch (InterruptedException e) {
+        }
         upp.finishedDir(dataDir);
         upp.scanFinished();
         upp.close();

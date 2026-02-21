@@ -58,6 +58,7 @@ class UpdateReposProcessTest {
                 false,
                 1,
                 dedupConfig,
+                false,
                 false
         );
 

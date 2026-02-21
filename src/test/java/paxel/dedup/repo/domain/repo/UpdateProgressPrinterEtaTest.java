@@ -96,7 +96,8 @@ class UpdateProgressPrinterEtaTest {
                 repoManager,
                 stats,
                 stubHasher,
-                clock
+                clock,
+                false
         );
 
         // Ensure we crossed the 30s threshold and mark scan as finished before the first file completes
