@@ -22,21 +22,22 @@ Repositories are logical groupings of files at a specific path.
     *   Lists all registered repositories.
 *   **Remove:** `dedup repo rm <name>`
     *   Deletes the repository configuration (not the files on disk).
-*   **Update:** `dedup repo update [-R <repo> | -a] [-t <threads>] [--no-progress]`
+*   **Update:** `dedup repo update [<repo>... | -R <repo>... | -a] [-t <threads>] [--no-progress]`
     *   Scans the file system and updates the index.
-    *   `-R`: Update specific repo.
+    *   Positional arguments or `-R`: Update specific repos.
     *   `-a`: Update all repos.
     *   `-t`: Number of threads for hashing (default: 2).
-*   **Prune:** `dedup repo prune [-R <repo> | -a] [-i <indices>] [--keep-deleted] [--change-codec {json|messagepack}]`
+*   **Prune:** `dedup repo prune [<repo>... | -R <repo>... | -a] [-i <indices>] [--keep-deleted] [--change-codec {json|messagepack}]`
     *   Cleans the index from old entries and deleted files.
-    *   `--keep-deleted`: Keep entries that are currently marked as deleted (do not drop missing files).
-    *   `--change-codec`: Change the repo codec as part of the prune by writing into a temporary repo and swapping it in.
+    *   Positional arguments or `-R`: Prune specific repos.
 *   **Copy/Move:**
     *   `cp <source> <dest> <path>`: Copies a repo profile to a new path.
     *   `rel <repo> <path>`: Changes the base path of a repo.
     *   `mv <source> <dest>`: Renames a repo.
-*   **Find Duplicates:** `dedup repo dupes [-R <repo> | -a]`
+*   **Find Duplicates:** `dedup repo dupes [<repo>... | -R <repo>... | -a]`
     *   Finds duplicates within the specified repositories.
+    *   Positional arguments or `-R`: Check specific repos.
+    *   `-a`: Check all repos.
 
 ### 2. File Operations (`files`)
 
@@ -61,6 +62,11 @@ Compares repositories or directories.
     *   `mv <source> <reference> <target> [-f <filter>]`: Moves differences to `target`.
 *   **Remove:** `dedup diff rm <source> <reference> [-f <filter>]`
     *   Deletes files in `source` that already exist in `reference`.
+*   **Sync:** `dedup diff sync <source> <target> [--copyNew] [--deleteMissing] [--mirror] [-f <filter>]`
+    *   Synchronizes `target` repo with `source`.
+    *   `--copyNew`: Copy files that exist in `source` but not in `target` (default: true).
+    *   `--deleteMissing`: Delete files in `target` that no longer exist in `source` (default: false).
+    *   `--mirror`: Equivalent to `--copyNew --deleteMissing`.
 
 ---
 

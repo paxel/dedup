@@ -144,11 +144,25 @@ class DiffProcessSyncTest {
         @Override
         public OutputStream newOutputStream(Path path, StandardOpenOption... options) {
             operations.add("openOut " + path);
+            boolean append = false;
+            for (StandardOpenOption opt : options) {
+                if (opt == StandardOpenOption.APPEND) append = true;
+            }
+            final byte[] initial = append ? files.getOrDefault(path, new byte[0]) : new byte[0];
+
             return new OutputStream() {
                 private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 
+                {
+                    try {
+                        buffer.write(initial);
+                    } catch (IOException ignored) {
+                    }
+                }
+
                 private void sync() {
-                    files.put(path, buffer.toByteArray());
+                    byte[] data = buffer.toByteArray();
+                    files.put(path, data);
                     lastModified.put(path, System.currentTimeMillis());
                 }
 
@@ -401,5 +415,142 @@ class DiffProcessSyncTest {
         assertThat(bReload.load().hasFailed()).isFalse();
         RepoFile inB = bReload.getByPath("x.txt");
         assertThat(inB.hash()).isEqualTo("H_OTHER");
+    }
+
+    @Test
+    void sync_obeysMimeFilter() {
+        MockRecordingFileSystem fs = new MockRecordingFileSystem();
+
+        Path repoDir = Paths.get("/repos");
+        Path aData = Paths.get("/Adata");
+        Path bData = Paths.get("/Bdata");
+        fs.createDirectories(repoDir);
+        fs.createDirectories(aData);
+        fs.createDirectories(bData);
+
+        Repo repoA = new Repo("A", aData.toString(), 1);
+        Repo repoB = new Repo("B", bData.toString(), 1);
+        DedupConfig cfg = new TestDedupConfig(repoDir, repoA, repoB);
+
+        RepoManager aMgr = RepoManager.forRepo(repoA, cfg, fs);
+        RepoManager bMgr = RepoManager.forRepo(repoB, cfg, fs);
+        assertThat(aMgr.load().hasFailed()).isFalse();
+        assertThat(bMgr.load().hasFailed()).isFalse();
+
+        // A has an image and a text file; B has nothing.
+        fs.putFile(aData.resolve("img.png").toString(), "imagedata");
+        fs.putFile(aData.resolve("doc.txt").toString(), "textdata");
+        RepoFile aImg = RepoFile.builder().hash("H_IMG").size(9L).relativePath("img.png").lastModified(1L).missing(false).mimeType("image/png").build();
+        RepoFile aTxt = RepoFile.builder().hash("H_TXT").size(8L).relativePath("doc.txt").lastModified(1L).missing(false).mimeType("text/plain").build();
+        assertThat(aMgr.addRepoFile(aImg).hasFailed()).isFalse();
+        assertThat(aMgr.addRepoFile(aTxt).hasFailed()).isFalse();
+
+        // Sync with mime:image filter
+        DiffProcess process = new DiffProcess(new CliParameter(), "A", "B", cfg, "mime:image", fs);
+        int rc = process.sync(true, false);
+        assertThat(rc).isEqualTo(0);
+
+        // Should copy img.png but NOT doc.txt
+        assertThat(fs.ops()).anyMatch(s -> s.contains("img.png"));
+        assertThat(fs.ops()).noneMatch(s -> s.contains("doc.txt"));
+
+        // Index in B should only have the image
+        RepoManager bReload = RepoManager.forRepo(repoB, cfg, fs);
+        assertThat(bReload.load().hasFailed()).isFalse();
+        assertThat(bReload.getByPath("img.png")).isNotNull();
+        assertThat(bReload.getByPath("doc.txt")).isNull();
+    }
+
+    @Test
+    void sync_obeysMimeFilter_forDelete() {
+        MockRecordingFileSystem fs = new MockRecordingFileSystem();
+
+        Path repoDir = Paths.get("/repos");
+        Path aData = Paths.get("/Adata");
+        Path bData = Paths.get("/Bdata");
+        fs.createDirectories(repoDir);
+        fs.createDirectories(aData);
+        fs.createDirectories(bData);
+
+        Repo repoA = new Repo("A", aData.toString(), 1);
+        Repo repoB = new Repo("B", bData.toString(), 1);
+        DedupConfig cfg = new TestDedupConfig(repoDir, repoA, repoB);
+
+        RepoManager aMgr = RepoManager.forRepo(repoA, cfg, fs);
+        RepoManager bMgr = RepoManager.forRepo(repoB, cfg, fs);
+        assertThat(aMgr.load().hasFailed()).isFalse();
+        assertThat(bMgr.load().hasFailed()).isFalse();
+
+        // B has an image and a text file. A marks both as missing.
+        fs.putFile(bData.resolve("img.png").toString(), "imagedata");
+        fs.putFile(bData.resolve("doc.txt").toString(), "textdata");
+        RepoFile bImg = RepoFile.builder().hash("H_IMG").size(10L).relativePath("img.png").lastModified(1L).missing(false).mimeType("image/png").build();
+        RepoFile bTxt = RepoFile.builder().hash("H_TXT").size(12L).relativePath("doc.txt").lastModified(1L).missing(false).mimeType("text/plain").build();
+        assertThat(bMgr.addRepoFile(bImg).hasFailed()).isFalse();
+        assertThat(bMgr.addRepoFile(bTxt).hasFailed()).isFalse();
+
+        RepoFile aImgMissing = RepoFile.builder().hash("H_IMG").size(10L).relativePath("img.png").lastModified(1L).missing(true).mimeType("image/png").build();
+        RepoFile aTxtMissing = RepoFile.builder().hash("H_TXT").size(12L).relativePath("doc.txt").lastModified(1L).missing(true).mimeType("text/plain").build();
+        assertThat(aMgr.addRepoFile(aImgMissing).hasFailed()).isFalse();
+        assertThat(aMgr.addRepoFile(aTxtMissing).hasFailed()).isFalse();
+
+        // Sync with mime:image filter and deleteMissing=true
+        DiffProcess process = new DiffProcess(new CliParameter(), "A", "B", cfg, "mime:image", fs);
+        int rc = process.sync(false, true);
+        assertThat(rc).isEqualTo(0);
+
+        // Should delete img.png but NOT doc.txt
+        assertThat(fs.ops()).anyMatch(s -> s.equals("delete " + bData.resolve("img.png")));
+        assertThat(fs.ops()).noneMatch(s -> s.equals("delete " + bData.resolve("doc.txt")));
+
+        // Index in B should have image marked missing, but text still present
+        RepoManager bReload = RepoManager.forRepo(repoB, cfg, fs);
+        assertThat(bReload.load().hasFailed()).isFalse();
+
+        RepoFile inBImg = bReload.getByPath("img.png");
+        assertThat(inBImg).isNotNull();
+        assertThat(inBImg.missing()).as("img.png should be missing").isTrue();
+
+        RepoFile inBTxt = bReload.getByPath("doc.txt");
+        assertThat(inBTxt).isNotNull();
+        assertThat(inBTxt.missing()).as("doc.txt should NOT be missing").isFalse();
+    }
+
+    @Test
+    void sync_obeysSizeFilter() {
+        MockRecordingFileSystem fs = new MockRecordingFileSystem();
+
+        Path repoDir = Paths.get("/repos");
+        Path aData = Paths.get("/Adata");
+        Path bData = Paths.get("/Bdata");
+        fs.createDirectories(repoDir);
+        fs.createDirectories(aData);
+        fs.createDirectories(bData);
+
+        Repo repoA = new Repo("A", aData.toString(), 1);
+        Repo repoB = new Repo("B", bData.toString(), 1);
+        DedupConfig cfg = new TestDedupConfig(repoDir, repoA, repoB);
+
+        RepoManager aMgr = RepoManager.forRepo(repoA, cfg, fs);
+        RepoManager bMgr = RepoManager.forRepo(repoB, cfg, fs);
+        assertThat(aMgr.load().hasFailed()).isFalse();
+        assertThat(bMgr.load().hasFailed()).isFalse();
+
+        // A has files with different sizes
+        fs.putFile(aData.resolve("small.txt").toString(), "small");
+        fs.putFile(aData.resolve("large.txt").toString(), "very large content");
+        RepoFile aSmall = RepoFile.builder().hash("H_SMALL").size(5L).relativePath("small.txt").lastModified(1L).missing(false).mimeType("text/plain").build();
+        RepoFile aLarge = RepoFile.builder().hash("H_LARGE").size(18L).relativePath("large.txt").lastModified(1L).missing(false).mimeType("text/plain").build();
+        assertThat(aMgr.addRepoFile(aSmall).hasFailed()).isFalse();
+        assertThat(aMgr.addRepoFile(aLarge).hasFailed()).isFalse();
+
+        // Sync with size:5 filter
+        DiffProcess process = new DiffProcess(new CliParameter(), "A", "B", cfg, "size:5", fs);
+        int rc = process.sync(true, false);
+        assertThat(rc).isEqualTo(0);
+
+        // Should copy small.txt but NOT large.txt
+        assertThat(fs.ops()).anyMatch(s -> s.contains("small.txt"));
+        assertThat(fs.ops()).noneMatch(s -> s.contains("large.txt"));
     }
 }

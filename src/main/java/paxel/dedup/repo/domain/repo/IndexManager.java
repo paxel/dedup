@@ -1,6 +1,7 @@
 package paxel.dedup.repo.domain.repo;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
 import paxel.dedup.domain.model.TunneledIoException;
@@ -27,6 +28,7 @@ import java.util.stream.Stream;
 
 
 @RequiredArgsConstructor
+@Slf4j
 public class IndexManager {
     public static final String FILES = "files";
     public static final String MISSING = "missing";
@@ -160,6 +162,16 @@ public class IndexManager {
             outputStream.write(arr);
             outputStream.write('\n');
             outputStream.flush();
+
+            // update cache
+            hashes.computeIfAbsent(repoFile.hash(), h -> new HashSet<>()).add(repoFile.relativePath());
+            RepoFile put = paths.put(repoFile.relativePath(), repoFile);
+            if (put != null && !put.hash().equals(repoFile.hash())) {
+                Set<String> strings = hashes.get(put.hash());
+                if (strings != null) {
+                    strings.remove(put.relativePath());
+                }
+            }
             return Result.ok(null);
         } catch (TunneledIoException e) {
             return Result.err(DedupError.of(ErrorType.WRITE, indexFile + ": write failed", toExceptionLocal(e.getCause())));

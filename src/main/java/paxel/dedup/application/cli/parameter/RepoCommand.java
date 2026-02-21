@@ -78,18 +78,21 @@ public class RepoCommand {
     @Command(name = "update", description = "Reads all file changes from the path into the Repos DB")
     public int update(
             @Option(names = {"-R"}, description = "Repos") List<String> names,
+            @Parameters(description = "Repos", arity = "0..*") List<String> positionalNames,
             @Option(names = {"-t", "--threads"}, description = "Number of threads used for hashing", defaultValue = "2") int threads,
             @Option(names = {"-a", "--all"}, description = "All repos") boolean all,
             @Option(names = {"--no-progress"}, description = "Don't show progress page") boolean noProgress) {
         initDefaultConfig();
 
-        return new UpdateReposProcess(cliParameter, names, all, threads, dedupConfig,
+        List<String> allNames = combine(names, positionalNames);
+        return new UpdateReposProcess(cliParameter, allNames, all, threads, dedupConfig,
                 !noProgress).update();
     }
 
     @Command(name = "prune", description = "Prunes the DB removing all old versions and deleted files")
     public int prune(
             @Option(names = {"-R"}, description = "Repos") List<String> names,
+            @Parameters(description = "Repos", arity = "0..*") List<String> positionalNames,
             @Option(names = {"-a", "--all"}, description = "All repos") boolean all,
             @Option(defaultValue = "10", names = {"--indices", "-i"}, description = "Number of index files") int indices,
             @Option(names = {"--keep-deleted"}, description = "Keep entries marked as deleted (do not drop missing files)") boolean keepDeleted,
@@ -108,7 +111,8 @@ public class RepoCommand {
             };
         }
 
-        return new PruneReposProcess(cliParameter, names, all, indices, dedupConfig, keepDeleted, targetCodec).prune();
+        List<String> allNames = combine(names, positionalNames);
+        return new PruneReposProcess(cliParameter, allNames, all, indices, dedupConfig, keepDeleted, targetCodec).prune();
     }
 
     @Command(name = "cp", description = "Copies the Repo into a new one with a new path, keeping all the entries from the original. The original is unmodified")
@@ -142,15 +146,26 @@ public class RepoCommand {
     @Command(name = "dupes", description = "Manage duplicates in one or more repos.")
     public int move(
             @Option(names = {"-R"}, description = "Repos") List<String> names,
+            @Parameters(description = "Repos", arity = "0..*") List<String> positionalNames,
             @Option(names = {"-a", "--all"}, description = "All repos") boolean all) {
         initDefaultConfig();
 
-        return new DuplicateRepoProcess(cliParameter, names, all, dedupConfig).dupes();
+        List<String> allNames = combine(names, positionalNames);
+        return new DuplicateRepoProcess(cliParameter, allNames, all, dedupConfig).dupes();
     }
 
 
     private void initDefaultConfig() {
         dedupConfig = infrastructureConfig.getDedupConfig();
+    }
+
+    private List<String> combine(List<String> names, List<String> positionalNames) {
+        if (names == null && positionalNames == null) return List.of();
+        if (names == null) return positionalNames;
+        if (positionalNames == null) return names;
+        java.util.ArrayList<String> result = new java.util.ArrayList<>(names);
+        result.addAll(positionalNames);
+        return result;
     }
 
 }

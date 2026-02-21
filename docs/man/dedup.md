@@ -75,9 +75,9 @@ dedup repo ls
 
 #### repo update
 ```
-dedup repo update [-R <name> ...] [-a | --all] [-t <threads> | --threads <threads>] [--no-progress]
+dedup repo update [<name> ...] [-R <name> ...] [-a | --all] [-t <threads> | --threads <threads>] [--no-progress]
 ```
-Read file changes from each specified repository's path and update its database. If no `-R` names are given, combine with `--all` to update all repos. Use `threads` to control hashing concurrency (default: 2). Use `--no-progress` to suppress the progress display.
+Read file changes from each specified repository's path and update its database. Repositories can be specified as positional arguments or using the `-R` option. If no names are given, combine with `--all` to update all repos. Use `threads` to control hashing concurrency (default: 2). Use `--no-progress` to suppress the progress display.
 
 Examples:
 - Update a single repo with 4 hashing threads:
@@ -91,9 +91,9 @@ Examples:
 
 #### repo prune
 ```
-dedup repo prune [-R <name> ...] [-a | --all] [-i <indices> | --indices <indices>] [--keep-deleted] [--change-codec {json|messagepack}]
+dedup repo prune [<name> ...] [-R <name> ...] [-a | --all] [-i <indices> | --indices <indices>] [--keep-deleted] [--change-codec {json|messagepack}]
 ```
-Prune the database by removing old versions and deleted files. Options:
+Prune the database by removing old versions and deleted files. Repositories can be specified as positional arguments or using the `-R` option. Options:
 - `-i, --indices` — Number of index files in the output (default: 10).
 - `--keep-deleted` — Keep entries marked as deleted (do not drop missing files).
 - `--change-codec` — Change the repo codec while pruning. Accepts `json` or `messagepack` and writes the pruned result with the selected codec.
@@ -142,9 +142,9 @@ dedup repo mv staging photos
 
 #### repo dupes
 ```
-dedup repo dupes [-R <name> ...] [-a | --all]
+dedup repo dupes [<name> ...] [-R <name> ...] [-a | --all]
 ```
-List and/or manage duplicates across the specified repositories or all repositories when `--all` is used. The tool identifies duplicates by content hash.
+List and/or manage duplicates across the specified repositories or all repositories when `--all` is used. Repositories can be specified as positional arguments or using the `-R` option. The tool identifies duplicates by content hash.
 
 Examples:
 - See duplicates in one repo:
@@ -279,6 +279,20 @@ dedup diff mv ~/Staging photos ~/Imported
 dedup diff rm <source> <reference> [-f <filter> | --filter <filter>]
 ```
 Remove files from `source` that already exist in `reference` (optionally restricted by `filter`).
+
+#### diff sync
+```
+dedup diff sync <source> <target> [--copyNew] [--deleteMissing] [--mirror] [-f <filter> | --filter <filter>]
+```
+Synchronize `target` repository with `source` based on content.
+- `--copyNew` (default: true) — copy files present in `source` but missing in `target` (by content).
+- `--deleteMissing` (default: false) — delete files in `target` that are marked missing in `source`.
+- `--mirror` — shortcut for both of the above.
+
+Example:
+```
+dedup diff sync sourceRepo targetRepo --mirror
+```
 
 Examples:
 - Clean an import/downloads folder after verifying backup to `photos`:

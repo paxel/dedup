@@ -88,6 +88,7 @@ public class DiffProcess {
                             try {
                                 if (move) {
                                     fileSystem.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
+                                    sourceRepo.addRepoFile(r.withMissing(true));
                                     if (cliParameter.isVerbose()) {
                                         log.info("Moved {}", r.relativePath());
                                     }

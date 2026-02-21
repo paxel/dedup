@@ -1,7 +1,5 @@
 package paxel.dedup.domain.model;
 
-import paxel.dedup.domain.model.RepoFile;
-
 import java.util.function.Predicate;
 
 public class FilterFactory {
@@ -24,6 +22,14 @@ public class FilterFactory {
                 }
                 return a.relativePath().contains(substring);
             };
+        } else if (filter.startsWith("size:")) {
+            String substring = filter.substring(5);
+            try {
+                long size = Long.parseLong(substring);
+                return a -> a.size() != null && a.size() == size;
+            } catch (NumberFormatException e) {
+                return a -> false;
+            }
         } else {
             return a -> false;
         }
