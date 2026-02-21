@@ -1,0 +1,536 @@
+.TH dedup 1 "2026-02-21" "dedup" "User Commands"
+.SH NAME
+dedup \- content-addressed repository and duplicate management CLI
+
+.SH SYNOPSIS
+.B dedup
+[
+.B -v
+]
+.I command
+[
+.I subcommand
+]
+[
+.I options
+]
+[
+.I arguments
+]
+
+.P
+Commands:
+.BR repo " | " files " | " diff
+
+.SH DESCRIPTION
+The
+.B dedup
+command manages repositories that index files by content hash (content-addressed) to help you find
+duplicates, audit collections, and move/copy/remove files safely based on differences.
+It works across both repositories and plain directories and is designed for large photo/video/document libraries.
+It uses subcommands grouped by domain: repository operations
+(.BR repo ),
+file operations within repositories or directories
+(.BR files ),
+and difference operations between sources and references
+(.BR diff ).
+
+.SS Purpose
+.IP \[bu] 2
+Keep one canonical copy of identical files across multiple folders or disks.
+.IP \[bu] 2
+Detect and manage duplicates without relying on names, dates, or paths.
+.IP \[bu] 2
+Stage and curate content (e.g., import from camera \[->] triage folder \[->] library).
+.IP \[bu] 2
+Generate repeatable file moves/copies based on deterministic hashes.
+
+.SS Common use cases
+.IP \[bu] 2
+Consolidate scattered media libraries: index multiple disks, find dupes, and de\-duplicate.
+.IP \[bu] 2
+Mirror or backfill content: copy what\[aq]s missing from A to B, or remove already\-backed\-up items from an import folder.
+.IP \[bu] 2
+Clean staging areas: after sorting, remove files that already exist in your library.
+.IP \[bu] 2
+Inventory and analytics: list files, filter by patterns, and inspect MIME types.
+
+.SH GLOBAL OPTIONS
+.TP
+.B -v
+Enable verbose logging. This option is inherited by all subcommands.
+
+.SH COMMANDS
+.SS repo
+Manipulate repositories (create, list, update, prune, copy, move, etc.).
+
+.TP
+.B repo create
+.I name path
+[
+.B -i
+.I indices
+|
+.B --indices
+.I indices
+]
+Create a new repository named
+.I name
+at filesystem
+.I path
+.
+The optional
+.I indices
+controls the number of index files (default: 10).
+
+.TP
+.B repo rm
+.I name
+Delete the repository
+.I name
+.
+
+.TP
+.B repo ls
+List all repositories.
+
+.TP
+.B repo update
+[
+.B -R
+.I name
+...
+]
+[
+.B -a
+|
+.B --all
+]
+[
+.B -t
+.I threads
+|
+.B --threads
+.I threads
+]
+[
+.B --no-progress
+]
+Read file changes from each specified repository's path and update its database.
+If no
+.B -R
+names are given, combine with
+.B --all
+to update all repos.
+Use
+.I threads
+to control hashing concurrency (default: 2). Use
+.B --no-progress
+to suppress the progress display.
+
+.TP
+.B repo prune
+[
+.B -R
+.I name
+...
+]
+[
+.B -a
+|
+.B --all
+]
+[
+.B -i
+.I indices
+|
+.B --indices
+.I indices
+]
+Prune the database by removing old versions and deleted files. Optionally
+adjust the number of index files (default: 10).
+
+.TP
+.B repo cp
+.I sourceRepo destRepo path
+Copy the repository
+.I sourceRepo
+into a new repository named
+.I destRepo
+at filesystem
+.I path
+.
+The original repository is not modified.
+
+.TP
+.B repo rel
+.I repo path
+Relocate the filesystem path of
+.I repo
+to
+.I path
+without changing existing entries.
+
+.TP
+.B repo mv
+.I sourceRepo destRepo
+Rename a repository from
+.I sourceRepo
+to
+.I destRepo
+.
+Entries and content remain unchanged; only the repo identity changes.
+
+.RS
+.nf
+Example:
+  dedup repo mv staging photos
+.fi
+.RE
+
+.TP
+.B repo dupes
+[
+.B -R
+.I name
+...
+]
+[
+.B -a
+|
+.B --all
+]
+List and/or manage duplicates across the specified repositories or all
+repositories when
+.B --all
+is used.
+
+.RS
+.nf
+Examples:
+  dedup repo dupes -R photos
+  dedup repo dupes --all
+.fi
+.RE
+
+.SS files
+Manage files contained in repositories or directories.
+
+.TP
+.B files ls
+.I repo
+[
+.B -f
+.I filter
+|
+.B --filter
+.I filter
+]
+List files in
+.I repo
+with an optional
+.I filter
+expression.
+
+.RS
+.nf
+Examples:
+  dedup files ls photos --filter "ext:jpg"
+  dedup files ls photos --filter holiday
+.fi
+.RE
+
+.TP
+.B files rm
+.I repo
+[
+.B -f
+.I filter
+|
+.B --filter
+.I filter
+]
+Delete files in
+.I repo
+matching the optional
+.I filter
+.
+
+.RS
+.nf
+Example (use -v for more visibility):
+  dedup -v files rm photos --filter "ext:tmp"
+.fi
+.RE
+
+.TP
+.B files cp
+.I source target
+[
+.B --appendix
+.I text
+]
+[
+.B -f
+.I filter
+|
+.B --filter
+.I filter
+]
+Copy files from
+.I source
+to
+.I target
+that match the optional
+.I filter
+.
+If
+.B --appendix
+is specified,
+.I text
+is appended to destination file names.
+
+.RS
+.nf
+Examples:
+  dedup files cp photos ~/Review --appendix -review --filter "ext:cr2"
+  dedup files cp photos ~/Export --filter "path:Family/2025"
+.fi
+.RE
+
+.TP
+.B files mv
+.I source target
+[
+.B --appendix
+.I text
+]
+[
+.B -f
+.I filter
+|
+.B --filter
+.I filter
+]
+Move (copy then remove) files from
+.I source
+to
+.I target
+that match the optional
+.I filter
+.
+If
+.B --appendix
+is specified,
+.I text
+is appended to destination file names.
+
+.RS
+.nf
+Example:
+  dedup files mv photos ~/Archive/2025 --filter "year:2025"
+.fi
+.RE
+
+.TP
+.B files types
+.I repo
+List MIME types discovered within
+.I repo
+.
+
+.RS
+.nf
+Example:
+  dedup files types photos
+.fi
+.RE
+
+.SS diff
+Compute and act on differences between a source and a reference (both can be
+repositories or directories).
+
+.TP
+.B diff print
+.I source reference
+[
+.B -f
+.I filter
+|
+.B --filter
+.I filter
+]
+Print differences where
+.I source
+contains files not present in
+.I reference
+(optionally restricted by
+.I filter
+).
+
+.RS
+.nf
+Examples:
+  dedup diff print ~/Downloads/Import photos --filter "ext:jpg"
+  dedup diff print staging photos
+.fi
+.RE
+
+.TP
+.B diff cp
+.I source reference target
+[
+.B -f
+.I filter
+|
+.B --filter
+.I filter
+]
+Copy files that exist in
+.I source
+and not in
+.I reference
+into
+.I target
+.
+
+.RS
+.nf
+Examples:
+  dedup diff cp photos backup /mnt/backup/Photos
+  dedup diff cp ~/CameraRoll photos ~/ToImport --filter "mime:video/*"
+.fi
+.RE
+
+.TP
+.B diff mv
+.I source reference target
+[
+.B -f
+.I filter
+|
+.B --filter
+.I filter
+]
+Move files that exist in
+.I source
+and not in
+.I reference
+into
+.I target
+.
+
+.RS
+.nf
+Example:
+  dedup diff mv ~/Staging photos ~/Imported
+.fi
+.RE
+
+.TP
+.B diff rm
+.I source reference
+[
+.B -f
+.I filter
+|
+.B --filter
+.I filter
+]
+Remove files from
+.I source
+that already exist in
+.I reference
+(optionally restricted by
+.I filter
+).
+
+.RS
+.nf
+Examples:
+  dedup diff rm ~/Downloads photos --filter "ext:jpg"
+  dedup diff rm ~/Scratch photos
+.fi
+.RE
+
+.SH FILTERS
+Several subcommands accept
+.B -f
+/
+.B --filter
+to limit affected files. The filter syntax is project-specific; common
+patterns include:
+.IP \[bu] 2
+\fIext:jpg\fR \- file extension equals \fIjpg\fR
+.IP \[bu] 2
+\fImime:video/*\fR \- MIME type matches wildcard
+.IP \[bu] 2
+\fIpath:Family/2025\fR \- path contains the substring
+.IP \[bu] 2
+Plain substring (e.g., \fIholiday\fR) \- matches file path/name
+
+Combine filters by repeating
+.B -f
+if supported, or pre\-filter lists using
+.B files ls
+and external tooling. When in doubt, start with
+.B diff print
+to preview.
+
+.SH EXAMPLES
+.TP
+Create a repository and index files using 4 threads
+.RS
+.nf
+dedup repo create photos ~/Pictures -i 16
+dedup repo update -R photos -t 4
+.fi
+.RE
+
+.TP
+List duplicates across all repositories
+.RS
+.nf
+dedup repo dupes --all
+.fi
+.RE
+
+.TP
+Copy files present in source but not in reference into a target directory
+.RS
+.nf
+dedup diff cp photos backup ~/to_review --filter "ext:jpg"
+.fi
+.RE
+
+.TP
+List files of a repo with a name filter
+.RS
+.nf
+dedup files ls photos --filter holiday
+.fi
+.RE
+
+.TP
+Clean an import folder by removing items already present in your main library
+.RS
+.nf
+dedup diff rm ~/Import photos
+.fi
+.RE
+
+.TP
+Mirror only missing items from an external drive to your library
+.RS
+.nf
+dedup diff cp /media/card/DCIM photos ~/ToImport
+.fi
+.RE
+
+.SH EXIT STATUS
+The
+.B dedup
+command exits with status 0 on success and a non-zero value on error.
+
+.SH SEE ALSO
+Project README and source code for implementation details.

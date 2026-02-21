@@ -1,3 +1,7 @@
+---
+apply: always
+---
+
 # AI Coding & Testing Rules
 
 This file defines the rules for development and testing in this project. These rules should be considered and extended in future changes.
@@ -47,10 +51,10 @@ This file defines the rules for development and testing in this project. These r
     * Cover at least one positive path and one negative/edge case per public behavior when feasible.
 * Example (before → after):
     * Before: `assertThat(stats).isNotNull();`
-    * After: 
-      - `assertThat(stats.get("files")).isEqualTo(1L);`
-      - `assertThat(indexPath).exists();`
-      - `assertThat(Files.readAllLines(indexPath)).singleElement().contains("file1.txt");`
+    * After:
+        - `assertThat(stats.get("files")).isEqualTo(1L);`
+        - `assertThat(indexPath).exists();`
+        - `assertThat(Files.readAllLines(indexPath)).singleElement().contains("file1.txt");`
 * Use AssertJ features:
     * `containsExactly`, `containsOnly`, `containsExactlyInAnyOrder`, `singleElement`, `extracting`, `usingRecursiveComparison()` for nested objects.
 * Test data must be deterministic. Avoid time- and randomness-based flakiness; inject clocks/executors or fix seeds where needed.
