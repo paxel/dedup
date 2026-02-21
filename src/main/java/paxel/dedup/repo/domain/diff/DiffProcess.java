@@ -143,6 +143,127 @@ public class DiffProcess {
         return 0;
     }
 
+    /**
+     * Sync source repo A into target repo B according to the rules:
+     * - Equality only by (hash,size), path is irrelevant for existence checks
+     * - copyNew: copy files from A that are not present in B (by content) to the same relativePath in B
+     * - never overwrite an existing file at the target path; count as skipped
+     * - after successful copy, update target index with add(missing=false)
+     * - deleteMissing: if A has a missing entry for (hash,size) and B has that content present, delete those B files
+     * - after successful delete, update target index with add(missing=true) for the deleted path
+     * - best effort: continue on errors and summarize
+     *
+     * @param copyNew       copy contents that are in A but not present in B (by content)
+     * @param deleteMissing delete contents present in B that A marks as missing
+     * @return 0 on success, negative error code on init error
+     */
+    public int sync(boolean copyNew, boolean deleteMissing) {
+        Result<Repos, Integer> init = init();
+        if (init.hasFailed()) {
+            return init.error();
+        }
+        RepoManager sourceRepo = init.value().source();
+        RepoManager targetRepo = init.value().target();
+
+        SyncCounters counters = new SyncCounters();
+
+        // Single-pass over source repo: decide copy or delete per entry
+        sourceRepo.stream()
+                .filter(repoFilter)
+                .forEach(entry -> {
+                    try {
+                        List<RepoFile> matches = targetRepo.getByHashAndSize(entry.hash(), entry.size());
+                        boolean contentPresentInB = matches.stream().anyMatch(b -> !b.missing());
+
+                        if (entry.missing()) {
+                            if (deleteMissing && contentPresentInB) {
+                                handleDelete(matches, targetRepo, counters);
+                            }
+                            return;
+                        }
+
+                        // entry is present in A
+                        if (!copyNew) {
+                            return;
+                        }
+                        if (contentPresentInB) {
+                            counters.equal++;
+                            return;
+                        }
+                        handleCopy(entry, sourceRepo, targetRepo, counters);
+                    } catch (RuntimeException e) {
+                        counters.errors++;
+                        log.error("Unexpected error in sync: {}", e.toString());
+                    }
+                });
+
+        log.info("Sync summary: equal={}, new={}, deleted={}, copied={}, removed={}, skipped={}, errors={}",
+                counters.equal, counters.newCount, counters.deletedCount, counters.copied, counters.removed, counters.skipped, counters.errors);
+
+        return 0;
+    }
+
+    private void handleCopy(RepoFile r, RepoManager sourceRepo, RepoManager targetRepo, SyncCounters counters) {
+        counters.newCount++;
+        Path targetRoot = Paths.get(targetRepo.getRepo().absolutePath());
+        Path targetFile = targetRoot.resolve(r.relativePath());
+
+        if (fileSystem.exists(targetFile)) { // never overwrite existing path
+            counters.skipped++;
+            return;
+        }
+
+        Path parent = targetFile.getParent();
+        if (parent != null && !fileSystem.exists(parent)) {
+            try {
+                fileSystem.createDirectories(parent);
+            } catch (IOException e) {
+                counters.errors++;
+                log.error("Could not create {} {}", parent, e.getClass().getSimpleName());
+                return;
+            }
+        }
+
+        Path sourceFile = Paths.get(sourceRepo.getRepo().absolutePath()).resolve(r.relativePath());
+        try {
+            fileSystem.copy(sourceFile, targetFile, StandardCopyOption.COPY_ATTRIBUTES);
+            counters.copied++;
+            // Update target index using withMissing(false) per rule
+            targetRepo.addRepoFile(r.withMissing(false));
+        } catch (IOException e) {
+            counters.errors++;
+            log.error("Could not copy {} to {} {}", sourceFile, targetFile, e.getClass().getSimpleName());
+        }
+    }
+
+    private void handleDelete(List<RepoFile> matches, RepoManager targetRepo, SyncCounters counters) {
+        for (RepoFile b : matches) {
+            if (b.missing()) {
+                continue; // only present entries in B are candidates
+            }
+            counters.deletedCount++;
+            Path bFile = Paths.get(targetRepo.getRepo().absolutePath()).resolve(b.relativePath());
+            try {
+                fileSystem.delete(bFile);
+                counters.removed++;
+                targetRepo.addRepoFile(b.withMissing(true));
+            } catch (IOException e) {
+                counters.errors++;
+                log.error("Could not delete {} {}", bFile, e.getClass().getSimpleName());
+            }
+        }
+    }
+
+    private static class SyncCounters {
+        long equal;
+        long newCount;
+        long deletedCount;
+        long copied;
+        long removed;
+        long skipped;
+        long errors;
+    }
+
     private Result<Repos, Integer> init() {
         this.repoFilter = filterFactory.createFilter(filter);
 

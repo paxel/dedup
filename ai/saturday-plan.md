@@ -37,20 +37,18 @@ This document outlines the Saturday work plan to evolve Dedup in four areas: nat
 - Migration
   - Provide a one-off `convert-codec` command to rewrite lines between codecs (optional, stretch goal).
 
-## 3) Introduce `dupes` command for cross-repo comparison and sync
+## 3) Introduce `sync` command for cross-repo comparison and sync
 
-- Command: `dedup dupes A B [--copyNew] [--deleteMissing] [--mirror] [--dryRun]`
+- Command: `diff sync A B [--copyNew] [--deleteMissing] [--mirror]`
   - `A` is source repo, `B` is target repo.
-  - `--copyNew`: copy files that exist in A but not in B.
-  - `--deleteMissing`: delete files in B that no longer exist in A.
-  - `--mirror`: equivalent to `--copyNew --deleteMissing`.
-  - `--dryRun`: report the plan without making changes.
+  - `--copyNew`: copy files that exist in A but not in B. default true
+  - `--deleteMissing`: delete files in B that no longer exist in A. default false
+  - `--mirror`: equivalent to `--copyNew --deleteMissing`. default false
 - Core behavior
   - Compare file inventories via chosen comparison strategy (see section 4).
   - Resolve path mapping rules (identical layout initially; configurable mapping as follow-up).
   - Provide progress and a concise summary: counts of equal, new, deleted, copied, removed, skipped, errors.
 - Safety
-  - Default to `--dryRun`; require explicit confirmation flags for destructive ops or accept `--yes`.
   - Ensure safe filesystem operations (temp writes, atomic moves where possible).
 - Tests
   - Unit tests for diffing logic and option parsing.

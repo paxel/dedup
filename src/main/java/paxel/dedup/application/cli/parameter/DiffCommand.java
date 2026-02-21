@@ -64,6 +64,26 @@ public class DiffCommand {
     }
 
 
+    @Command(name = "sync", description = "Syncs target repo with source: copy new contents, optionally delete missing")
+    public int sync(
+            @Parameters(description = "Source repo or dir (A)") String source,
+            @Parameters(description = "Target repo or dir (B)") String target,
+            @Option(names = {"--copyNew"}, description = "Copy contents that exist in A but not in B (default: ${DEFAULT-VALUE})", defaultValue = "true") boolean copyNew,
+            @Option(names = {"--deleteMissing"}, description = "Delete in B contents that A marks as missing (default: ${DEFAULT-VALUE})", defaultValue = "false") boolean deleteMissing,
+            @Option(names = {"--mirror"}, description = "Equivalent to --copyNew --deleteMissing (overrides the two options)") boolean mirror,
+            @Option(names = {"-f", "--filter"}) String filter) {
+        initDefaultConfig();
+
+        if (mirror) {
+            copyNew = true;
+            deleteMissing = true;
+        }
+
+        return new DiffProcess(cliParameter, source, target, dedupConfig, filter, infrastructureConfig.getFileSystem())
+                .sync(copyNew, deleteMissing);
+    }
+
+
     private void initDefaultConfig() {
         dedupConfig = infrastructureConfig.getDedupConfig();
     }

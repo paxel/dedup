@@ -39,8 +39,8 @@ This file defines the rules for development and testing in this project. These r
 
 ### Test Types
 * **Unit Tests:** Every new service or process should be covered by unit tests.
-* **Mocks/Stubs:** Use stubs or mocks for infrastructure dependencies (e.g., `FileSystem`, `DedupConfig`) to keep tests fast and isolated.
-* **Integration Tests:** Use `@TempDir` to test real file system operations in an isolated environment.
+* **Mocks/Stubs (mandatory for I/O):** Do NOT perform real filesystem or network I/O in unit tests. Always mock or stub infrastructure dependencies (especially `FileSystem`) and verify interactions (e.g., that `copy`, `move`, `delete`, `createDirectories`, `newOutputStream` are called as expected).
+* **Integration Tests (opt-in):** Use `@TempDir` only for explicit integration tests that exercise the real filesystem end-to-end. Keep them minimal and clearly marked as integration tests.
 
 ### Test Frameworks
 * **JUnit 5:** As the primary test framework.
