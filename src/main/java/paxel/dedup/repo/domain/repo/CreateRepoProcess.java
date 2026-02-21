@@ -10,6 +10,7 @@ import paxel.lib.Result;
 
 import java.nio.file.Paths;
 
+
 @RequiredArgsConstructor
 @Slf4j
 public class CreateRepoProcess {
@@ -32,8 +33,7 @@ public class CreateRepoProcess {
         if (createResult.hasFailed()) {
             DedupError err = createResult.error();
             // Keep legacy message substring to satisfy tests while logging full context
-            String msg = (err.description() != null && !err.description().isBlank())
-                    ? err.description() : ("Failed to create repo '" + name + "'");
+            String msg = firstNonBlankLocal(err.description(), "Failed to create repo '" + name + "'");
             if (err.exception() != null) log.error("{}", msg, err.exception());
             else log.error("{}", msg);
             return -10;
@@ -43,5 +43,12 @@ public class CreateRepoProcess {
         }
         return 0;
 
+    }
+
+    private String firstNonBlankLocal(String preferred, String fallback) {
+        if (preferred != null && !preferred.isBlank()) {
+            return preferred;
+        }
+        return fallback;
     }
 }

@@ -41,14 +41,14 @@ public class MessagePackRepoFileCodec implements LineCodec<RepoFile> {
                 String key = un.unpackString();
                 switch (key) {
                     case "h" -> h = un.unpackString();
-                    case "p" -> p = un.tryUnpackNil() ? null : un.unpackString();
+                    case "p" -> p = unpackNullableStringLocal(un);
                     case "s" -> {
                         if (un.tryUnpackNil()) s = null;
                         else s = un.unpackLong();
                     }
                     case "l" -> l = un.unpackLong();
                     case "d" -> d = un.unpackBoolean();
-                    case "m" -> m = un.tryUnpackNil() ? null : un.unpackString();
+                    case "m" -> m = unpackNullableStringLocal(un);
                     default -> un.skipValue();
                 }
             }
@@ -68,7 +68,10 @@ public class MessagePackRepoFileCodec implements LineCodec<RepoFile> {
         byte[] out;
         try (var outStream = new java.io.ByteArrayOutputStream();
              MessagePacker pk = MessagePack.newDefaultPacker(outStream)) {
-            int fields = 5 + (value.mimeType() != null && !value.mimeType().isEmpty() ? 1 : 0);
+            int fields = 5;
+            if (value.mimeType() != null && !value.mimeType().isEmpty()) {
+                fields = fields + 1;
+            }
             pk.packMapHeader(fields);
             pk.packString("h");
             pk.packString(value.hash());
@@ -90,5 +93,12 @@ public class MessagePackRepoFileCodec implements LineCodec<RepoFile> {
             out = outStream.toByteArray();
         }
         return ByteBuffer.wrap(out);
+    }
+
+    private String unpackNullableStringLocal(MessageUnpacker un) throws IOException {
+        if (un.tryUnpackNil()) {
+            return null;
+        }
+        return un.unpackString();
     }
 }

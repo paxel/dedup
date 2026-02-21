@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.With;
 
+
 @Builder
 public record Repo(
         @With String name,
@@ -24,7 +25,7 @@ public record Repo(
         this.absolutePath = absolutePath;
         this.indices = indices;
         // Backward compatibility: default to JSON when field missing/null
-        this.codec = codec == null ? Codec.JSON : codec;
+        this.codec = firstNonNullLocal(codec, Codec.JSON);
     }
 
     // Backward-compatible convenience constructor used in code/tests
@@ -35,5 +36,12 @@ public record Repo(
     @Override
     public String toString() {
         return name + ": " + absolutePath;
+    }
+
+    private <T> T firstNonNullLocal(T preferred, T fallback) {
+        if (preferred != null) {
+            return preferred;
+        }
+        return fallback;
     }
 }

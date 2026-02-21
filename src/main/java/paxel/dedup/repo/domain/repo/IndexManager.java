@@ -25,6 +25,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+
 @RequiredArgsConstructor
 public class IndexManager {
     public static final String FILES = "files";
@@ -161,7 +162,7 @@ public class IndexManager {
             outputStream.flush();
             return Result.ok(null);
         } catch (TunneledIoException e) {
-            return Result.err(DedupError.of(ErrorType.WRITE, indexFile + ": write failed", e.getCause() instanceof Exception ex ? ex : new Exception(e.getCause())));
+            return Result.err(DedupError.of(ErrorType.WRITE, indexFile + ": write failed", toExceptionLocal(e.getCause())));
         } catch (IOException e) {
             return Result.err(DedupError.of(ErrorType.WRITE, indexFile + ": write failed", e));
         }
@@ -178,5 +179,12 @@ public class IndexManager {
         } catch (IOException e) {
             return Result.err(DedupError.of(ErrorType.CLOSE, indexFile + ": close failed", e));
         }
+    }
+
+    private Exception toExceptionLocal(Throwable t) {
+        if (t instanceof Exception e) {
+            return e;
+        }
+        return new Exception(t);
     }
 }

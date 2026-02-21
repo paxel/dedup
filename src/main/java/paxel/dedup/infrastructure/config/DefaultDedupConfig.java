@@ -149,8 +149,19 @@ public final class DefaultDedupConfig implements DedupConfig {
         }
 
         if (!deleteResult.value()) {
+            Exception cause;
+            if (exceptions.isEmpty()) {
+                cause = null;
+            } else {
+                var first = exceptions.getFirst();
+                if (first instanceof Exception ex) {
+                    cause = ex;
+                } else {
+                    cause = new Exception(first);
+                }
+            }
             return Result.err(DedupError.of(ErrorType.DELETE_REPO, "While deleting " + name + " " + exceptions.size() + " exceptions happened",
-                    exceptions.isEmpty() ? null : (exceptions.getFirst() instanceof Exception ex ? ex : new Exception(exceptions.getFirst()))));
+                    cause));
         }
 
 
@@ -249,11 +260,14 @@ public final class DefaultDedupConfig implements DedupConfig {
     }
 
     // --- helpers for YAML <-> Repo mapping without reflection on records (GraalVM-friendly) ---
-    private static String stringOf(Object o) {
-        return o == null ? null : o.toString();
+    private String stringOf(Object o) {
+        if (o == null) {
+            return null;
+        }
+        return o.toString();
     }
 
-    private static int intOf(Object o) {
+    private int intOf(Object o) {
         if (o == null) return 1;
         if (o instanceof Number n) return n.intValue();
         try {
@@ -263,7 +277,7 @@ public final class DefaultDedupConfig implements DedupConfig {
         }
     }
 
-    private static Repo.Codec codecOf(String s) {
+    private Repo.Codec codecOf(String s) {
         if (s == null || s.isBlank()) return Repo.Codec.JSON; // backward-compatible default
         try {
             return Repo.Codec.valueOf(s.toUpperCase());

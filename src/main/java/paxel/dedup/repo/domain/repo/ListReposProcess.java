@@ -11,6 +11,7 @@ import paxel.lib.Result;
 import java.util.Comparator;
 import java.util.List;
 
+
 @RequiredArgsConstructor
 @Slf4j
 public class ListReposProcess {
@@ -25,7 +26,7 @@ public class ListReposProcess {
             DedupError err = getReposResult.error();
             // Preserve legacy substring "Invalid" to keep test expectations
             String desc = err.description();
-            String msg = (desc != null && !desc.isBlank()) ? desc : "Invalid";
+            String msg = firstNonBlankLocal(desc, "Invalid");
             if (err.exception() != null) {
                 log.error("{} {}", msg, "Invalid", err.exception());
             } else {
@@ -44,5 +45,12 @@ public class ListReposProcess {
                 })
                 .forEach(line -> log.info("{}", line));
         return 0;
+    }
+
+    private String firstNonBlankLocal(String preferred, String fallback) {
+        if (preferred != null && !preferred.isBlank()) {
+            return preferred;
+        }
+        return fallback;
     }
 }
