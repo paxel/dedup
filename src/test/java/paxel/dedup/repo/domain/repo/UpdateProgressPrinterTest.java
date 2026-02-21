@@ -9,7 +9,7 @@ import paxel.dedup.domain.model.Statistics;
 import paxel.dedup.domain.model.errors.LoadError;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
-import paxel.dedup.infrastructure.adapter.out.serialization.JacksonLineCodec;
+import paxel.dedup.infrastructure.adapter.out.serialization.JsonLineCodec;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.terminal.StatisticPrinter;
 import paxel.lib.Result;
@@ -29,17 +29,50 @@ class UpdateProgressPrinterTest {
     @TempDir
     Path tempDir;
 
-    /** Minimal stub that only exposes the repo config directory. */
+    /**
+     * Minimal stub that only exposes the repo config directory.
+     */
     static class StubDedupConfig implements DedupConfig {
         private final Path repoDir;
-        StubDedupConfig(Path repoDir) { this.repoDir = repoDir; }
-        @Override public Result<List<Repo>, paxel.dedup.domain.model.errors.OpenRepoError> getRepos() { return Result.ok(List.of()); }
-        @Override public Result<Repo, paxel.dedup.domain.model.errors.OpenRepoError> getRepo(String name) { return Result.err(null); }
-        @Override public Result<Repo, paxel.dedup.domain.model.errors.CreateRepoError> createRepo(String name, Path path, int indices) { return Result.err(null); }
-        @Override public Result<Repo, paxel.dedup.domain.model.errors.ModifyRepoError> changePath(String name, Path path) { return Result.err(null); }
-        @Override public Result<Boolean, paxel.dedup.domain.model.errors.DeleteRepoError> deleteRepo(String name) { return Result.ok(false); }
-        @Override public Path getRepoDir() { return repoDir; }
-        @Override public Result<Boolean, paxel.dedup.domain.model.errors.RenameRepoError> renameRepo(String oldName, String newName) { return Result.ok(false); }
+
+        StubDedupConfig(Path repoDir) {
+            this.repoDir = repoDir;
+        }
+
+        @Override
+        public Result<List<Repo>, paxel.dedup.domain.model.errors.OpenRepoError> getRepos() {
+            return Result.ok(List.of());
+        }
+
+        @Override
+        public Result<Repo, paxel.dedup.domain.model.errors.OpenRepoError> getRepo(String name) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Repo, paxel.dedup.domain.model.errors.CreateRepoError> createRepo(String name, Path path, int indices) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Repo, paxel.dedup.domain.model.errors.ModifyRepoError> changePath(String name, Path path) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Boolean, paxel.dedup.domain.model.errors.DeleteRepoError> deleteRepo(String name) {
+            return Result.ok(false);
+        }
+
+        @Override
+        public Path getRepoDir() {
+            return repoDir;
+        }
+
+        @Override
+        public Result<Boolean, paxel.dedup.domain.model.errors.RenameRepoError> renameRepo(String oldName, String newName) {
+            return Result.ok(false);
+        }
     }
 
     @Test
@@ -57,7 +90,7 @@ class UpdateProgressPrinterTest {
         DedupConfig config = new StubDedupConfig(configRoot);
         ObjectMapper mapper = new ObjectMapper();
         FileSystem fs = new NioFileSystemAdapter();
-        RepoManager repoManager = new RepoManager(repo, config,new JacksonLineCodec<>( mapper,RepoFile.class), fs);
+        RepoManager repoManager = new RepoManager(repo, config, new JsonLineCodec<>(mapper, RepoFile.class), fs);
 
         // Ensure index dir exists; RepoManager.load() will also create 0.idx if missing.
         Files.createDirectories(configRoot.resolve("r1"));
@@ -72,16 +105,20 @@ class UpdateProgressPrinterTest {
 
         StatisticPrinter sp = new StatisticPrinter();
         // No-op change listener so calls don't NPE
-        sp.registerChangeListener(() -> {});
+        sp.registerChangeListener(() -> {
+        });
 
         Statistics stats = new Statistics("s");
 
         // FileHasher stub that returns a completed future immediately
         paxel.dedup.domain.model.FileHasher hasher = new paxel.dedup.domain.model.FileHasher() {
-            @Override public CompletableFuture<paxel.lib.Result<String, LoadError>> hash(Path path) {
+            @Override
+            public CompletableFuture<paxel.lib.Result<String, LoadError>> hash(Path path) {
                 return CompletableFuture.completedFuture(Result.ok("HASH-OK"));
             }
-            @Override public void close() { /* nothing */ }
+
+            @Override
+            public void close() { /* nothing */ }
         };
 
         UpdateProgressPrinter upp = new UpdateProgressPrinter(remaining, sp, repoManager, stats, hasher);
@@ -107,8 +144,10 @@ class UpdateProgressPrinterTest {
         assertThat(filesLine).contains("finished");
 
         // Statistics updated with deleted count
-        final long[] deletedStat = { -1 };
-        stats.forCounter((k, v) -> { if ("deleted".equals(k)) deletedStat[0] = v; });
+        final long[] deletedStat = {-1};
+        stats.forCounter((k, v) -> {
+            if ("deleted".equals(k)) deletedStat[0] = v;
+        });
         assertThat(deletedStat[0]).isEqualTo(1L);
 
         // Index file should have been appended to with the processed file

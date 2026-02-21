@@ -36,9 +36,14 @@ Subcommands are grouped by domain:
 
 #### repo create
 ```
-dedup repo create <name> <path> [-i <indices> | --indices <indices>]
+dedup repo create <name> <path> [-i <indices> | --indices <indices>] [--codec {json|messagepack}] [--strict]
 ```
-Create a new repository named `name` at filesystem `path`. Optional `indices` controls the number of index files (default: 10).
+Create a new repository named `name` at filesystem `path`.
+
+Options:
+- `-i, --indices` — Number of index files (default: 10).
+- `--codec` — Persist the repo's line codec. Supported values: `json`, `messagepack`. If not specified, the repo is written with `messagepack` by default (backwards compatible: missing field reads as `json`).
+- `--strict` — Fail if persisting the codec fails.
 
 Examples:
 - Create a library repo at `~/Libraries/Photos` with 16 index shards:
@@ -86,9 +91,12 @@ Examples:
 
 #### repo prune
 ```
-dedup repo prune [-R <name> ...] [-a | --all] [-i <indices> | --indices <indices>]
+dedup repo prune [-R <name> ...] [-a | --all] [-i <indices> | --indices <indices>] [--keep-deleted] [--change-codec {json|messagepack}]
 ```
-Prune the database by removing old versions and deleted files. Optionally adjust the number of index files (default: 10).
+Prune the database by removing old versions and deleted files. Options:
+- `-i, --indices` — Number of index files in the output (default: 10).
+- `--keep-deleted` — Keep entries marked as deleted (do not drop missing files).
+- `--change-codec` — Change the repo codec while pruning. Accepts `json` or `messagepack` and writes the pruned result with the selected codec.
 
 Example:
 ```

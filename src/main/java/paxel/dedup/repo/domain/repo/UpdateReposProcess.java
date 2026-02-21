@@ -1,20 +1,15 @@
 package paxel.dedup.repo.domain.repo;
+
 import lombok.RequiredArgsConstructor;
-import paxel.dedup.infrastructure.config.DedupConfig;
-import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.RepoFile;
-import paxel.dedup.domain.model.Statistics;
+import paxel.dedup.application.cli.parameter.CliParameter;
+import paxel.dedup.domain.model.*;
 import paxel.dedup.domain.model.errors.LoadError;
 import paxel.dedup.domain.model.errors.OpenRepoError;
 import paxel.dedup.domain.model.errors.UpdateRepoError;
-import paxel.dedup.domain.model.HexFormatter;
-import paxel.dedup.domain.model.ResilientFileWalker;
-import paxel.dedup.domain.model.Sha1Hasher;
-import paxel.dedup.application.cli.parameter.CliParameter;
+import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
+import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.terminal.StatisticPrinter;
 import paxel.dedup.terminal.TerminalProgress;
-import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
-import paxel.dedup.domain.port.out.LineCodec;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -35,7 +30,6 @@ public class UpdateReposProcess {
     private final boolean all;
     private final int threads;
     private final DedupConfig dedupConfig;
-    private final LineCodec<RepoFile> repoFileCodec;
     private final boolean progress;
 
     public int update() {
@@ -50,7 +44,7 @@ public class UpdateReposProcess {
                 return -50;
             }
             for (Repo repo : lsResult.value()) {
-                updateRepo(new RepoManager(repo, dedupConfig, repoFileCodec, new NioFileSystemAdapter()));
+                updateRepo(RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter()));
             }
             return 0;
         }
@@ -58,7 +52,8 @@ public class UpdateReposProcess {
         for (String name : names) {
             Result<Repo, OpenRepoError> getRepoResult = dedupConfig.getRepo(name);
             if (getRepoResult.isSuccess()) {
-                Result<Statistics, UpdateRepoError> statisticsUpdateRepoErrorResult = updateRepo(new RepoManager(getRepoResult.value(), dedupConfig, repoFileCodec, new NioFileSystemAdapter()));
+                Repo repo = getRepoResult.value();
+                Result<Statistics, UpdateRepoError> statisticsUpdateRepoErrorResult = updateRepo(RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter()));
             }
         }
         return 0;
@@ -92,7 +87,7 @@ public class UpdateReposProcess {
 
     private TerminalProgress prepProgress(StatisticPrinter progressPrinter) {
         if (progress) {
-                return TerminalProgress.initLanterna(progressPrinter);
+            return TerminalProgress.initLanterna(progressPrinter);
         }
         return TerminalProgress.initDummy(progressPrinter);
     }

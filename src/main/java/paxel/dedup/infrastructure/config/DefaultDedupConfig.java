@@ -57,7 +57,15 @@ public final class DefaultDedupConfig implements DedupConfig {
         }
 
         try {
-            return Result.ok(objectMapper.readerFor(Repo.class).readValue(fileSystem.readAllBytes(resolve), Repo.class));
+            byte[] yaml = fileSystem.readAllBytes(resolve);
+            @SuppressWarnings("unchecked")
+            var map = objectMapper.readValue(yaml, java.util.Map.class);
+            String rName = stringOf(map.getOrDefault(RepoYamlKey.NAME.key, name));
+            String absolutePath = stringOf(map.get(RepoYamlKey.ABSOLUTE_PATH.key));
+            int indices = intOf(map.getOrDefault(RepoYamlKey.INDICES.key, 1));
+            Repo.Codec codec = codecOf(stringOf(map.get(RepoYamlKey.CODEC.key))); // defaults to JSON when missing/unknown
+
+            return Result.ok(new Repo(rName, absolutePath, indices, codec));
         } catch (IOException e) {
             return Result.err(OpenRepoError.ioError(resolve, e));
         }
@@ -112,9 +120,14 @@ public final class DefaultDedupConfig implements DedupConfig {
 
 
     private Result<Repo, IOException> writeRepoFile(String name, Path path, int indices, Path ymlFile) {
-        Repo repo = new Repo(name, path.toAbsolutePath().toString(), indices);
+        Repo repo = new Repo(name, path.toAbsolutePath().toString(), indices, Repo.Codec.MESSAGEPACK);
         try {
-            fileSystem.write(ymlFile, objectMapper.writerFor(Repo.class).writeValueAsBytes(repo));
+            java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
+            map.put(RepoYamlKey.NAME.key, repo.name());
+            map.put(RepoYamlKey.ABSOLUTE_PATH.key, repo.absolutePath());
+            map.put(RepoYamlKey.INDICES.key, repo.indices());
+            map.put(RepoYamlKey.CODEC.key, repo.codec().name());
+            fileSystem.write(ymlFile, objectMapper.writeValueAsBytes(map));
         } catch (IOException e) {
             return Result.err(e);
         }
@@ -193,6 +206,27 @@ public final class DefaultDedupConfig implements DedupConfig {
                 .map(a -> true, e -> new RenameRepoError(ymlFile, List.of(e)));
     }
 
+    @Override
+    public @NonNull Result<Repo, ModifyRepoError> setCodec(@NonNull String name, @NonNull Repo.Codec codec) {
+        Result<Repo, OpenRepoError> repo = this.getRepo(name);
+        if (repo.hasFailed()) {
+            return repo.mapError(e -> new ModifyRepoError(e.path(), e.ioException()));
+        }
+        Path ymlFile = repoRootPath.resolve(name).resolve(DEDUP_REPO_YML);
+        try {
+            Repo updated = new Repo(name, repo.value().absolutePath(), repo.value().indices(), codec);
+            java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
+            map.put(RepoYamlKey.NAME.key, updated.name());
+            map.put(RepoYamlKey.ABSOLUTE_PATH.key, updated.absolutePath());
+            map.put(RepoYamlKey.INDICES.key, updated.indices());
+            map.put(RepoYamlKey.CODEC.key, updated.codec().name());
+            fileSystem.write(ymlFile, objectMapper.writeValueAsBytes(map));
+            return Result.ok(updated);
+        } catch (IOException e) {
+            return Result.err(new ModifyRepoError(ymlFile, e));
+        }
+    }
+
 
     @Override
     public boolean equals(Object obj) {
@@ -210,6 +244,43 @@ public final class DefaultDedupConfig implements DedupConfig {
     @Override
     public String toString() {
         return "DefaultDedupConfig[" + "repoRootPath=" + repoRootPath + ']';
+    }
+
+    // --- helpers for YAML <-> Repo mapping without reflection on records (GraalVM-friendly) ---
+    private static String stringOf(Object o) {
+        return o == null ? null : o.toString();
+    }
+
+    private static int intOf(Object o) {
+        if (o == null) return 1;
+        if (o instanceof Number n) return n.intValue();
+        try {
+            return Integer.parseInt(o.toString());
+        } catch (NumberFormatException e) {
+            return 1;
+        }
+    }
+
+    private static Repo.Codec codecOf(String s) {
+        if (s == null || s.isBlank()) return Repo.Codec.JSON; // backward-compatible default
+        try {
+            return Repo.Codec.valueOf(s.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return Repo.Codec.JSON;
+        }
+    }
+
+    // Centralized YAML keys to avoid primitive obsession with map keys
+    enum RepoYamlKey {
+        NAME("name"),
+        ABSOLUTE_PATH("absolutePath"),
+        INDICES("indices"),
+        CODEC("codec");
+        final String key;
+
+        RepoYamlKey(String key) {
+            this.key = key;
+        }
     }
 
 }

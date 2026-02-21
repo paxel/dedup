@@ -36,7 +36,8 @@ public interface DedupConfig {
     @NonNull
     Result<Repo, CreateRepoError> createRepo(@NonNull String name, @NonNull Path path, int indices);
 
-    @NonNull Result<Repo, ModifyRepoError> changePath(@NonNull String name, @NonNull Path path);
+    @NonNull
+    Result<Repo, ModifyRepoError> changePath(@NonNull String name, @NonNull Path path);
 
     /**
      * Deletes a Repo with given name or explains the reason why not.
@@ -63,4 +64,12 @@ public interface DedupConfig {
      * @return {@code true} if the repo existed and was moved. {@code false} if the repo did not exist or was not moved. {@link RenameRepoError} if the repo could not be moved.
      */
     Result<Boolean, RenameRepoError> renameRepo(String oldName, String newName);
+
+    /**
+     * Updates the codec of the repo YAML while keeping name, path, and indices the same.
+     */
+    @NonNull
+    default Result<Repo, ModifyRepoError> setCodec(@NonNull String name, @NonNull Repo.Codec codec) {
+        return Result.err(new ModifyRepoError(getRepoDir().resolve(name).resolve("dedup_repo.yml"), null));
+    }
 }

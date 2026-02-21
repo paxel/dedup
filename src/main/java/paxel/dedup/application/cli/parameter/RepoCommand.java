@@ -1,6 +1,8 @@
 package paxel.dedup.application.cli.parameter;
+
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
+import paxel.dedup.domain.model.Repo;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.infrastructure.config.InfrastructureConfig;
 import paxel.dedup.repo.domain.repo.*;
@@ -25,10 +27,36 @@ public class RepoCommand {
     public int create(
             @Parameters(description = "Name of the repo") String name,
             @Parameters(description = "Path of the repo") String path,
-            @Option(defaultValue = "10", names = {"--indices", "-i"}, description = "Number of index files") int indices) {
+            @Option(defaultValue = "10", names = {"--indices", "-i"}, description = "Number of index files") int indices,
+            @Option(names = {"--codec"}, description = "Line codec to use: json|messagepack", defaultValue = "messagepack") String codec,
+            @Option(names = {"--strict"}, description = "Fail if selected codec is unavailable") boolean strict) {
         initDefaultConfig();
 
-        return new CreateRepoProcess(cliParameter, name, path, indices, dedupConfig).create();
+        int rc = new CreateRepoProcess(cliParameter, name, path, indices, dedupConfig).create();
+        if (rc == 0) {
+            // Persist codec selection in repo YAML via config API
+            Repo.Codec target = switch (codec.toLowerCase()) {
+                case "json" -> Repo.Codec.JSON;
+                case "messagepack" -> Repo.Codec.MESSAGEPACK;
+                default -> null;
+            };
+            if (target == null) {
+                System.err.println("Unknown codec '" + codec + "'. Supported: json, messagepack. Falling back to default (messagepack on write).");
+            } else {
+                try {
+                    dedupConfig.setCodec(name, target);
+                } catch (Exception e) {
+                    if (strict) {
+                        System.err.println("Failed to persist codec selection: " + e.getMessage());
+                        return -11;
+                    }
+                    if (cliParameter.isVerbose()) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+        return rc;
     }
 
     @Command(name = "rm", description = "Deletes existing repo")
@@ -55,18 +83,32 @@ public class RepoCommand {
             @Option(names = {"--no-progress"}, description = "Don't show progress page") boolean noProgress) {
         initDefaultConfig();
 
-        return (new UpdateReposProcess(cliParameter, names, all, threads, dedupConfig, infrastructureConfig.getRepoFileCodec(),
-                !noProgress).update());
+        return new UpdateReposProcess(cliParameter, names, all, threads, dedupConfig,
+                !noProgress).update();
     }
 
     @Command(name = "prune", description = "Prunes the DB removing all old versions and deleted files")
     public int prune(
             @Option(names = {"-R"}, description = "Repos") List<String> names,
             @Option(names = {"-a", "--all"}, description = "All repos") boolean all,
-            @Option(defaultValue = "10", names = {"--indices", "-i"}, description = "Number of index files") int indices) {
+            @Option(defaultValue = "10", names = {"--indices", "-i"}, description = "Number of index files") int indices,
+            @Option(names = {"--keep-deleted"}, description = "Keep entries marked as deleted (do not drop missing files)") boolean keepDeleted,
+            @Option(names = {"--change-codec"}, description = "Change codec during prune: json|messagepack") String changeCodec) {
         initDefaultConfig();
 
-        return (new PruneReposProcess(cliParameter, names, all, indices, dedupConfig, infrastructureConfig.getRepoFileCodec()).prune());
+        Repo.Codec targetCodec = null;
+        if (changeCodec != null && !changeCodec.isBlank()) {
+            targetCodec = switch (changeCodec.toLowerCase()) {
+                case "json" -> Repo.Codec.JSON;
+                case "messagepack" -> Repo.Codec.MESSAGEPACK;
+                default -> {
+                    System.err.println("Unknown codec '" + changeCodec + "'. Supported: json, messagepack");
+                    yield null;
+                }
+            };
+        }
+
+        return new PruneReposProcess(cliParameter, names, all, indices, dedupConfig, keepDeleted, targetCodec).prune();
     }
 
     @Command(name = "cp", description = "Copies the Repo into a new one with a new path, keeping all the entries from the original. The original is unmodified")
@@ -76,7 +118,7 @@ public class RepoCommand {
             @Parameters(description = "Path of the new repo") String path) {
         initDefaultConfig();
 
-        return (new CopyRepoProcess(cliParameter, sourceRepo, destinationRepo, path, dedupConfig).copy());
+        return new CopyRepoProcess(cliParameter, sourceRepo, destinationRepo, path, dedupConfig).copy();
     }
 
     @Command(name = "rel", description = "Relocates the path of a Repo. The entries remain unchanged.")
@@ -85,7 +127,7 @@ public class RepoCommand {
             @Parameters(description = "The relocated path") String path) {
         initDefaultConfig();
 
-        return (new RelocateRepoProcess(cliParameter, repo, path, dedupConfig).move());
+        return new RelocateRepoProcess(cliParameter, repo, path, dedupConfig).move();
     }
 
     @Command(name = "mv", description = "Moves the repos to a new Repo. The entries remain unchanged.")
@@ -94,7 +136,7 @@ public class RepoCommand {
             @Parameters(description = "Target Repo") String destinationRepo) {
         initDefaultConfig();
 
-        return (new MoveRepoProcess(cliParameter, sourceRepo, destinationRepo, dedupConfig).move());
+        return new MoveRepoProcess(cliParameter, sourceRepo, destinationRepo, dedupConfig).move();
     }
 
     @Command(name = "dupes", description = "Manage duplicates in one or more repos.")
@@ -103,7 +145,7 @@ public class RepoCommand {
             @Option(names = {"-a", "--all"}, description = "All repos") boolean all) {
         initDefaultConfig();
 
-        return (new DuplicateRepoProcess(cliParameter, names, all, dedupConfig, infrastructureConfig.getRepoFileCodec()).dupes());
+        return new DuplicateRepoProcess(cliParameter, names, all, dedupConfig).dupes();
     }
 
 

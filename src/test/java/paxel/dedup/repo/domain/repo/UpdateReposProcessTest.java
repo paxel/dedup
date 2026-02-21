@@ -6,10 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
-import paxel.dedup.infrastructure.adapter.out.serialization.JacksonLineCodec;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
@@ -60,7 +58,6 @@ class UpdateReposProcessTest {
                 false,
                 1,
                 dedupConfig,
-           new JacksonLineCodec<>( objectMapper,RepoFile.class),
                 false
         );
 
@@ -72,11 +69,11 @@ class UpdateReposProcessTest {
 
         // Assert
         assertThat(exitCode).isEqualTo(0);
-        
+
         // Verify index was created
         Path indexPath = configRepoDir.resolve("0.idx");
         assertThat(indexPath).exists();
-        
+
         List<String> lines = Files.readAllLines(indexPath);
         assertThat(lines).hasSize(1);
         assertThat(lines.getFirst()).contains("file1.txt");

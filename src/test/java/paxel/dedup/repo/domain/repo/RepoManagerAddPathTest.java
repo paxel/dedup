@@ -11,8 +11,8 @@ import paxel.dedup.domain.model.errors.LoadError;
 import paxel.dedup.domain.model.errors.WriteError;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
+import paxel.dedup.infrastructure.adapter.out.serialization.JsonLineCodec;
 import paxel.dedup.infrastructure.config.DedupConfig;
-import paxel.dedup.infrastructure.adapter.out.serialization.JacksonLineCodec;
 import paxel.lib.Result;
 
 import java.nio.file.Files;
@@ -29,14 +29,45 @@ class RepoManagerAddPathTest {
 
     static class StubDedupConfig implements DedupConfig {
         private final Path repoDir;
-        StubDedupConfig(Path repoDir) { this.repoDir = repoDir; }
-        @Override public Result<List<Repo>, paxel.dedup.domain.model.errors.OpenRepoError> getRepos() { return Result.ok(List.of()); }
-        @Override public Result<Repo, paxel.dedup.domain.model.errors.OpenRepoError> getRepo(String name) { return Result.err(null); }
-        @Override public Result<Repo, paxel.dedup.domain.model.errors.CreateRepoError> createRepo(String name, Path path, int indices) { return Result.err(null); }
-        @Override public Result<Repo, paxel.dedup.domain.model.errors.ModifyRepoError> changePath(String name, Path path) { return Result.err(null); }
-        @Override public Result<Boolean, paxel.dedup.domain.model.errors.DeleteRepoError> deleteRepo(String name) { return Result.ok(false); }
-        @Override public Path getRepoDir() { return repoDir; }
-        @Override public Result<Boolean, paxel.dedup.domain.model.errors.RenameRepoError> renameRepo(String oldName, String newName) { return Result.ok(false); }
+
+        StubDedupConfig(Path repoDir) {
+            this.repoDir = repoDir;
+        }
+
+        @Override
+        public Result<List<Repo>, paxel.dedup.domain.model.errors.OpenRepoError> getRepos() {
+            return Result.ok(List.of());
+        }
+
+        @Override
+        public Result<Repo, paxel.dedup.domain.model.errors.OpenRepoError> getRepo(String name) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Repo, paxel.dedup.domain.model.errors.CreateRepoError> createRepo(String name, Path path, int indices) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Repo, paxel.dedup.domain.model.errors.ModifyRepoError> changePath(String name, Path path) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Boolean, paxel.dedup.domain.model.errors.DeleteRepoError> deleteRepo(String name) {
+            return Result.ok(false);
+        }
+
+        @Override
+        public Path getRepoDir() {
+            return repoDir;
+        }
+
+        @Override
+        public Result<Boolean, paxel.dedup.domain.model.errors.RenameRepoError> renameRepo(String oldName, String newName) {
+            return Result.ok(false);
+        }
     }
 
     @Test
@@ -54,7 +85,7 @@ class RepoManagerAddPathTest {
         DedupConfig cfg = new StubDedupConfig(configRoot);
         ObjectMapper mapper = new ObjectMapper();
         FileSystem fs = new NioFileSystemAdapter();
-        RepoManager repoManager = new RepoManager(repo, cfg, new JacksonLineCodec<>(mapper, RepoFile.class), fs);
+        RepoManager repoManager = new RepoManager(repo, cfg, new JsonLineCodec<>(mapper, RepoFile.class), fs);
 
         // Load will create 0.idx and 1.idx
         Result<Statistics, LoadError> load = repoManager.load();
@@ -62,10 +93,14 @@ class RepoManagerAddPathTest {
 
         // Stub FileHasher returns a constant hash immediately
         paxel.dedup.domain.model.FileHasher hasher = new paxel.dedup.domain.model.FileHasher() {
-            @Override public CompletableFuture<Result<String, LoadError>> hash(Path path) {
+            @Override
+            public CompletableFuture<Result<String, LoadError>> hash(Path path) {
                 return CompletableFuture.completedFuture(Result.ok("HASH-SMALL"));
             }
-            @Override public void close() { }
+
+            @Override
+            public void close() {
+            }
         };
 
         // Act

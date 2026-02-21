@@ -6,7 +6,6 @@ import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.errors.*;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
-import paxel.dedup.infrastructure.adapter.out.serialization.JacksonLineCodec;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -21,13 +20,40 @@ class PruneReposProcessTest {
         Result<List<Repo>, OpenRepoError> reposResult = Result.ok(List.of());
         Result<Repo, OpenRepoError> repoByName = Result.err(null);
 
-        @Override public Result<List<Repo>, OpenRepoError> getRepos() { return reposResult; }
-        @Override public Result<Repo, OpenRepoError> getRepo(String name) { return repoByName; }
-        @Override public Result<Repo, CreateRepoError> createRepo(String name, Path path, int indices) { return Result.err(null); }
-        @Override public Result<Repo, ModifyRepoError> changePath(String name, Path path) { return Result.err(null); }
-        @Override public Result<Boolean, DeleteRepoError> deleteRepo(String name) { return Result.ok(false); }
-        @Override public Path getRepoDir() { return Path.of("/tmp/config"); }
-        @Override public Result<Boolean, RenameRepoError> renameRepo(String oldName, String newName) { return Result.ok(false); }
+        @Override
+        public Result<List<Repo>, OpenRepoError> getRepos() {
+            return reposResult;
+        }
+
+        @Override
+        public Result<Repo, OpenRepoError> getRepo(String name) {
+            return repoByName;
+        }
+
+        @Override
+        public Result<Repo, CreateRepoError> createRepo(String name, Path path, int indices) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Repo, ModifyRepoError> changePath(String name, Path path) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Boolean, DeleteRepoError> deleteRepo(String name) {
+            return Result.ok(false);
+        }
+
+        @Override
+        public Path getRepoDir() {
+            return Path.of("/tmp/config");
+        }
+
+        @Override
+        public Result<Boolean, RenameRepoError> renameRepo(String oldName, String newName) {
+            return Result.ok(false);
+        }
     }
 
     @Test
@@ -41,7 +67,7 @@ class PruneReposProcessTest {
         cfg.reposResult = Result.err(OpenRepoError.ioError(errPath, ioEx));
 
         // Act
-        int code = new PruneReposProcess(cli, List.of(), true, 2, cfg, new JacksonLineCodec<>(new com.fasterxml.jackson.databind.ObjectMapper(), paxel.dedup.domain.model.RepoFile.class)).prune();
+        int code = new PruneReposProcess(cli, List.of(), true, 2, cfg, false, null).prune();
 
         // Assert
         assertThat(code).isEqualTo(-30);
@@ -56,7 +82,7 @@ class PruneReposProcessTest {
         cfg.repoByName = Result.err(OpenRepoError.ioError(Path.of("/x"), new IOException("nf")));
 
         // Act
-        int code = new PruneReposProcess(cli, new ArrayList<>(List.of("missing1", "missing2")), false, 2, cfg, new JacksonLineCodec<>(new com.fasterxml.jackson.databind.ObjectMapper(), paxel.dedup.domain.model.RepoFile.class)).prune();
+        int code = new PruneReposProcess(cli, new ArrayList<>(List.of("missing1", "missing2")), false, 2, cfg, false, null).prune();
 
         // Assert
         assertThat(code).isEqualTo(0);

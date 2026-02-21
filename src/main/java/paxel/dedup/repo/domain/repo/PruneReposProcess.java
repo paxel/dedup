@@ -1,14 +1,14 @@
 package paxel.dedup.repo.domain.repo;
+
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.time.DurationFormatUtils;
-import paxel.dedup.infrastructure.config.DedupConfig;
+import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
 import paxel.dedup.domain.model.errors.*;
-import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
-import paxel.dedup.domain.port.out.LineCodec;
+import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -22,7 +22,8 @@ public class PruneReposProcess {
     private final boolean all;
     private final int indices;
     private final DedupConfig dedupConfig;
-    private final LineCodec<RepoFile> repoFileCodec;
+    private final boolean keepDeleted;
+    private final Repo.Codec targetCodec;
 
     public int prune() {
         if (all) {
@@ -62,7 +63,7 @@ public class PruneReposProcess {
             System.out.println("Pruning " + repo.name());
         }
 
-        Result<Statistics, UpdateRepoError> result = pruneRepo(new RepoManager(repo, dedupConfig, repoFileCodec, new NioFileSystemAdapter()), indices);
+        Result<Statistics, UpdateRepoError> result = pruneRepo(RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter()), indices);
 
         if (result.hasFailed()) {
             System.err.println("Could not prune " + repo.name() + " " + result.error());
@@ -85,6 +86,10 @@ public class PruneReposProcess {
         Result<Repo, CreateRepoError> repo = dedupConfig.createRepo(newName, Paths.get(oldRepo.absolutePath()), indices);
         // Stream existing files into the repo
         if (repo.isSuccess()) {
+            if (targetCodec != null) {
+                // Set codec on the temp repo before we start writing
+                dedupConfig.setCodec(newName, targetCodec);
+            }
             Result<Statistics, UpdateRepoError> loadNew = streamRepo(repoManager, statistics, repo.value());
             if (loadNew.hasFailed())
                 return loadNew;
@@ -118,12 +123,12 @@ public class PruneReposProcess {
     }
 
     private Result<Statistics, UpdateRepoError> streamRepo(RepoManager repoManager, Statistics statistics, Repo newRepo) {
-        RepoManager temp = new RepoManager(newRepo, dedupConfig, repoFileCodec, new NioFileSystemAdapter());
+        RepoManager temp = RepoManager.forRepo(newRepo, dedupConfig, new NioFileSystemAdapter());
         Result<Statistics, LoadError> loadNew = temp.load();
         if (loadNew.hasFailed()) {
             return loadNew.mapError(f -> UpdateRepoError.ioException(repoManager.getRepoDir(), loadNew.error().ioException()));
         }
-        repoManager.stream().filter(f -> !f.missing()).forEach(repoFile -> {
+        repoManager.stream().filter(f -> keepDeleted || !f.missing()).forEach(repoFile -> {
             Result<RepoFile, WriteError> result = temp.addRepoFile(repoFile);
             if (result.isSuccess()) {
                 if (result.value() != null)

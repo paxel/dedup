@@ -1,14 +1,14 @@
 package paxel.dedup.repo.domain.repo;
+
 import lombok.RequiredArgsConstructor;
-import paxel.dedup.infrastructure.config.DedupConfig;
+import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
 import paxel.dedup.domain.model.errors.LoadError;
 import paxel.dedup.domain.model.errors.OpenRepoError;
-import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
-import paxel.dedup.domain.port.out.LineCodec;
+import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
 import java.util.*;
@@ -19,7 +19,6 @@ public class DuplicateRepoProcess {
     private final List<String> names;
     private final boolean all;
     private final DedupConfig dedupConfig;
-    private final LineCodec<RepoFile> repoFileCodec;
 
 
     public int dupes() {
@@ -46,7 +45,7 @@ public class DuplicateRepoProcess {
         Map<UniqueHash, List<RepoRepoFile>> all = new HashMap<>();
 
         for (Repo repo : repos) {
-            RepoManager r = new RepoManager(repo, dedupConfig, repoFileCodec, new NioFileSystemAdapter());
+            RepoManager r = RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter());
             Result<Statistics, LoadError> load = r.load();
             if (load.hasFailed()) {
                 return -81;
@@ -69,7 +68,7 @@ public class DuplicateRepoProcess {
         for (List<RepoRepoFile> repoRepoFiles : list) {
             System.out.printf("%s%n %d bytes%n", repoRepoFiles.getFirst().file.hash(), repoRepoFiles.getFirst().file.size());
             repoRepoFiles.stream().sorted(Comparator.comparing(f -> f.file().lastModified()))
-                    .forEach(repoRepoFile -> System.out.printf("  %s%n   %s/%s%n",repoRepoFile.repo.name(), repoRepoFile.repo.absolutePath(), repoRepoFile.file.relativePath()));
+                    .forEach(repoRepoFile -> System.out.printf("  %s%n   %s/%s%n", repoRepoFile.repo.name(), repoRepoFile.repo.absolutePath(), repoRepoFile.file.relativePath()));
         }
     }
 

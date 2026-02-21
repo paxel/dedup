@@ -1,19 +1,17 @@
 package paxel.dedup.repo.domain.repo;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
-import paxel.dedup.infrastructure.config.DedupConfig;
-import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.RepoFile;
-import paxel.dedup.domain.model.Statistics;
+import paxel.dedup.domain.model.*;
 import paxel.dedup.domain.model.errors.CloseError;
 import paxel.dedup.domain.model.errors.IoError;
 import paxel.dedup.domain.model.errors.LoadError;
 import paxel.dedup.domain.model.errors.WriteError;
-import paxel.dedup.domain.model.BinaryFormatter;
-import paxel.dedup.domain.model.FileHasher;
-import paxel.dedup.domain.model.HexFormatter;
-import paxel.dedup.domain.model.MimetypeProvider;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.domain.port.out.LineCodec;
+import paxel.dedup.infrastructure.adapter.out.serialization.JsonLineCodec;
+import paxel.dedup.infrastructure.adapter.out.serialization.MessagePackRepoFileCodec;
+import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -43,6 +41,25 @@ public class RepoManager {
         this.fileSystem = fileSystem;
         this.lineCodec = lineCodec;
         repoDir = dedupConfig.getRepoDir().resolve(repo.name());
+    }
+
+    /**
+     * Factory: open a repo and select its LineCodec once based on {@link Repo#codec()}.
+     * Falls back to JSON if MessagePack implementation is unavailable at runtime.
+     */
+    public static RepoManager forRepo(Repo repo, DedupConfig dedupConfig, FileSystem fileSystem) {
+        LineCodec<RepoFile> codec;
+        if (repo.codec() == Repo.Codec.MESSAGEPACK) {
+            try {
+                codec = new MessagePackRepoFileCodec();
+            } catch (Throwable t) {
+                System.err.println("MessagePack codec unavailable, falling back to JSON for repo '" + repo.name() + "'");
+                codec = new JsonLineCodec<>(new ObjectMapper(), RepoFile.class);
+            }
+        } else {
+            codec = new JsonLineCodec<>(new ObjectMapper(), RepoFile.class);
+        }
+        return new RepoManager(repo, dedupConfig, codec, fileSystem);
     }
 
     private static String nameIndexFile(int index) {

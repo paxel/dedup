@@ -1,12 +1,9 @@
 package paxel.dedup;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.port.out.FileSystem;
-import paxel.dedup.infrastructure.adapter.out.serialization.JacksonLineCodec;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.repo.domain.repo.UpdateReposProcess;
 import paxel.lib.Result;
@@ -28,36 +25,132 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MockedFileProcessingTest {
 
     static class StubFileSystem implements FileSystem {
-        @Override public boolean exists(Path path) { return true; }
-        @Override public Stream<Path> list(Path dir) { return Stream.empty(); }
-        @Override public Stream<Path> walk(Path start) { return Stream.empty(); }
-        @Override public boolean isRegularFile(Path path) { return false; }
-        @Override public boolean isDirectory(Path path) { return true; }
-        @Override public boolean isSymbolicLink(Path path) { return false; }
-        @Override public long size(Path path) { return 0; }
-        @Override public FileTime getLastModifiedTime(Path path) { return FileTime.fromMillis(0); }
-        @Override public InputStream newInputStream(Path path, StandardOpenOption... options) { return null; }
-        @Override public OutputStream newOutputStream(Path path, StandardOpenOption... options) { return null; }
-        @Override public BufferedReader newBufferedReader(Path path) { return new BufferedReader(new StringReader("")); }
-        @Override public byte[] readAllBytes(Path path) { return new byte[0]; }
-        @Override public void write(Path path, byte[] bytes, StandardOpenOption... options) {}
-        @Override public void delete(Path path) {}
-        @Override public boolean deleteIfExists(Path path) { return false; }
-        @Override public void createDirectories(Path path) {}
-        @Override public void copy(Path source, Path target, CopyOption... options) {}
-        @Override public void move(Path source, Path target, CopyOption... options) {}
+        @Override
+        public boolean exists(Path path) {
+            return true;
+        }
+
+        @Override
+        public Stream<Path> list(Path dir) {
+            return Stream.empty();
+        }
+
+        @Override
+        public Stream<Path> walk(Path start) {
+            return Stream.empty();
+        }
+
+        @Override
+        public boolean isRegularFile(Path path) {
+            return false;
+        }
+
+        @Override
+        public boolean isDirectory(Path path) {
+            return true;
+        }
+
+        @Override
+        public boolean isSymbolicLink(Path path) {
+            return false;
+        }
+
+        @Override
+        public long size(Path path) {
+            return 0;
+        }
+
+        @Override
+        public FileTime getLastModifiedTime(Path path) {
+            return FileTime.fromMillis(0);
+        }
+
+        @Override
+        public InputStream newInputStream(Path path, StandardOpenOption... options) {
+            return null;
+        }
+
+        @Override
+        public OutputStream newOutputStream(Path path, StandardOpenOption... options) {
+            return null;
+        }
+
+        @Override
+        public BufferedReader newBufferedReader(Path path) {
+            return new BufferedReader(new StringReader(""));
+        }
+
+        @Override
+        public byte[] readAllBytes(Path path) {
+            return new byte[0];
+        }
+
+        @Override
+        public void write(Path path, byte[] bytes, StandardOpenOption... options) {
+        }
+
+        @Override
+        public void delete(Path path) {
+        }
+
+        @Override
+        public boolean deleteIfExists(Path path) {
+            return false;
+        }
+
+        @Override
+        public void createDirectories(Path path) {
+        }
+
+        @Override
+        public void copy(Path source, Path target, CopyOption... options) {
+        }
+
+        @Override
+        public void move(Path source, Path target, CopyOption... options) {
+        }
     }
 
     static class StubDedupConfig implements DedupConfig {
-        @Override public Result<List<Repo>, paxel.dedup.domain.model.errors.OpenRepoError> getRepos() { 
-            return Result.ok(List.of(new Repo("testRepo", "/mock", 1))); 
+        @Override
+        public Result<List<Repo>, paxel.dedup.domain.model.errors.OpenRepoError> getRepos() {
+            return Result.ok(List.of(new Repo("testRepo", "/mock", 1)));
         }
-        @Override public Result<Repo, paxel.dedup.domain.model.errors.OpenRepoError> getRepo(String name) { return Result.err(null); }
-        @Override public Result<Repo, paxel.dedup.domain.model.errors.CreateRepoError> createRepo(String name, Path path, int indices) { return Result.err(null); }
-        @Override public Result<Repo, paxel.dedup.domain.model.errors.ModifyRepoError> changePath(String name, Path path) { return Result.err(null); }
-        @Override public Result<Boolean, paxel.dedup.domain.model.errors.DeleteRepoError> deleteRepo(String name) { return Result.ok(false); }
-        @Override public Path getRepoDir() { return Paths.get("/mock/config"); }
-        @Override public Result<Boolean, paxel.dedup.domain.model.errors.RenameRepoError> renameRepo(String oldName, String newName) { return Result.ok(false); }
+
+        @Override
+        public Result<Repo, paxel.dedup.domain.model.errors.OpenRepoError> getRepo(String name) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Repo, paxel.dedup.domain.model.errors.CreateRepoError> createRepo(String name, Path path, int indices) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Repo, paxel.dedup.domain.model.errors.ModifyRepoError> changePath(String name, Path path) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Boolean, paxel.dedup.domain.model.errors.DeleteRepoError> deleteRepo(String name) {
+            return Result.ok(false);
+        }
+
+        @Override
+        public Path getRepoDir() {
+            return Paths.get("/mock/config");
+        }
+
+        @Override
+        public Result<Boolean, paxel.dedup.domain.model.errors.RenameRepoError> renameRepo(String oldName, String newName) {
+            return Result.ok(false);
+        }
+
+        @Override
+        public Result<Repo, paxel.dedup.domain.model.errors.ModifyRepoError> setCodec(String name, Repo.Codec codec) {
+            return Result.err(null);
+        }
     }
 
     @Test
@@ -68,7 +161,6 @@ class MockedFileProcessingTest {
                 true, // all
                 1,    // threads
                 new StubDedupConfig(),
-              new JacksonLineCodec<>( new ObjectMapper(),RepoFile.class),
                 false // progress
         );
 

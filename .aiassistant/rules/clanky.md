@@ -18,6 +18,9 @@ This file defines the rules for development and testing in this project. These r
     * `infrastructure`: Contains the concrete implementations (e.g., file system access, configuration).
 * **Domain-Driven Design (DDD):** Use concepts like Aggregates, Entities, and Value Objects where appropriate (see `Repo`, `RepoFile`).
 * **Immutability:** Prefer immutable data structures (e.g., Lombok `@Value`, `@Builder`).
+* **Avoid Primitive Obsession:** Use enums/value objects instead of ad-hoc strings/ints for domain choices (e.g., `Repo.Codec` instead of string codec names). For config map keys, avoid raw string literals; centralize keys using a small enum colocated with the mapping code (no standalone constants/utility classes).
+* **Not Invented Here (NIH):** Prefer proven, well-maintained libraries over custom implementations for standard concerns (e.g., JSON/YAML parsing, serialization, collections, concurrency). Do NOT reimplement parsers/serializers or common utilities when a solid library exists, unless there is a compelling project-specific constraint (document it explicitly).
+* **Keep It Lean:** Avoid introducing unnecessary statistics helpers or generic utility classes; prefer focused, cohesive methods close to where they are used.
 
 ### Error Handling
 * **Result-Pattern:** Use the `Result<Success, Error>` class (from `paxel.lib`) instead of exceptions for expected error states.
@@ -62,6 +65,7 @@ This file defines the rules for development and testing in this project. These r
 ## 3. CLI Development
 * **Picocli:** Use Picocli for defining CLI commands and parameters.
 * **Consistency:** New commands should fit into the existing structure (`repo`, `files`, `diff`).
+* **Maven Sync Reminder:** Whenever `pom.xml` is modified, explicitly remind the user to click "Sync Maven" in the IDE. This reminder must be included in the PR/commit message and in the assistant's response after any `pom.xml` change.
 
 ## 4. Future Extensions
 * (Future rules will be added here)
