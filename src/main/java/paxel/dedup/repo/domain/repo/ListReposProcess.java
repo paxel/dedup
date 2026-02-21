@@ -1,10 +1,11 @@
 package paxel.dedup.repo.domain.repo;
 
 import lombok.RequiredArgsConstructor;
-import paxel.dedup.infrastructure.config.DedupConfig;
+import lombok.extern.slf4j.Slf4j;
+import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.errors.OpenRepoError;
-import paxel.dedup.application.cli.parameter.CliParameter;
+import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -12,6 +13,7 @@ import java.util.Comparator;
 import java.util.List;
 
 @RequiredArgsConstructor
+@Slf4j
 public class ListReposProcess {
 
     private final CliParameter cliParameter;
@@ -23,8 +25,7 @@ public class ListReposProcess {
         if (!getReposResult.isSuccess()) {
             IOException ioException = getReposResult.error().ioException();
             if (ioException != null) {
-                System.err.println(getReposResult.error().path() + " Invalid");
-                ioException.printStackTrace();
+                log.error("{} Invalid", getReposResult.error().path(), ioException);
             }
             return -20;
         }
@@ -37,7 +38,7 @@ public class ListReposProcess {
                         return repo.name() + ": " + repo.absolutePath();
                     }
                 })
-                .forEach(System.out::println);
+                .forEach(line -> log.info("{}", line));
         return 0;
     }
 }

@@ -1,6 +1,7 @@
 package paxel.dedup.repo.domain.diff;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.*;
 import paxel.dedup.domain.model.errors.LoadError;
@@ -20,6 +21,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 @RequiredArgsConstructor
+@Slf4j
 public class DiffProcess {
     private final CliParameter cliParameter;
     private final String source;
@@ -44,16 +46,16 @@ public class DiffProcess {
                 .forEach(r -> {
                     List<RepoFile> byHash = targetRepo.getByHashAndSize(r.hash(), r.size());
                     if (byHash.isEmpty()) {
-                        System.out.println("New: " + r.relativePath());
+                        log.info("New: {}", r.relativePath());
                     } else {
                         Optional<RepoFile> exsting = byHash.stream().filter(repoFile -> !repoFile.missing()).findAny();
                         if (exsting.isPresent()) {
                             // File exists
                             if (cliParameter.isVerbose()) {
-                                System.out.println("Equal: " + r.relativePath() + " = " + exsting.get().relativePath());
+                                log.info("Equal: {} = {}", r.relativePath(), exsting.get().relativePath());
                             }
                         } else {
-                            System.out.println("Deleted in target: " + r.relativePath());
+                            log.info("Deleted in target: {}", r.relativePath());
                         }
                     }
                 });
@@ -88,12 +90,12 @@ public class DiffProcess {
                                 if (move) {
                                     fileSystem.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
                                     if (cliParameter.isVerbose()) {
-                                        System.out.println("Moved " + r.relativePath());
+                                        log.info("Moved {}", r.relativePath());
                                     }
                                 } else {
                                     fileSystem.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
                                     if (cliParameter.isVerbose()) {
-                                        System.out.println("Copied " + r.relativePath());
+                                        log.info("Copied {}", r.relativePath());
                                     }
                                 }
                             } catch (IOException e) {
@@ -102,7 +104,7 @@ public class DiffProcess {
                         }
                     });
         } catch (TunneledIoException e) {
-            System.err.println(e.getMessage() + " " + e.getCause().getClass().getSimpleName());
+            log.error("{} {}", e.getMessage(), e.getCause().getClass().getSimpleName());
             return -200;
         }
         return 0;
@@ -128,7 +130,7 @@ public class DiffProcess {
                             try {
                                 fileSystem.delete(sourceFile);
                                 if (cliParameter.isVerbose()) {
-                                    System.out.println("Deleted " + r.relativePath());
+                                    log.info("Deleted {}", r.relativePath());
                                 }
                             } catch (IOException e) {
                                 throw new TunneledIoException("Could not delete " + sourceFile, e);
@@ -136,7 +138,7 @@ public class DiffProcess {
                         }
                     });
         } catch (TunneledIoException e) {
-            System.err.println(e.getMessage() + " " + e.getCause().getClass().getSimpleName());
+            log.error("{} {}", e.getMessage(), e.getCause().getClass().getSimpleName());
             return -200;
         }
         return 0;
@@ -157,13 +159,13 @@ public class DiffProcess {
     private Result<RepoManager, Integer> openRepo(String name, int errOffset) {
         Result<Repo, OpenRepoError> repo = dedupConfig.getRepo(name);
         if (repo.hasFailed()) {
-            System.err.println("Could not open " + name + " " + repo.error());
+            log.error("Could not open {} {}", name, repo.error());
             return Result.err(errOffset - 1);
         }
         RepoManager repoManager = RepoManager.forRepo(repo.value(), dedupConfig, fileSystem);
         Result<Statistics, LoadError> loadResult = repoManager.load();
         if (loadResult.hasFailed()) {
-            System.err.println("Could not load " + name + " " + loadResult.error());
+            log.error("Could not load {} {}", name, loadResult.error());
             return Result.err(errOffset - 2);
         }
         return Result.ok(repoManager);

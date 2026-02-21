@@ -1,6 +1,7 @@
 package paxel.dedup.repo.domain.files;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.*;
 import paxel.dedup.domain.model.errors.LoadError;
@@ -20,6 +21,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 @RequiredArgsConstructor
+@Slf4j
 public class FilesProcess {
     private final CliParameter cliParameter;
     private final String source;
@@ -45,10 +47,10 @@ public class FilesProcess {
                 .forEach(r -> {
                     String path = Paths.get(r.relativePath()).getParent().toString();
                     if (last.get() == null || !last.get().equals(path)) {
-                        System.out.println(path);
+                        log.info("{}", path);
                         last.set(path);
                     }
-                    System.out.printf("  %-50s %-12s %s%n", Paths.get(r.relativePath()).getFileName().toString(), r.size(), new Date(r.lastModified()));
+                    log.info(String.format("  %-50s %-12s %s", Paths.get(r.relativePath()).getFileName().toString(), r.size(), new Date(r.lastModified())));
                 });
         return 0;
     }
@@ -74,7 +76,7 @@ public class FilesProcess {
 
                     });
         } catch (TunneledIoException e) {
-            System.err.println(e.getMessage() + " " + e.getCause().getClass().getSimpleName());
+            log.error("{} {}", e.getMessage(), e.getCause().getClass().getSimpleName());
             return -213;
         }
         return 0;
@@ -104,12 +106,12 @@ public class FilesProcess {
                             if (move) {
                                 fileSystem.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
                                 if (cliParameter.isVerbose()) {
-                                    System.out.println("Moved " + r.relativePath());
+                                    log.info("Moved {}", r.relativePath());
                                 }
                             } else {
                                 fileSystem.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
                                 if (cliParameter.isVerbose()) {
-                                    System.out.println("Copied " + r.relativePath());
+                                    log.info("Copied {}", r.relativePath());
                                 }
                             }
                         } catch (IOException e) {
@@ -117,7 +119,7 @@ public class FilesProcess {
                         }
                     });
         } catch (TunneledIoException e) {
-            System.err.println(e.getMessage() + " " + e.getCause().getClass().getSimpleName());
+            log.error("{} {}", e.getMessage(), e.getCause().getClass().getSimpleName());
             return -200;
         }
         return 0;
@@ -136,9 +138,9 @@ public class FilesProcess {
                     .map(RepoFile::mimeType)
                     .distinct()
                     .sorted()
-                    .forEach(System.out::println);
+                    .forEach(type -> log.info("{}", type));
         } catch (TunneledIoException e) {
-            System.err.println(e.getMessage() + " " + e.getCause().getClass().getSimpleName());
+            log.error("{} {}", e.getMessage(), e.getCause().getClass().getSimpleName());
             return -213;
         }
         return 0;
@@ -147,13 +149,13 @@ public class FilesProcess {
     private Result<RepoManager, Integer> openRepo(String name) {
         Result<Repo, OpenRepoError> repo = dedupConfig.getRepo(name);
         if (repo.hasFailed()) {
-            System.err.println("Could not open " + name + " " + repo.error());
+            log.error("Could not open {} {}", name, repo.error());
             return Result.err(-121);
         }
         RepoManager repoManager = RepoManager.forRepo(repo.value(), dedupConfig, fileSystem);
         Result<Statistics, LoadError> loadResult = repoManager.load();
         if (loadResult.hasFailed()) {
-            System.err.println("Could not load " + name + " " + loadResult.error());
+            log.error("Could not load {} {}", name, loadResult.error());
             return Result.err(-123);
         }
         return Result.ok(repoManager);

@@ -1,6 +1,7 @@
 package paxel.dedup.repo.domain.repo;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.RepoFile;
@@ -14,6 +15,7 @@ import paxel.lib.Result;
 import java.util.*;
 
 @RequiredArgsConstructor
+@Slf4j
 public class DuplicateRepoProcess {
     private final CliParameter cliParameter;
     private final List<String> names;
@@ -66,9 +68,9 @@ public class DuplicateRepoProcess {
     private static void printDuplicates(Map<UniqueHash, List<RepoRepoFile>> all) {
         List<List<RepoRepoFile>> list = all.entrySet().stream().filter(e -> e.getValue().size() > 1).map(Map.Entry::getValue).toList();
         for (List<RepoRepoFile> repoRepoFiles : list) {
-            System.out.printf("%s%n %d bytes%n", repoRepoFiles.getFirst().file.hash(), repoRepoFiles.getFirst().file.size());
+            log.info(String.format("%s%n %d bytes", repoRepoFiles.getFirst().file.hash(), repoRepoFiles.getFirst().file.size()));
             repoRepoFiles.stream().sorted(Comparator.comparing(f -> f.file().lastModified()))
-                    .forEach(repoRepoFile -> System.out.printf("  %s%n   %s/%s%n", repoRepoFile.repo.name(), repoRepoFile.repo.absolutePath(), repoRepoFile.file.relativePath()));
+                    .forEach(repoRepoFile -> log.info(String.format("  %s%n   %s/%s", repoRepoFile.repo.name(), repoRepoFile.repo.absolutePath(), repoRepoFile.file.relativePath())));
         }
     }
 

@@ -1,6 +1,7 @@
 package paxel.dedup.repo.domain.repo;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.time.DurationFormatUtils;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
@@ -16,6 +17,7 @@ import java.nio.file.Paths;
 import java.util.List;
 
 @RequiredArgsConstructor
+@Slf4j
 public class PruneReposProcess {
     private final CliParameter cliParameter;
     private final List<String> names;
@@ -60,16 +62,16 @@ public class PruneReposProcess {
 
     private void pruneRepo(Repo repo) {
         if (cliParameter.isVerbose()) {
-            System.out.println("Pruning " + repo.name());
+            log.info("Pruning {}", repo.name());
         }
 
         Result<Statistics, UpdateRepoError> result = pruneRepo(RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter()), indices);
 
         if (result.hasFailed()) {
-            System.err.println("Could not prune " + repo.name() + " " + result.error());
+            log.error("Could not prune {} {}", repo.name(), result.error());
         } else if (cliParameter.isVerbose()) {
-            result.value().forCounter((a, b) -> System.out.println(a + ": " + b));
-            result.value().forTimer((a, b) -> System.out.println(a + ": " + DurationFormatUtils.formatDurationWords(b.toMillis(), true, true)));
+            result.value().forCounter((a, b) -> log.info("{}: {}", a, b));
+            result.value().forTimer((a, b) -> log.info("{}: {}", a, DurationFormatUtils.formatDurationWords(b.toMillis(), true, true)));
         }
     }
 
@@ -99,7 +101,7 @@ public class PruneReposProcess {
         if (result.hasFailed())
             return result.mapError(f -> new UpdateRepoError(f.resolve(), f.ioExceptions(), null));
         if (!result.value()) {
-            System.err.println("Could not rename " + name + " to " + name + "_del");
+            log.error("Could not rename {} to {}", name, name + "_del");
             return Result.err(UpdateRepoError.description("Could not rename repo from " + name + " to " + name + "_del"));
         }
         // rename new repo
@@ -107,7 +109,7 @@ public class PruneReposProcess {
         if (otherResult.hasFailed())
             return otherResult.mapError(f -> new UpdateRepoError(f.resolve(), f.ioExceptions(), null));
         if (!otherResult.value()) {
-            System.err.println("Could not rename " + newName + " to " + name);
+            log.error("Could not rename {} to {}", newName, name);
             return Result.err(UpdateRepoError.description("Could not rename repo from " + newName + " to " + name));
         }
         //delete old repo
@@ -115,7 +117,7 @@ public class PruneReposProcess {
         if (deleteResult.hasFailed())
             return result.mapError(f -> new UpdateRepoError(f.resolve(), f.ioExceptions(), null));
         if (!deleteResult.value()) {
-            System.err.println("Could not delete " + name + "_del");
+            log.error("Could not delete {}", name + "_del");
             return Result.err(UpdateRepoError.description("Could not delete " + name + "_del"));
         }
 

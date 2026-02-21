@@ -2,6 +2,7 @@ package paxel.dedup.application.cli.parameter;
 
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.infrastructure.config.InfrastructureConfig;
@@ -16,6 +17,7 @@ import java.util.List;
 @Command(name = "repo", description = "manipulates repos")
 @RequiredArgsConstructor
 @NoArgsConstructor(force = true)
+@Slf4j
 public class RepoCommand {
 
     @CommandLine.ParentCommand
@@ -41,18 +43,16 @@ public class RepoCommand {
                 default -> null;
             };
             if (target == null) {
-                System.err.println("Unknown codec '" + codec + "'. Supported: json, messagepack. Falling back to default (messagepack on write).");
+                log.warn("Unknown codec '{}' . Supported: json, messagepack. Falling back to default (messagepack on write).", codec);
             } else {
                 try {
                     dedupConfig.setCodec(name, target);
                 } catch (Exception e) {
                     if (strict) {
-                        System.err.println("Failed to persist codec selection: " + e.getMessage());
+                        log.error("Failed to persist codec selection: {}", e.getMessage(), e);
                         return -11;
                     }
-                    if (cliParameter.isVerbose()) {
-                        e.printStackTrace();
-                    }
+                    log.debug("Failed to persist codec selection (non-strict mode)", e);
                 }
             }
         }
@@ -102,7 +102,7 @@ public class RepoCommand {
                 case "json" -> Repo.Codec.JSON;
                 case "messagepack" -> Repo.Codec.MESSAGEPACK;
                 default -> {
-                    System.err.println("Unknown codec '" + changeCodec + "'. Supported: json, messagepack");
+                    log.warn("Unknown codec '{}' . Supported: json, messagepack", changeCodec);
                     yield null;
                 }
             };

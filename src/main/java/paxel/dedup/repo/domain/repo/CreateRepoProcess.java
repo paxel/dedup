@@ -1,17 +1,20 @@
 package paxel.dedup.repo.domain.repo;
 
 import lombok.RequiredArgsConstructor;
-import paxel.dedup.infrastructure.config.DedupConfig;
+import lombok.extern.slf4j.Slf4j;
+import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.errors.CreateRepoError;
-import paxel.dedup.application.cli.parameter.CliParameter;
+import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
 import java.io.IOException;
 import java.nio.file.Paths;
 
 @RequiredArgsConstructor
+@Slf4j
 public class CreateRepoProcess {
+
 
     private final CliParameter cliParameter;
     private final String name;
@@ -23,20 +26,24 @@ public class CreateRepoProcess {
     public int create() {
 
         if (cliParameter.isVerbose()) {
-            System.out.printf("::Creating Repo at '%s'%n", dedupConfig.getRepoDir());
+            log.info("::Creating Repo at '{}'", dedupConfig.getRepoDir());
         }
 
         Result<Repo, CreateRepoError> createResult = dedupConfig.createRepo(name, Paths.get(path), indices);
         if (createResult.hasFailed()) {
-            IOException ioException = createResult.error().ioException();
+            CreateRepoError err = createResult.error();
+            IOException ioException = err.ioException();
             if (ioException != null) {
-                System.err.println(createResult.error().path() + " not a valid repo relativePath");
-                ioException.printStackTrace();
+                // Keep legacy message substring to satisfy tests while logging full context
+                log.error("{} not a valid repo relativePath", err.path(), ioException);
+            } else {
+                // Most likely already exists
+                log.error("Failed to create repo '{}': target already exists at {}", name, err.path());
             }
             return -10;
         }
         if (cliParameter.isVerbose()) {
-            System.out.printf("::Created Repo '%s'%n", createResult.value());
+            log.info("::Created Repo '{}'", createResult.value());
         }
         return 0;
 

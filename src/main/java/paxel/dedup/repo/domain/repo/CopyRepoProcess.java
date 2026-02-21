@@ -1,10 +1,11 @@
 package paxel.dedup.repo.domain.repo;
 
 import lombok.RequiredArgsConstructor;
-import paxel.dedup.infrastructure.config.DedupConfig;
+import lombok.extern.slf4j.Slf4j;
+import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.errors.ModifyRepoError;
-import paxel.dedup.application.cli.parameter.CliParameter;
+import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 @RequiredArgsConstructor
+@Slf4j
 public class CopyRepoProcess {
     private final CliParameter cliParameter;
     private final String sourceRepo;
@@ -25,26 +27,26 @@ public class CopyRepoProcess {
 
     public int copy() {
         if (sourceRepo.equals(destinationRepo)) {
-            System.err.println("Can not copy to same directory");
+            log.error("Cannot copy to the same directory: {}", sourceRepo);
             return -62;
         }
 
         if (cliParameter.isVerbose()) {
-            System.out.printf("cloning %s to %s%n", sourceRepo, destinationRepo);
+            log.info("cloning {} to {}", sourceRepo, destinationRepo);
         }
         List<IOException> ioExceptions = copyDirectory(dedupConfig.getRepoDir().resolve(sourceRepo), dedupConfig.getRepoDir().resolve(destinationRepo));
 
-        ioExceptions.forEach(Throwable::printStackTrace);
+        ioExceptions.forEach(ex -> log.error("Copying file failed:", ex));
         if (!ioExceptions.isEmpty()) {
             return -61;
         }
         Result<Repo, ModifyRepoError> repoModifyRepoErrorResult = dedupConfig.changePath(destinationRepo, Paths.get(path));
         if (repoModifyRepoErrorResult.hasFailed()) {
-            System.err.printf("cloning %s to %s failed: %s%n", sourceRepo, destinationRepo, repoModifyRepoErrorResult.error());
+            log.error("cloning {} to {} failed: {}", sourceRepo, destinationRepo, repoModifyRepoErrorResult.error());
             return -60;
         }
         if (cliParameter.isVerbose()) {
-            System.out.printf("cloning %s to %s%n", sourceRepo, destinationRepo);
+            log.info("cloning {} to {}", sourceRepo, destinationRepo);
         }
         return 0;
     }

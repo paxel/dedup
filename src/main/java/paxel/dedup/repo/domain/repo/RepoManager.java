@@ -2,6 +2,7 @@ package paxel.dedup.repo.domain.repo;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.domain.model.*;
 import paxel.dedup.domain.model.errors.CloseError;
 import paxel.dedup.domain.model.errors.IoError;
@@ -25,6 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+@Slf4j
 public class RepoManager {
     @Getter
     private final Repo repo;
@@ -53,7 +55,7 @@ public class RepoManager {
             try {
                 codec = new MessagePackRepoFileCodec();
             } catch (Throwable t) {
-                System.err.println("MessagePack codec unavailable, falling back to JSON for repo '" + repo.name() + "'");
+                log.warn("MessagePack codec unavailable, falling back to JSON for repo '{}'", repo.name(), t);
                 codec = new JsonLineCodec<>(new ObjectMapper(), RepoFile.class);
             }
         } else {
