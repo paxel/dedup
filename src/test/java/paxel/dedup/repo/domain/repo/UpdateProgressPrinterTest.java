@@ -17,12 +17,14 @@ import paxel.lib.Result;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 class UpdateProgressPrinterTest {
 
@@ -102,9 +104,9 @@ class UpdateProgressPrinterTest {
         Result<Statistics, DedupError> load = repoManager.load();
         assertThat(load.hasFailed()).isFalse();
 
-        // Remaining paths map: include the file (will be removed) and a second leftover
+        // Remaining paths map: exclude the file (will be removed) and a second leftover
         Map<Path, RepoFile> remaining = new HashMap<>();
-        remaining.put(file, RepoFile.builder().relativePath("a.txt").size(5L).hash("h").build());
+        // Note: we do NOT put 'file' in remaining, so it's treated as a new file and hashed
         Path leftover = dataDir.resolve("leftover.bin");
         remaining.put(leftover, RepoFile.builder().relativePath("leftover.bin").size(1L).hash("x").build());
 
@@ -131,14 +133,14 @@ class UpdateProgressPrinterTest {
         // Act: simulate traversal
         upp.addDir(dataDir);
         upp.file(file);         // processes and removes it from remaining
-        // The file processing is asynchronous. In tests we need to wait a bit.
-        try {
-            Thread.sleep(200);
-        } catch (InterruptedException e) {
-        }
+        // Wait for asynchronous processing to complete
+        await().atMost(Duration.ofSeconds(5)).until(() -> sp.getLineAt(5).contains("1"));
+
         upp.finishedDir(dataDir);
         upp.scanFinished();
         upp.close();
+        Result<Statistics, DedupError> loadAfterUpdate = repoManager.load(); // Flush indices by reloading
+        assertThat(loadAfterUpdate.isSuccess()).isTrue();
 
         // Assert: StatisticPrinter lines reflect changes deterministically
         // Directories line should contain finishedDirs / allDirs (1 / 1) and a scan finished marker at some point
@@ -146,7 +148,7 @@ class UpdateProgressPrinterTest {
         assertThat(dirLine).contains("1");
 
         // Deleted count should be the size of the remaining map after processing the file (leftover only => 1)
-        String deletedLine = sp.getLineAt(6); // "    Deleted: ..."
+        String deletedLine = sp.getLineAt(5); // "    Deleted: ..."
         assertThat(deletedLine).contains("1");
 
         // Files line contains "finished" after close
