@@ -7,7 +7,8 @@ apply: always
 This file defines the rules for development and testing in this project. These rules should be considered and extended in future changes.
 
 ## 0. General Rules
-* **Language:** All texts in the project (code, comments, documentation, CLI output) must be in English.
+* **Language:** All texts in the project (code, comments, documentation, CLI output) must be in English. No German comments.
+* **Modern Java:** Always use modern Java (21+) language features and APIs.
 
 ## 1. Coding Rules
 
