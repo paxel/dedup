@@ -2,11 +2,11 @@ package paxel.dedup.application.cli.parameter;
 
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.infrastructure.config.InfrastructureConfig;
+import paxel.dedup.infrastructure.logging.ConsoleLogger;
 import paxel.dedup.repo.domain.repo.*;
 import paxel.lib.Result;
 import picocli.CommandLine;
@@ -19,8 +19,8 @@ import java.util.List;
 @Command(name = "repo", description = "manipulates repos")
 @RequiredArgsConstructor
 @NoArgsConstructor(force = true)
-@Slf4j
 public class RepoCommand {
+    private static final ConsoleLogger log = ConsoleLogger.getInstance();
 
     @CommandLine.ParentCommand
     CliParameter cliParameter;

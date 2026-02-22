@@ -2,7 +2,6 @@ package paxel.dedup.repo.domain.repo;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.domain.model.*;
 import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.domain.model.errors.ErrorType;
@@ -11,6 +10,7 @@ import paxel.dedup.domain.port.out.LineCodec;
 import paxel.dedup.infrastructure.adapter.out.serialization.JsonLineCodec;
 import paxel.dedup.infrastructure.adapter.out.serialization.MessagePackRepoFileCodec;
 import paxel.dedup.infrastructure.config.DedupConfig;
+import paxel.dedup.infrastructure.logging.ConsoleLogger;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -24,8 +24,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
-@Slf4j
 public class RepoManager {
+    private static final ConsoleLogger log = ConsoleLogger.getInstance();
     @Getter
     private final Repo repo;
     private final Map<Integer, IndexManager> indices = new ConcurrentHashMap<>();

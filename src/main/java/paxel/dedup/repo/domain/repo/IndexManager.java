@@ -1,7 +1,6 @@
 package paxel.dedup.repo.domain.repo;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
 import paxel.dedup.domain.model.TunneledIoException;
@@ -9,6 +8,7 @@ import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.domain.model.errors.ErrorType;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.domain.port.out.LineCodec;
+import paxel.dedup.infrastructure.logging.ConsoleLogger;
 import paxel.lib.Result;
 
 import java.io.BufferedOutputStream;
@@ -28,8 +28,8 @@ import java.util.stream.Stream;
 
 
 @RequiredArgsConstructor
-@Slf4j
 public class IndexManager {
+    private static final ConsoleLogger log = ConsoleLogger.getInstance();
     public static final String FILES = "files";
     public static final String MISSING = "missing";
     public static final String DUPLICATES = "duplicates";

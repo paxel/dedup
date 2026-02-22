@@ -12,12 +12,23 @@ public class DedupCli {
     public static void main(String[] args) {
 
         InfrastructureConfig infrastructureConfig = new InfrastructureConfig();
+        CliParameter cliParameter = new CliParameter();
 
-        CommandLine commandLine = new CommandLine(new CliParameter())
+        CommandLine commandLine = new CommandLine(cliParameter)
                 .addSubcommand(new DiffCommand(infrastructureConfig))
                 .addSubcommand(new FilesCommand(infrastructureConfig))
                 .addSubcommand(new RepoCommand(infrastructureConfig));
 
+        CommandLine.ParseResult parseResult = commandLine.parseArgs(args);
+        if (parseResult.isUsageHelpRequested()) {
+            commandLine.usage(System.out);
+            System.exit(0);
+        } else if (parseResult.isVersionHelpRequested()) {
+            commandLine.printVersionHelp(System.out);
+            System.exit(0);
+        }
+
+        paxel.dedup.infrastructure.logging.ConsoleLogger.getInstance().setVerbose(cliParameter.isVerbose());
 
         int exitCode = commandLine.execute(args);
         System.exit(exitCode);
