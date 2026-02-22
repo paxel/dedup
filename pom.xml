@@ -168,13 +168,11 @@
                 <configuration>
                     <imageName>dedup</imageName>
                     <mainClass>paxel.dedup.application.cli.DedupCli</mainClass>
-                    <!-- Use dockerized GraalVM to build native image locally as default config hint -->
-                    <imageBuilder>docker</imageBuilder>
-                    <!-- Community builder image for JDK 21 native-image -->
-                    <builderImage>ghcr.io/graalvm/native-image-community:21</builderImage>
                     <buildArgs>
                         <arg>--no-fallback</arg>
                         <arg>-H:+ReportExceptionStackTraces</arg>
+                        <arg>--initialize-at-run-time=org.slf4j.helpers.SubstituteServiceProvider</arg>
+                        <arg>-H:IncludeResources=logback.xml</arg>
                     </buildArgs>
                 </configuration>
             </plugin>
@@ -217,12 +215,11 @@
                         <configuration>
                             <imageName>dedup</imageName>
                             <mainClass>paxel.dedup.application.cli.DedupCli</mainClass>
-                            <!-- Force containerized build when running with -Pnative -->
-                            <imageBuilder>docker</imageBuilder>
-                            <builderImage>ghcr.io/graalvm/native-image-community:21</builderImage>
                             <buildArgs>
                                 <arg>--no-fallback</arg>
                                 <arg>-H:+ReportExceptionStackTraces</arg>
+                                <arg>--initialize-at-run-time=org.slf4j.helpers.SubstituteServiceProvider</arg>
+                                <arg>-H:IncludeResources=logback.xml</arg>
                             </buildArgs>
                         </configuration>
                         <executions>
