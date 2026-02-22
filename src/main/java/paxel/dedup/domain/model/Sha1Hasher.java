@@ -48,7 +48,8 @@ public class Sha1Hasher implements FileHasher {
     @Override
     public void close() {
         executorService.shutdown();
-        while (!executorService.awaitTermination(1, TimeUnit.HOURS)) {
+        if (!executorService.awaitTermination(1, TimeUnit.HOURS)) {
+            executorService.shutdownNow();
         }
     }
 }

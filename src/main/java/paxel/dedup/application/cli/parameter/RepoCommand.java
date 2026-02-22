@@ -3,6 +3,7 @@ package paxel.dedup.application.cli.parameter;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import paxel.dedup.domain.model.Repo;
+import paxel.dedup.domain.model.errors.DedupConfigErrorHandler;
 import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.infrastructure.config.InfrastructureConfig;
@@ -150,7 +151,12 @@ public class RepoCommand {
         }
 
         List<String> allNames = combine(names, positionalNames);
-        return new PruneReposProcess(cliParameter, allNames, all, indices, dedupConfig, keepDeleted, targetCodec).prune();
+        Result<Integer, DedupError> result = new PruneReposProcess(cliParameter, allNames, all, indices, dedupConfig, keepDeleted, targetCodec).prune();
+        if (result.hasFailed()) {
+            new DedupConfigErrorHandler().dump(result.error());
+            return -30;
+        }
+        return result.value();
     }
 
     @Command(name = "cp", description = "Copies the Repo into a new one with a new path, keeping all the entries from the original. The original is unmodified")
@@ -190,7 +196,12 @@ public class RepoCommand {
         initDefaultConfig();
 
         List<String> allNames = combine(names, positionalNames);
-        return new DuplicateRepoProcess(cliParameter, allNames, all, dedupConfig, threshold).dupes();
+        Result<Integer, DedupError> result = new DuplicateRepoProcess(cliParameter, allNames, all, dedupConfig, threshold).dupes();
+        if (result.hasFailed()) {
+            new DedupConfigErrorHandler().dump(result.error());
+            return -80;
+        }
+        return result.value();
     }
 
 

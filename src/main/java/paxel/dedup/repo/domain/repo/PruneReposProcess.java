@@ -27,12 +27,12 @@ public class PruneReposProcess {
     private final boolean keepDeleted;
     private final Repo.Codec targetCodec;
 
-    public int prune() {
+    public Result<Integer, DedupError> prune() {
         if (all) {
             return pruneAll();
         }
 
-        return pruneByNames();
+        return Result.ok(pruneByNames());
     }
 
     private int pruneByNames() {
@@ -45,17 +45,15 @@ public class PruneReposProcess {
         return 0;
     }
 
-    private int pruneAll() {
+    private Result<Integer, DedupError> pruneAll() {
         Result<List<Repo>, DedupError> lsResult = dedupConfig.getRepos();
         if (lsResult.hasFailed()) {
-            DedupError err = lsResult.error();
-            if (err.exception() != null) err.exception().printStackTrace();
-            return -30;
+            return Result.err(lsResult.error());
         }
         for (Repo repo : lsResult.value()) {
             pruneRepo(repo);
         }
-        return 0;
+        return Result.ok(0);
     }
 
     private void pruneRepo(Repo repo) {

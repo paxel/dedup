@@ -68,10 +68,11 @@ class PruneReposProcessTest {
         cfg.reposResult = Result.err(DedupError.of(ErrorType.OPEN_REPO, errPath + " Invalid", ioEx));
 
         // Act
-        int code = new PruneReposProcess(cli, List.of(), true, 2, cfg, false, null).prune();
+        Result<Integer, DedupError> result = new PruneReposProcess(cli, List.of(), true, 2, cfg, false, null).prune();
 
         // Assert
-        assertThat(code).isEqualTo(-30);
+        assertThat(result.hasFailed()).isTrue();
+        assertThat(result.error().type()).isEqualTo(ErrorType.OPEN_REPO);
     }
 
     @Test
@@ -83,9 +84,10 @@ class PruneReposProcessTest {
         cfg.repoByName = Result.err(DedupError.of(ErrorType.OPEN_REPO, Path.of("/x") + " Invalid", new IOException("nf")));
 
         // Act
-        int code = new PruneReposProcess(cli, new ArrayList<>(List.of("missing1", "missing2")), false, 2, cfg, false, null).prune();
+        Result<Integer, DedupError> result = new PruneReposProcess(cli, new ArrayList<>(List.of("missing1", "missing2")), false, 2, cfg, false, null).prune();
 
         // Assert
-        assertThat(code).isEqualTo(0);
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.value()).isEqualTo(0);
     }
 }

@@ -28,13 +28,13 @@ public class DuplicateRepoProcess {
         this(cliParameter, names, all, dedupConfig, threshold, new NioFileSystemAdapter());
     }
 
-    public int dupes() {
+    public Result<Integer, DedupError> dupes() {
         if (all) {
             Result<List<Repo>, DedupError> repos = dedupConfig.getRepos();
             if (repos.hasFailed()) {
-                return -80;
+                return Result.err(repos.error());
             }
-            return dupe(repos.value());
+            return Result.ok(dupe(repos.value()));
         }
         List<Repo> repos = new ArrayList<>();
         for (String name : names) {
@@ -43,8 +43,7 @@ public class DuplicateRepoProcess {
                 repos.add(repoResult.value());
             }
         }
-        dupe(repos);
-        return 0;
+        return Result.ok(dupe(repos));
     }
 
     private int dupe(List<Repo> repos) {
@@ -58,8 +57,6 @@ public class DuplicateRepoProcess {
             RepoManager r = RepoManager.forRepo(repo, dedupConfig, fileSystem);
             Result<Statistics, DedupError> load = r.load();
             if (load.hasFailed()) {
-                log.error("Failed to load repo {}: {}", repo.name(), load.error().describe());
-                if (load.error().exception() != null) load.error().exception().printStackTrace();
                 return -81;
             }
             r.stream()

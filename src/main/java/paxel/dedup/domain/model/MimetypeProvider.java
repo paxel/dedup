@@ -9,11 +9,11 @@ import java.io.IOException;
 import java.nio.file.Path;
 
 public class MimetypeProvider {
+    private static final Tika TIKA = new Tika();
 
     public Result<String, DedupError> get(Path file) {
         try {
-            Tika tika = new Tika();
-            return Result.ok(tika.detect(file));
+            return Result.ok(TIKA.detect(file));
         } catch (IOException e) {
             return Result.err(DedupError.of(ErrorType.IO, file + ": mimetype detection failed", e));
         }

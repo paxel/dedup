@@ -181,7 +181,8 @@ class MockedFileProcessingTest {
                 null,
                 new StubFileSystem()
         );
-        int result = process.dupes();
-        assertThat(result).isEqualTo(0);
+        Result<Integer, DedupError> result = process.dupes();
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.value()).isEqualTo(0);
     }
 }

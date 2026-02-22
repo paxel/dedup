@@ -75,6 +75,9 @@ public final class DefaultDedupConfig implements DedupConfig {
 
     @Override
     public @NonNull Result<Repo, DedupError> createRepo(@NonNull String name, @NonNull Path path, int indices) {
+        if (!isValidRepoName(name)) {
+            return Result.err(DedupError.of(ErrorType.CREATE_REPO, "Invalid repo name: " + name + " (only alphanumeric characters allowed)"));
+        }
         Path repoPath = repoRootPath.resolve(name);
         if (fileSystem.exists(repoPath)) {
             return Result.err(DedupError.of(ErrorType.CREATE_REPO, repoPath + " already exists"));
@@ -102,6 +105,13 @@ public final class DefaultDedupConfig implements DedupConfig {
         Path ymlFile = repoRootPath.resolve(name).resolve(DEDUP_REPO_YML);
         return writeRepoFile(name, path, repo.value().indices(), ymlFile)
                 .map(Function.identity(), e -> DedupError.of(ErrorType.MODIFY_REPO, path + " modify failed", e));
+    }
+
+    private boolean isValidRepoName(String name) {
+        if (name == null || name.isBlank()) {
+            return false;
+        }
+        return name.chars().allMatch(c -> Character.isLetterOrDigit(c) || c == '_');
     }
 
     private Result<Repo, DedupError> writeRepoFiles(String name, Path path, int indices, Path ymlFile) {
@@ -200,6 +210,9 @@ public final class DefaultDedupConfig implements DedupConfig {
 
     @Override
     public Result<Boolean, DedupError> renameRepo(String oldName, String newName) {
+        if (!isValidRepoName(newName)) {
+            return Result.err(DedupError.of(ErrorType.RENAME_REPO, "Invalid new repo name: " + newName + " (only alphanumeric characters allowed)"));
+        }
         if (oldName.equals(newName))
             return Result.ok(false);
         Result<Repo, DedupError> repo = getRepo(oldName);

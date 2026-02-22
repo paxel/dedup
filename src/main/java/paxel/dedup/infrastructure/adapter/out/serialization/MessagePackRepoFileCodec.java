@@ -34,6 +34,7 @@ public class MessagePackRepoFileCodec implements LineCodec<RepoFile> {
         long l = 0L;
         boolean d = false;
         String m = null;
+        String f = null;
 
         try (MessageUnpacker un = MessagePack.newDefaultUnpacker(arr)) {
             int mapSize = un.unpackMapHeader();
@@ -49,18 +50,12 @@ public class MessagePackRepoFileCodec implements LineCodec<RepoFile> {
                     case "l" -> l = un.unpackLong();
                     case "d" -> d = un.unpackBoolean();
                     case "m" -> m = unpackNullableStringLocal(un);
+                    case "f" -> f = unpackNullableStringLocal(un);
                     default -> un.skipValue();
                 }
             }
         }
-        return RepoFile.builder()
-                .hash(h)
-                .relativePath(p)
-                .size(s)
-                .lastModified(l)
-                .missing(d)
-                .mimeType(m)
-                .build();
+        return new RepoFile(h, p, s, l, d, m, f);
     }
 
     @Override
@@ -70,6 +65,9 @@ public class MessagePackRepoFileCodec implements LineCodec<RepoFile> {
              MessagePacker pk = MessagePack.newDefaultPacker(outStream)) {
             int fields = 5;
             if (value.mimeType() != null && !value.mimeType().isEmpty()) {
+                fields = fields + 1;
+            }
+            if (value.fingerprint() != null && !value.fingerprint().isEmpty()) {
                 fields = fields + 1;
             }
             pk.packMapHeader(fields);
@@ -88,6 +86,10 @@ public class MessagePackRepoFileCodec implements LineCodec<RepoFile> {
             if (value.mimeType() != null && !value.mimeType().isEmpty()) {
                 pk.packString("m");
                 pk.packString(value.mimeType());
+            }
+            if (value.fingerprint() != null && !value.fingerprint().isEmpty()) {
+                pk.packString("f");
+                pk.packString(value.fingerprint());
             }
             pk.flush();
             out = outStream.toByteArray();

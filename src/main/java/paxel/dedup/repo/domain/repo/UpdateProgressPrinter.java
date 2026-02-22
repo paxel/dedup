@@ -63,6 +63,10 @@ class UpdateProgressPrinter implements FileObserver {
         progressPrinter.setFiles(files.incrementAndGet() + " last: " + absolutePath);
         progressPrinter.setDeleted("" + remainingPaths.size());
 
+        if (!scanFinished.get()) {
+            progressPrinter.setProgress("Scanning... Found " + files.get() + " files and " + allDirs.get() + " directories");
+        }
+
         boolean forceUpdate = false;
         if (refreshFingerprints && existing != null) {
             if (existing.mimeType() != null && existing.mimeType().startsWith("image/")) {
@@ -116,6 +120,9 @@ class UpdateProgressPrinter implements FileObserver {
     public void addDir(Path f) {
         allDirs.incrementAndGet();
         progressPrinter.setDirectories(finishedDirs + " / " + allDirs);
+        if (!scanFinished.get()) {
+            progressPrinter.setProgress("Scanning... Found " + files.get() + " files and " + allDirs.get() + " directories");
+        }
     }
 
     @Override
@@ -128,6 +135,7 @@ class UpdateProgressPrinter implements FileObserver {
     public void scanFinished() {
         scanFinished.set(true);
         progressPrinter.setDirectories(finishedDirs + ". scan finished after " + DurationFormatUtils.formatDurationWords(Duration.between(start, clock.instant()).toMillis(), true, true));
+        progressPrinter.setProgress("Scan finished. Calculating ETA...");
     }
 
     @Override

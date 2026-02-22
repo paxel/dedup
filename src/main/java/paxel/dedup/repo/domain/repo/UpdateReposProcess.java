@@ -62,8 +62,7 @@ public class UpdateReposProcess {
         Map<Path, RepoFile> remainingPaths = repoManager.stream().filter(r -> !r.missing()).collect(Collectors.toMap(r -> Paths.get(repoManager.getRepo().absolutePath(), r.relativePath()), Function.identity(), (old, update) -> update));
         StatisticPrinter progressPrinter = new StatisticPrinter();
         TerminalProgress terminalProgress = prepProgress(progressPrinter);
-        Sha1Hasher sha1Hasher = new Sha1Hasher(new HexFormatter(), Executors.newFixedThreadPool(threads));
-        try {
+        try (Sha1Hasher sha1Hasher = new Sha1Hasher(new HexFormatter(), Executors.newFixedThreadPool(threads))) {
             progressPrinter.set(repoManager.getRepo().name(), repoManager.getRepo().absolutePath());
             progressPrinter.setProgress("...stand by... collecting info");
             Statistics statistics = new Statistics(repoManager.getRepo().absolutePath());
@@ -74,7 +73,6 @@ public class UpdateReposProcess {
             }
             return Result.ok(statistics);
         } finally {
-            sha1Hasher.close();
             terminalProgress.deactivate();
         }
     }
