@@ -21,7 +21,7 @@ Dieser Plan basiert auf einer umfassenden Analyse des Projekts und konzentriert 
 
 ## 4. Konsistente Fehlerbehandlung (Error Handling)
 **Dateien:** `DuplicateRepoProcess.java`, `PruneReposProcess.java`
-**Problem:** Trotz der vorhandenen `Result<T, E>`-Klasse wird an vielen Stellen (z.B. in `dupe` oder `pruneAll`) direkt auf `System.out` geloggt oder `printStackTrace()` verwendet, während ein magischer Integer-Exit-Code zurückgegeben wird. Dies vermischt Domänen-Logik mit Infrastruktur-Details (CLI-Output).
+**Problem:** Trotz der vorhandenen `Result<T, E>`-Klasse wird an vielen Stellen (z.B. in `dupe` oder `pruneAll`) direkt auf `System.out` geloggt oder `printStackTrace()` verwendet, während ein magischer Integer-exit-Code zurückgegeben wird. Dies vermischt Domänen-Logik mit Infrastruktur-Details (CLI-Output).
 **Lösung:** Umstellung aller Kern-Prozesse auf die konsequente Rückgabe von `Result`. Zentrale Behandlung der Fehler in den `Command`-Klassen unter Nutzung des `ConsoleLogger`.
 
 ## 5. Refactoring "Primitive Obsession" & Filter (Bad Code)
@@ -31,5 +31,5 @@ Dieser Plan basiert auf einer umfassenden Analyse des Projekts und konzentriert 
 
 ## 6. Modernisierung des manuellen Codecs (Code Quality)
 **Dateien:** `MessagePackRepoFileCodec.java`, `RepoFile.java`
-**Problem:** Der manuelle Codec für MessagePack wurde eingeführt, um Reflexion zu vermeiden (GraalVM-Kompatibilität). Aktuell fehlt jedoch die Serialisierung für das Feld `fingerprint`, was zu Datenverlust bei Bild-Fingerprints führt.
+**Problem:** Der manuelle Codec für MessagePack wurde eingeführt, um Reflexion zu vermeiden. Aktuell fehlt jedoch die Serialisierung für das Feld `fingerprint`, was zu Datenverlust bei Bild-Fingerprints führt.
 **Lösung:** Ergänzung des `MessagePackRepoFileCodec` um das `fingerprint`-Feld (Key "f"), analog zur JSON-Implementierung.

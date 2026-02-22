@@ -8,15 +8,15 @@ import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.domain.model.errors.ErrorType;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.domain.port.out.LineCodec;
+import paxel.dedup.infrastructure.adapter.out.serialization.FrameIterator;
+import paxel.dedup.infrastructure.adapter.out.serialization.FrameWriter;
 import paxel.dedup.infrastructure.logging.ConsoleLogger;
 import paxel.lib.Result;
 
-import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
@@ -38,13 +38,15 @@ public class IndexManager {
     public static final String CHANGES = "Changes";
 
     private final Map<String, RepoFile> paths = new ConcurrentHashMap<>();
-    private final AtomicReference<BufferedOutputStream> out = new AtomicReference<>();
+    private final AtomicReference<FrameWriter> out = new AtomicReference<>();
     private final Map<String, Set<String>> hashes = new ConcurrentHashMap<>();
 
 
     private final Path indexFile;
     private final LineCodec<RepoFile> lineCodec;
     private final FileSystem fileSystem;
+    private final Function<InputStream, FrameIterator> frameIteratorFactory;
+    private final Function<OutputStream, FrameWriter> frameWriterFactory;
 
     public Stream<RepoFile> stream() {
         return paths.values().stream();
@@ -54,9 +56,9 @@ public class IndexManager {
         // MVP: we load everything to memory
         Statistics statistics = new Statistics(indexFile.toAbsolutePath().toString());
         statistics.start(LOAD);
-        try (BufferedReader bufferedReader = fileSystem.newBufferedReader(indexFile)) {
-            for (; ; ) {
-                String s = bufferedReader.readLine();
+        try (FrameIterator frameIterator = frameIteratorFactory.apply(fileSystem.newInputStream(indexFile))) {
+            while (frameIterator.hasNext()) {
+                ByteBuffer s = frameIterator.next();
                 if (s == null)
                     break;
                 statistics.inc(LINES);
@@ -102,10 +104,9 @@ public class IndexManager {
         }
     }
 
-    private RepoFile readValid(String s) throws IOException {
+    private RepoFile readValid(ByteBuffer s) throws IOException {
         // Interpret the line as UTF-8 JSON bytes and delegate to codec
-        byte[] data = s.getBytes(StandardCharsets.UTF_8);
-        RepoFile repoFile = lineCodec.decode(ByteBuffer.wrap(data));
+        RepoFile repoFile = lineCodec.decode(s);
         if (repoFile.size() == null)
             repoFile = repoFile.withSize(0L);
         if (repoFile.mimeType() == null)
@@ -134,13 +135,12 @@ public class IndexManager {
     public synchronized Result<Void, DedupError> add(RepoFile repoFile) {
         try {
 
-            BufferedOutputStream outputStream = out.updateAndGet(o -> {
+            FrameWriter frameWriter = out.updateAndGet(o -> {
                 if (o != null)
                     return o;
                 else {
                     try {
-                        //        return new BufferedOutputStream(new GZIPOutputStream(Files.newOutputStream(indexFile, StandardOpenOption.APPEND)));
-                        return new BufferedOutputStream(fileSystem.newOutputStream(indexFile, StandardOpenOption.APPEND));
+                        return frameWriterFactory.apply(fileSystem.newOutputStream(indexFile, StandardOpenOption.APPEND));
                     } catch (IOException e) {
                         throw new TunneledIoException(e);
                     }
@@ -148,20 +148,7 @@ public class IndexManager {
             });
 
             ByteBuffer encoded = lineCodec.encode(repoFile);
-            byte[] arr;
-            if (encoded.hasArray()) {
-                int offset = encoded.arrayOffset() + encoded.position();
-                int len = encoded.remaining();
-                arr = new byte[len];
-                System.arraycopy(encoded.array(), offset, arr, 0, len);
-            } else {
-                arr = new byte[encoded.remaining()];
-                encoded.duplicate().get(arr);
-            }
-            // Write the JSON line directly (UTF-8), followed by newline
-            outputStream.write(arr);
-            outputStream.write('\n');
-            outputStream.flush();
+            frameWriter.write(encoded);
 
             // update cache
             hashes.computeIfAbsent(repoFile.hash(), h -> new HashSet<>()).add(repoFile.relativePath());
@@ -181,12 +168,12 @@ public class IndexManager {
     }
 
     public Result<Boolean, DedupError> close() {
-        OutputStream outputStream = out.getAndSet(null);
-        if (outputStream == null) {
+        FrameWriter frameWriter = out.getAndSet(null);
+        if (frameWriter == null) {
             return Result.ok(false);
         }
         try {
-            outputStream.close();
+            frameWriter.close();
             return Result.ok(true);
         } catch (IOException e) {
             return Result.err(DedupError.of(ErrorType.CLOSE, indexFile + ": close failed", e));

@@ -8,7 +8,9 @@ import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
 import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
-import paxel.dedup.infrastructure.adapter.out.serialization.JsonLineCodec;
+import paxel.dedup.infrastructure.adapter.out.serialization.JacksonMapperLineCodec;
+import paxel.dedup.infrastructure.adapter.out.serialization.JsonFrameIterator;
+import paxel.dedup.infrastructure.adapter.out.serialization.JsonFrameWriter;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -32,7 +34,7 @@ class IndexManagerTest {
         indexFile = tempDir.resolve("test.idx");
         objectMapper = new ObjectMapper();
         // Default to real FS for most tests, or we can use the mock
-        indexManager = new IndexManager(indexFile, new JsonLineCodec<>(objectMapper, RepoFile.class), new NioFileSystemAdapter());
+        indexManager = new IndexManager(indexFile, new JacksonMapperLineCodec<>(objectMapper, RepoFile.class), new NioFileSystemAdapter(), JsonFrameIterator::new, JsonFrameWriter::new);
     }
 
     @Test

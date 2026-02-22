@@ -7,11 +7,12 @@ import lombok.With;
 
 
 @Builder
+@With
 public record Repo(
-        @With String name,
-        @With String absolutePath,
-        @With int indices,
-        @With Codec codec
+        String name,
+        String absolutePath,
+        int indices,
+        Codec codec
 ) {
 
     public enum Codec {JSON, MESSAGEPACK}
@@ -25,7 +26,7 @@ public record Repo(
         this.absolutePath = absolutePath;
         this.indices = indices;
         // Backward compatibility: default to JSON when field missing/null
-        this.codec = firstNonNullLocal(codec, Codec.JSON);
+        this.codec = codec != null ? codec : Codec.JSON;
     }
 
     // Backward-compatible convenience constructor used in code/tests
@@ -36,12 +37,5 @@ public record Repo(
     @Override
     public String toString() {
         return name + ": " + absolutePath;
-    }
-
-    private <T> T firstNonNullLocal(T preferred, T fallback) {
-        if (preferred != null) {
-            return preferred;
-        }
-        return fallback;
     }
 }

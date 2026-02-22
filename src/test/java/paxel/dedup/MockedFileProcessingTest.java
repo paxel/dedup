@@ -69,7 +69,7 @@ class MockedFileProcessingTest {
 
         @Override
         public InputStream newInputStream(Path path, StandardOpenOption... options) {
-            return null;
+            return new java.io.ByteArrayInputStream(new byte[0]);
         }
 
         @Override

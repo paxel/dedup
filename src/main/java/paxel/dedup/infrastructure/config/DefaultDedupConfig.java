@@ -59,14 +59,11 @@ public final class DefaultDedupConfig implements DedupConfig {
 
         try {
             byte[] yaml = fileSystem.readAllBytes(resolve);
-            @SuppressWarnings("unchecked")
-            var map = objectMapper.readValue(yaml, java.util.Map.class);
-            String rName = stringOf(map.getOrDefault(RepoYamlKey.NAME.key, name));
-            String absolutePath = stringOf(map.get(RepoYamlKey.ABSOLUTE_PATH.key));
-            int indices = intOf(map.getOrDefault(RepoYamlKey.INDICES.key, 1));
-            Repo.Codec codec = codecOf(stringOf(map.get(RepoYamlKey.CODEC.key))); // defaults to JSON when missing/unknown
-
-            return Result.ok(new Repo(rName, absolutePath, indices, codec));
+            Repo loaded = objectMapper.readValue(yaml, Repo.class);
+            if (loaded.name() == null || loaded.name().isBlank()) {
+                loaded = loaded.withName(name);
+            }
+            return Result.ok(loaded);
         } catch (IOException e) {
             return Result.err(DedupError.of(ErrorType.OPEN_REPO, resolve + " Invalid", e));
         }
@@ -133,12 +130,7 @@ public final class DefaultDedupConfig implements DedupConfig {
     private Result<Repo, IOException> writeRepoFile(String name, Path path, int indices, Path ymlFile) {
         Repo repo = new Repo(name, path.toAbsolutePath().toString(), indices, Repo.Codec.MESSAGEPACK);
         try {
-            java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
-            map.put(RepoYamlKey.NAME.key, repo.name());
-            map.put(RepoYamlKey.ABSOLUTE_PATH.key, repo.absolutePath());
-            map.put(RepoYamlKey.INDICES.key, repo.indices());
-            map.put(RepoYamlKey.CODEC.key, repo.codec().name());
-            fileSystem.write(ymlFile, objectMapper.writeValueAsBytes(map));
+            fileSystem.write(ymlFile, objectMapper.writeValueAsBytes(repo));
         } catch (IOException e) {
             return Result.err(e);
         }
@@ -241,12 +233,7 @@ public final class DefaultDedupConfig implements DedupConfig {
         Path ymlFile = repoRootPath.resolve(name).resolve(DEDUP_REPO_YML);
         try {
             Repo updated = new Repo(name, repo.value().absolutePath(), repo.value().indices(), codec);
-            java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
-            map.put(RepoYamlKey.NAME.key, updated.name());
-            map.put(RepoYamlKey.ABSOLUTE_PATH.key, updated.absolutePath());
-            map.put(RepoYamlKey.INDICES.key, updated.indices());
-            map.put(RepoYamlKey.CODEC.key, updated.codec().name());
-            fileSystem.write(ymlFile, objectMapper.writeValueAsBytes(map));
+            fileSystem.write(ymlFile, objectMapper.writeValueAsBytes(updated));
             return Result.ok(updated);
         } catch (IOException e) {
             return Result.err(DedupError.of(ErrorType.MODIFY_REPO, ymlFile + " write failed", e));
@@ -278,7 +265,7 @@ public final class DefaultDedupConfig implements DedupConfig {
         return "DefaultDedupConfig[" + "repoRootPath=" + repoRootPath + ']';
     }
 
-    // --- helpers for YAML <-> Repo mapping without reflection on records (GraalVM-friendly) ---
+    // --- helpers for YAML <-> Repo mapping without reflection on records ---
     private String stringOf(Object o) {
         if (o == null) {
             return null;

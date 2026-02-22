@@ -7,8 +7,8 @@ import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.domain.model.errors.ErrorType;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.domain.port.out.LineCodec;
-import paxel.dedup.infrastructure.adapter.out.serialization.JsonLineCodec;
-import paxel.dedup.infrastructure.adapter.out.serialization.MessagePackRepoFileCodec;
+import paxel.dedup.infrastructure.adapter.out.serialization.FrameIteratorFactoryFactory;
+import paxel.dedup.infrastructure.adapter.out.serialization.JacksonMapperLineCodec;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.infrastructure.logging.ConsoleLogger;
 import paxel.lib.Result;
@@ -51,13 +51,14 @@ public class RepoManager {
         LineCodec<RepoFile> codec;
         if (repo.codec() == Repo.Codec.MESSAGEPACK) {
             try {
-                codec = new MessagePackRepoFileCodec();
+                ObjectMapper mp = new ObjectMapper(new org.msgpack.jackson.dataformat.MessagePackFactory());
+                codec = new JacksonMapperLineCodec<>(mp, RepoFile.class);
             } catch (Throwable t) {
                 log.warn("MessagePack codec unavailable, falling back to JSON for repo '{}'", repo.name(), t);
-                codec = new JsonLineCodec<>(new ObjectMapper(), RepoFile.class);
+                codec = new JacksonMapperLineCodec<>(new ObjectMapper(), RepoFile.class);
             }
         } else {
-            codec = new JsonLineCodec<>(new ObjectMapper(), RepoFile.class);
+            codec = new JacksonMapperLineCodec<>(new ObjectMapper(), RepoFile.class);
         }
         return new RepoManager(repo, dedupConfig, codec, fileSystem);
     }
@@ -91,7 +92,8 @@ public class RepoManager {
                 return Result.err(DedupError.of(ErrorType.LOAD, indexPath + ": Could not initialize index file", e));
             }
 
-            IndexManager indexManager = new IndexManager(indexPath, lineCodec, fileSystem);
+            FrameIteratorFactoryFactory ffff = new FrameIteratorFactoryFactory();
+            IndexManager indexManager = new IndexManager(indexPath, lineCodec, fileSystem, ffff.forReader(repo.codec()), ffff.forWriter(repo.codec()));
             Result<Statistics, DedupError> load = indexManager.load();
             if (load.hasFailed()) {
                 return load;

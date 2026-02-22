@@ -6,11 +6,11 @@ import paxel.dedup.domain.port.out.LineCodec;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-public class JsonLineCodec<T> implements LineCodec<T> {
+public class JacksonMapperLineCodec<T> implements LineCodec<T> {
     private final ObjectMapper objectMapper;
     private final Class<T> type;
 
-    public JsonLineCodec(ObjectMapper objectMapper, Class<T> type) {
+    public JacksonMapperLineCodec(ObjectMapper objectMapper, Class<T> type) {
         this.objectMapper = objectMapper;
         this.type = type;
     }
