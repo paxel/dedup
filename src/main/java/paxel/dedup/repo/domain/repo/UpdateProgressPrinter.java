@@ -5,10 +5,7 @@ import paxel.dedup.domain.model.*;
 import paxel.dedup.terminal.StatisticPrinter;
 
 import java.nio.file.Path;
-import java.time.Clock;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.ZonedDateTime;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -164,7 +161,7 @@ class UpdateProgressPrinter implements FileObserver {
                     ZonedDateTime eta = ZonedDateTime.now(clock).plus(estimation);
                     progressPrinter.setProgress("%.2f %% estimated remaining duration: %s ETA: %s".formatted((1.0 - remainingPercent) * 100,
                             DurationFormatUtils.formatDurationWords(estimation.toMillis(), true, true),
-                            dateTimeFormatter.format(eta)));
+                            dateTimeFormatter.withZone(ZoneId.systemDefault()).format(eta)));
                 }
             }
         } catch (RuntimeException e) {

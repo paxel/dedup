@@ -179,6 +179,7 @@ class MockedFileProcessingTest {
                 true,
                 new StubDedupConfig(),
                 null,
+                DuplicateRepoProcess.DupePrintMode.PRINT,
                 new StubFileSystem()
         );
         Result<Integer, DedupError> result = process.dupes();

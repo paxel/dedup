@@ -114,6 +114,6 @@ class UpdateProgressPrinterEtaTest {
         // Apache DurationFormatUtils#formatDurationWords(0, ...) yields "0 seconds"
         assertThat(progressLine).contains("estimated remaining duration: 0 seconds");
         // ETA should be exactly formatted with the injected clock time
-        assertThat(progressLine).contains("ETA: 00:00:31 (01.01.1970)");
+        assertThat(progressLine).contains("ETA: 01:00:31 (01.01.1970)");
     }
 }

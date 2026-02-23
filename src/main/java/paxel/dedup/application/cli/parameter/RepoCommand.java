@@ -80,15 +80,14 @@ public class RepoCommand {
 
     @Command(name = "update", description = "Reads all file changes from the path into the Repos DB", mixinStandardHelpOptions = true)
     public int update(
-            @Option(names = {"-R"}, description = "Repos") List<String> names,
-            @Parameters(description = "Repos", arity = "0..*") List<String> positionalNames,
+            @Parameters(description = "Repos", arity = "0..*") List<String> repos,
             @Option(names = {"-t", "--threads"}, description = "Number of threads used for hashing", defaultValue = "2") int threads,
             @Option(names = {"-a", "--all"}, description = "All repos") boolean all,
             @Option(names = {"--no-progress"}, description = "Don't show progress page") boolean noProgress,
             @Option(names = {"--refresh-fingerprints"}, description = "Refresh fingerprints for files that don't have one") boolean refreshFingerprints) {
         initDefaultConfig();
 
-        List<String> allNames = combine(names, positionalNames);
+        List<String> allNames = repos == null ? List.of() : repos;
         return new UpdateReposProcess(cliParameter, allNames, all, threads, dedupConfig,
                 !noProgress, refreshFingerprints).update();
     }
@@ -130,8 +129,7 @@ public class RepoCommand {
 
     @Command(name = "prune", description = "Prunes the DB removing all old versions and deleted files", mixinStandardHelpOptions = true)
     public int prune(
-            @Option(names = {"-R"}, description = "Repos") List<String> names,
-            @Parameters(description = "Repos", arity = "0..*") List<String> positionalNames,
+            @Parameters(description = "Repos", arity = "0..*") List<String> repos,
             @Option(names = {"-a", "--all"}, description = "All repos") boolean all,
             @Option(defaultValue = "10", names = {"--indices", "-i"}, description = "Number of index files") int indices,
             @Option(names = {"--keep-deleted"}, description = "Keep entries marked as deleted (do not drop missing files)") boolean keepDeleted,
@@ -150,7 +148,7 @@ public class RepoCommand {
             };
         }
 
-        List<String> allNames = combine(names, positionalNames);
+        List<String> allNames = repos == null ? List.of() : repos;
         Result<Integer, DedupError> result = new PruneReposProcess(cliParameter, allNames, all, indices, dedupConfig, keepDeleted, targetCodec).prune();
         if (result.hasFailed()) {
             new DedupConfigErrorHandler().dump(result.error());
@@ -189,14 +187,15 @@ public class RepoCommand {
 
     @Command(name = "dupes", description = "Manage duplicates in one or more repos.", mixinStandardHelpOptions = true)
     public int move(
-            @Option(names = {"-R"}, description = "Repos") List<String> names,
-            @Parameters(description = "Repos", arity = "0..*") List<String> positionalNames,
+            @Parameters(description = "Repos", arity = "0..*") List<String> repos,
             @Option(names = {"-a", "--all"}, description = "All repos") boolean all,
-            @Option(names = {"--threshold"}, description = "Threshold for image fingerprint similarity (0-100, default 0 for exact match)") Integer threshold) {
+            @Option(names = {"--threshold"}, description = "Threshold for image fingerprint similarity (0-100, default 0 for exact match)") Integer threshold,
+            @Option(names = {"--print"}, description = "Print duplicate groups to standard out") boolean print) {
         initDefaultConfig();
 
-        List<String> allNames = combine(names, positionalNames);
-        Result<Integer, DedupError> result = new DuplicateRepoProcess(cliParameter, allNames, all, dedupConfig, threshold).dupes();
+        List<String> allNames = repos == null ? List.of() : repos;
+        DuplicateRepoProcess.DupePrintMode printMode = getDupePrintMode(print);
+        Result<Integer, DedupError> result = new DuplicateRepoProcess(cliParameter, allNames, all, dedupConfig, threshold, printMode).dupes();
         if (result.hasFailed()) {
             new DedupConfigErrorHandler().dump(result.error());
             return -80;
@@ -209,13 +208,11 @@ public class RepoCommand {
         dedupConfig = infrastructureConfig.getDedupConfig();
     }
 
-    private List<String> combine(List<String> names, List<String> positionalNames) {
-        if (names == null && positionalNames == null) return List.of();
-        if (names == null) return positionalNames;
-        if (positionalNames == null) return names;
-        java.util.ArrayList<String> result = new java.util.ArrayList<>(names);
-        result.addAll(positionalNames);
-        return result;
+    private DuplicateRepoProcess.DupePrintMode getDupePrintMode(boolean print) {
+        if (print) {
+            return DuplicateRepoProcess.DupePrintMode.PRINT;
+        }
+        return DuplicateRepoProcess.DupePrintMode.QUIET;
     }
 
 }

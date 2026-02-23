@@ -17,15 +17,21 @@ import java.util.*;
 @RequiredArgsConstructor
 @Slf4j
 public class DuplicateRepoProcess {
+
+    public enum DupePrintMode {
+        QUIET, PRINT
+    }
+
     private final CliParameter cliParameter;
     private final List<String> names;
     private final boolean all;
     private final DedupConfig dedupConfig;
     private final Integer threshold;
+    private final DupePrintMode printMode;
     private final FileSystem fileSystem;
 
-    public DuplicateRepoProcess(CliParameter cliParameter, List<String> names, boolean all, DedupConfig dedupConfig, Integer threshold) {
-        this(cliParameter, names, all, dedupConfig, threshold, new NioFileSystemAdapter());
+    public DuplicateRepoProcess(CliParameter cliParameter, List<String> names, boolean all, DedupConfig dedupConfig, Integer threshold, DupePrintMode printMode) {
+        this(cliParameter, names, all, dedupConfig, threshold, printMode, new NioFileSystemAdapter());
     }
 
     public Result<Integer, DedupError> dupes() {
@@ -66,7 +72,9 @@ public class DuplicateRepoProcess {
                                     k -> new ArrayList<>()).add(new RepoRepoFile(repo, repoFile)));
         }
 
-        printDuplicates(all);
+        if (printMode == DupePrintMode.PRINT) {
+            printDuplicates(all);
+        }
 
 
         return 0;
@@ -76,9 +84,24 @@ public class DuplicateRepoProcess {
         List<RepoRepoFile> images = new ArrayList<>();
         for (Repo repo : repos) {
             RepoManager r = RepoManager.forRepo(repo, dedupConfig, fileSystem);
-            if (r.load().hasFailed()) continue;
+            Result<Statistics, DedupError> load = r.load();
+            if (load.hasFailed()) {
+                continue;
+            }
             r.stream()
-                    .filter(rf -> !rf.missing() && rf.fingerprint() != null)
+                    .filter(rf -> {
+                        if (rf.missing()) {
+                            return false;
+                        }
+                        String fingerprint = rf.fingerprint();
+                        if (fingerprint == null) {
+                            return false;
+                        }
+                        if (fingerprint.isBlank()) {
+                            return false;
+                        }
+                        return true;
+                    })
                     .forEach(rf -> images.add(new RepoRepoFile(repo, rf)));
         }
 
@@ -91,7 +114,9 @@ public class DuplicateRepoProcess {
         // For large repos, we'd need a more efficient way like BK-tree or spatial hashing.
         Set<Integer> handled = new HashSet<>();
         for (int i = 0; i < images.size(); i++) {
-            if (handled.contains(i)) continue;
+            if (handled.contains(i)) {
+                continue;
+            }
             List<RepoRepoFile> group = new ArrayList<>();
             group.add(images.get(i));
 
@@ -99,7 +124,9 @@ public class DuplicateRepoProcess {
             java.math.BigInteger b1 = new java.math.BigInteger(f1, 16);
 
             for (int j = i + 1; j < images.size(); j++) {
-                if (handled.contains(j)) continue;
+                if (handled.contains(j)) {
+                    continue;
+                }
                 String f2 = images.get(j).file.fingerprint();
                 java.math.BigInteger b2 = new java.math.BigInteger(f2, 16);
 
@@ -114,7 +141,9 @@ public class DuplicateRepoProcess {
                 }
             }
             if (group.size() > 1) {
-                printSimilarGroup(group);
+                if (printMode == DupePrintMode.PRINT) {
+                    printSimilarGroup(group);
+                }
             }
         }
         return 0;
