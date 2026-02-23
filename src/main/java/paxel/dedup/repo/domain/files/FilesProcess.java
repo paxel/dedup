@@ -1,12 +1,12 @@
 package paxel.dedup.repo.domain.files;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.*;
 import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.config.DedupConfig;
-import paxel.dedup.infrastructure.logging.ConsoleLogger;
 import paxel.dedup.repo.domain.repo.RepoManager;
 import paxel.lib.Result;
 
@@ -20,8 +20,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
 @RequiredArgsConstructor
+@Slf4j
 public class FilesProcess {
-    private static final ConsoleLogger log = ConsoleLogger.getInstance();
     private final CliParameter cliParameter;
     private final String source;
     private final DedupConfig dedupConfig;

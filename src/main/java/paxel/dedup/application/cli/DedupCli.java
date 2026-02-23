@@ -1,5 +1,9 @@
 package paxel.dedup.application.cli;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.LoggerFactory;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.application.cli.parameter.DiffCommand;
 import paxel.dedup.application.cli.parameter.FilesCommand;
@@ -8,6 +12,7 @@ import paxel.dedup.infrastructure.config.InfrastructureConfig;
 import picocli.CommandLine;
 
 
+@Slf4j
 public class DedupCli {
     public static void main(String[] args) {
 
@@ -28,7 +33,10 @@ public class DedupCli {
             System.exit(0);
         }
 
-        paxel.dedup.infrastructure.logging.ConsoleLogger.getInstance().setVerbose(cliParameter.isVerbose());
+        if (cliParameter.isVerbose()) {
+            Logger root = (Logger) LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME);
+            root.setLevel(Level.DEBUG);
+        }
 
         int exitCode = commandLine.execute(args);
         System.exit(exitCode);

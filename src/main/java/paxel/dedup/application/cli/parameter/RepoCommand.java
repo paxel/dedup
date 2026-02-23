@@ -2,12 +2,12 @@ package paxel.dedup.application.cli.parameter;
 
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.errors.DedupConfigErrorHandler;
 import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.infrastructure.config.InfrastructureConfig;
-import paxel.dedup.infrastructure.logging.ConsoleLogger;
 import paxel.dedup.repo.domain.repo.*;
 import paxel.lib.Result;
 import picocli.CommandLine;
@@ -17,18 +17,18 @@ import picocli.CommandLine.Parameters;
 
 import java.util.List;
 
-@Command(name = "repo", description = "manipulates repos")
+@Command(name = "repo", description = "manipulates repos", mixinStandardHelpOptions = true)
 @RequiredArgsConstructor
 @NoArgsConstructor(force = true)
+@Slf4j
 public class RepoCommand {
-    private static final ConsoleLogger log = ConsoleLogger.getInstance();
 
     @CommandLine.ParentCommand
     CliParameter cliParameter;
     private final InfrastructureConfig infrastructureConfig;
     private DedupConfig dedupConfig;
 
-    @Command(name = "create", description = "Creates a non existing repo")
+    @Command(name = "create", description = "Creates a non existing repo", mixinStandardHelpOptions = true)
     public int create(
             @Parameters(description = "Name of the repo") String name,
             @Parameters(description = "Path of the repo") String path,
@@ -62,7 +62,7 @@ public class RepoCommand {
         return rc;
     }
 
-    @Command(name = "rm", description = "Deletes existing repo")
+    @Command(name = "rm", description = "Deletes existing repo", mixinStandardHelpOptions = true)
     public int delete(
             @Parameters(description = "Name of the repo") String name) {
         initDefaultConfig();
@@ -71,14 +71,14 @@ public class RepoCommand {
     }
 
 
-    @Command(name = "ls", description = "List all repos")
+    @Command(name = "ls", description = "List all repos", mixinStandardHelpOptions = true)
     public int list() {
         initDefaultConfig();
 
         return new ListReposProcess(cliParameter, dedupConfig).list();
     }
 
-    @Command(name = "update", description = "Reads all file changes from the path into the Repos DB")
+    @Command(name = "update", description = "Reads all file changes from the path into the Repos DB", mixinStandardHelpOptions = true)
     public int update(
             @Option(names = {"-R"}, description = "Repos") List<String> names,
             @Parameters(description = "Repos", arity = "0..*") List<String> positionalNames,
@@ -93,7 +93,7 @@ public class RepoCommand {
                 !noProgress, refreshFingerprints).update();
     }
 
-    @Command(name = "config", description = "Configures a repo")
+    @Command(name = "config", description = "Configures a repo", mixinStandardHelpOptions = true)
     public int config(
             @Parameters(description = "Name of the repo") String name,
             @Option(names = {"--codec"}, description = "Line codec to use: json|messagepack") String codec) {
@@ -128,7 +128,7 @@ public class RepoCommand {
         }
     }
 
-    @Command(name = "prune", description = "Prunes the DB removing all old versions and deleted files")
+    @Command(name = "prune", description = "Prunes the DB removing all old versions and deleted files", mixinStandardHelpOptions = true)
     public int prune(
             @Option(names = {"-R"}, description = "Repos") List<String> names,
             @Parameters(description = "Repos", arity = "0..*") List<String> positionalNames,
@@ -159,7 +159,7 @@ public class RepoCommand {
         return result.value();
     }
 
-    @Command(name = "cp", description = "Copies the Repo into a new one with a new path, keeping all the entries from the original. The original is unmodified")
+    @Command(name = "cp", description = "Copies the Repo into a new one with a new path, keeping all the entries from the original. The original is unmodified", mixinStandardHelpOptions = true)
     public int clone(
             @Parameters(description = "Source Repo") String sourceRepo,
             @Parameters(description = "Destination Repo") String destinationRepo,
@@ -169,7 +169,7 @@ public class RepoCommand {
         return new CopyRepoProcess(cliParameter, sourceRepo, destinationRepo, path, dedupConfig).copy();
     }
 
-    @Command(name = "rel", description = "Relocates the path of a Repo. The entries remain unchanged.")
+    @Command(name = "rel", description = "Relocates the path of a Repo. The entries remain unchanged.", mixinStandardHelpOptions = true)
     public int clone(
             @Parameters(description = "Source Repo") String repo,
             @Parameters(description = "The relocated path") String path) {
@@ -178,7 +178,7 @@ public class RepoCommand {
         return new RelocateRepoProcess(cliParameter, repo, path, dedupConfig).move();
     }
 
-    @Command(name = "mv", description = "Moves the repos to a new Repo. The entries remain unchanged.")
+    @Command(name = "mv", description = "Moves the repos to a new Repo. The entries remain unchanged.", mixinStandardHelpOptions = true)
     public int move(
             @Parameters(description = "Source Repo") String sourceRepo,
             @Parameters(description = "Target Repo") String destinationRepo) {
@@ -187,7 +187,7 @@ public class RepoCommand {
         return new MoveRepoProcess(cliParameter, sourceRepo, destinationRepo, dedupConfig).move();
     }
 
-    @Command(name = "dupes", description = "Manage duplicates in one or more repos.")
+    @Command(name = "dupes", description = "Manage duplicates in one or more repos.", mixinStandardHelpOptions = true)
     public int move(
             @Option(names = {"-R"}, description = "Repos") List<String> names,
             @Parameters(description = "Repos", arity = "0..*") List<String> positionalNames,

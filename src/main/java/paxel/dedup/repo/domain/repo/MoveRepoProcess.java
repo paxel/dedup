@@ -1,15 +1,15 @@
 package paxel.dedup.repo.domain.repo;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.infrastructure.config.DedupConfig;
-import paxel.dedup.infrastructure.logging.ConsoleLogger;
 import paxel.lib.Result;
 
 @RequiredArgsConstructor
+@Slf4j
 public class MoveRepoProcess {
-    private static final ConsoleLogger log = ConsoleLogger.getInstance();
     private final CliParameter cliParameter;
     private final String sourceRepo;
     private final String destinationRepo;

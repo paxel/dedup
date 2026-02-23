@@ -76,10 +76,3 @@ This file defines the rules for development and testing in this project. These r
 
 ## 4. Future Extensions
 * (Future rules will be added here)
-
-## 5. GraalVM Compatibility
-* **Native Image Support:** All code must be compatible with GraalVM Native Image.
-    * Avoid reflection unless strictly necessary and properly configured.
-    * Use reflection-free alternatives for serialization where possible (see \`MessagePackRepoFileCodec\`).
-    * Prefer static initialization or framework-supported dependency injection that works at build time.
-    * Ensure all resources needed at runtime are explicitly included in the native image configuration.

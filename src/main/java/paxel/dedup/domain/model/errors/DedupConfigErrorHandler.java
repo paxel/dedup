@@ -1,9 +1,9 @@
 package paxel.dedup.domain.model.errors;
 
-import paxel.dedup.infrastructure.logging.ConsoleLogger;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public class DedupConfigErrorHandler {
-    private static final ConsoleLogger log = ConsoleLogger.getInstance();
 
     public void dump(DedupError error) {
         if (error == null) return;

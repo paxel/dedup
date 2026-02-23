@@ -10,7 +10,7 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
-@Command(name = "diff", description = "Checks diffs to and/or from repos")
+@Command(name = "diff", description = "Checks diffs to and/or from repos", mixinStandardHelpOptions = true)
 @RequiredArgsConstructor
 @NoArgsConstructor(force = true)
 public class DiffCommand {
@@ -20,7 +20,7 @@ public class DiffCommand {
     private final InfrastructureConfig infrastructureConfig;
     private DedupConfig dedupConfig;
 
-    @Command(name = "print", description = "prints differences between source and reference")
+    @Command(name = "print", description = "prints differences between source and reference", mixinStandardHelpOptions = true)
     public int print(
             @Parameters(description = "Source repo or dir") String source,
             @Parameters(description = "Reference repo or dir") String reference,
@@ -30,7 +30,7 @@ public class DiffCommand {
         return new DiffProcess(cliParameter, source, reference, dedupConfig, filter, infrastructureConfig.getFileSystem()).print();
     }
 
-    @Command(name = "cp", description = "copies files in source and not in reference to a target")
+    @Command(name = "cp", description = "copies files in source and not in reference to a target", mixinStandardHelpOptions = true)
     public int copy(
             @Parameters(description = "Source repo or dir") String source,
             @Parameters(description = "Reference repo or dir") String reference,
@@ -42,7 +42,7 @@ public class DiffCommand {
     }
 
 
-    @Command(name = "mv", description = "Moves files in source and not in reference to a target")
+    @Command(name = "mv", description = "Moves files in source and not in reference to a target", mixinStandardHelpOptions = true)
     public int move(
             @Parameters(description = "Source repo or dir") String source,
             @Parameters(description = "Reference repo or dir") String reference,
@@ -53,7 +53,7 @@ public class DiffCommand {
         return new DiffProcess(cliParameter, source, reference, dedupConfig, filter, infrastructureConfig.getFileSystem()).copy(target, true);
     }
 
-    @Command(name = "rm", description = "Delete files in source that are already in reference")
+    @Command(name = "rm", description = "Delete files in source that are already in reference", mixinStandardHelpOptions = true)
     public int move(
             @Parameters(description = "Source repo or dir") String source,
             @Parameters(description = "Reference repo or dir") String reference,
@@ -64,7 +64,7 @@ public class DiffCommand {
     }
 
 
-    @Command(name = "sync", description = "Syncs target repo with source: copy new contents, optionally delete missing")
+    @Command(name = "sync", description = "Syncs target repo with source: copy new contents, optionally delete missing", mixinStandardHelpOptions = true)
     public int sync(
             @Parameters(description = "Source repo or dir (A)") String source,
             @Parameters(description = "Target repo or dir (B)") String target,
