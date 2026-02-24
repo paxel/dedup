@@ -19,7 +19,7 @@ public class RelocateRepoProcess {
     private final DedupConfig dedupConfig;
 
 
-    public int move() {
+    public Result<Integer, DedupError> move() {
 
         if (cliParameter.isVerbose()) {
             log.info("Relocating {} path to {}", repo, path);
@@ -27,12 +27,11 @@ public class RelocateRepoProcess {
 
         Result<Repo, DedupError> repoModifyRepoErrorResult = dedupConfig.changePath(repo, Paths.get(path));
         if (repoModifyRepoErrorResult.hasFailed()) {
-            log.error("Relocating {} to {} failed: {}", repo, path, repoModifyRepoErrorResult.error());
-            return -70;
+            return Result.err(repoModifyRepoErrorResult.error());
         }
         if (cliParameter.isVerbose()) {
             log.info("Relocated {} path to {}", repo, path);
         }
-        return 0;
+        return Result.ok(0);
     }
 }

@@ -23,7 +23,7 @@ public class CreateRepoProcess {
     private final DedupConfig dedupConfig;
 
 
-    public int create() {
+    public Result<Integer, DedupError> create() {
 
         if (cliParameter.isVerbose()) {
             log.info("::Creating Repo at '{}'", dedupConfig.getRepoDir());
@@ -31,17 +31,12 @@ public class CreateRepoProcess {
 
         Result<Repo, DedupError> createResult = dedupConfig.createRepo(name, Paths.get(path), indices);
         if (createResult.hasFailed()) {
-            DedupError err = createResult.error();
-            // Keep legacy message substring to satisfy tests while logging full context
-            String msg = firstNonBlankLocal(err.description(), "Failed to create repo '" + name + "'");
-            if (err.exception() != null) log.error("{}", msg, err.exception());
-            else log.error("{}", msg);
-            return -10;
+            return Result.err(createResult.error());
         }
         if (cliParameter.isVerbose()) {
             log.info("::Created Repo '{}'", createResult.value());
         }
-        return 0;
+        return Result.ok(0);
 
     }
 

@@ -73,7 +73,7 @@ class ListReposProcessTest {
         PrintStream oldOut = System.out;
         System.setOut(new PrintStream(outBuf));
         try {
-            int code = new ListReposProcess(params, cfg).list();
+            int code = new ListReposProcess(params, cfg).list().value();
             assertThat(code).isEqualTo(0);
             String[] lines = outBuf.toString().trim().split("\n");
             assertThat(lines).containsExactly(
@@ -99,7 +99,7 @@ class ListReposProcessTest {
         PrintStream oldOut = System.out;
         System.setOut(new PrintStream(outBuf));
         try {
-            int code = new ListReposProcess(params, cfg).list();
+            int code = new ListReposProcess(params, cfg).list().value();
             assertThat(code).isEqualTo(0);
             String stdout = outBuf.toString().trim();
             assertThat(stdout).isEqualTo("a: /data/a index files: 2");
@@ -123,10 +123,9 @@ class ListReposProcessTest {
         PrintStream oldErr = System.err;
         System.setErr(new PrintStream(errBuf));
         try {
-            int code = new ListReposProcess(params, cfg).list();
-            assertThat(code).isEqualTo(-20);
-            String stderr = errBuf.toString();
-            assertThat(stderr).contains(errPath.toString()).contains("Invalid");
+            Result<Integer, DedupError> result = new ListReposProcess(params, cfg).list();
+            assertThat(result.hasFailed()).isTrue();
+            assertThat(result.error().description()).contains(errPath.toString()).contains("Invalid");
         } finally {
             System.setErr(oldErr);
         }

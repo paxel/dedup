@@ -67,9 +67,10 @@ class CopyRepoProcessTest {
         cli.setVerbose(false);
         StubConfig cfg = new StubConfig();
 
-        int code = new CopyRepoProcess(cli, "same", "same", "/path", cfg).copy();
+        Result<Integer, DedupError> result = new CopyRepoProcess(cli, "same", "same", "/path", cfg).copy();
 
-        assertThat(code).isEqualTo(-62);
+        assertThat(result.hasFailed()).isTrue();
+        assertThat(result.error().type()).isEqualTo(ErrorType.MODIFY_REPO);
     }
 
     /**
@@ -89,8 +90,9 @@ class CopyRepoProcessTest {
             }
         };
 
-        int code = proc.copy();
-        assertThat(code).isEqualTo(-61);
+        Result<Integer, DedupError> result = proc.copy();
+        assertThat(result.hasFailed()).isTrue();
+        assertThat(result.error().type()).isEqualTo(ErrorType.WRITE);
     }
 
     /**
@@ -111,8 +113,9 @@ class CopyRepoProcessTest {
             }
         };
 
-        int code = proc.copy();
-        assertThat(code).isEqualTo(-60);
+        Result<Integer, DedupError> result = proc.copy();
+        assertThat(result.hasFailed()).isTrue();
+        assertThat(result.error().type()).isEqualTo(ErrorType.MODIFY_REPO);
     }
 
     /**
@@ -135,7 +138,7 @@ class CopyRepoProcessTest {
                 }
             };
 
-            int code = proc.copy();
+            int code = proc.copy().value();
             assertThat(code).isEqualTo(0);
 
             String out = outBuf.toString();

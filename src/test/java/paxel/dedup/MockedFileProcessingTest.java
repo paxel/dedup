@@ -164,10 +164,11 @@ class MockedFileProcessingTest {
                 1,    // threads
                 new StubDedupConfig(),
                 false, // progress
-                false  // refreshFingerprints
+                false, // refreshFingerprints
+                new StubFileSystem()
         );
 
-        int result = process.update();
+        int result = process.update().value();
         assertThat(result).isEqualTo(0);
     }
 

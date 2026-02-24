@@ -14,25 +14,19 @@ public class RmReposProcess {
     private final String name;
     private final DedupConfig dedupConfig;
 
-    public int delete() {
+    public Result<Integer, DedupError> delete() {
         if (cliParameter.isVerbose()) {
             log.info("Deleting {} from {}", name, dedupConfig.getRepoDir());
         }
 
         Result<Boolean, DedupError> deleteResult = dedupConfig.deleteRepo(name);
         if (deleteResult.hasFailed()) {
-            // Keep legacy style message if description contains count; otherwise, use generic description
-            DedupError err = deleteResult.error();
-            log.error("{}", err.describe());
-            if (err.exception() != null) {
-                log.error("Delete {} failed due to:", name, err.exception());
-            }
-            return -40;
+            return Result.err(deleteResult.error());
         }
 
         if (cliParameter.isVerbose()) {
             log.info("Deleted {}", name);
         }
-        return 0;
+        return Result.ok(0);
     }
 }

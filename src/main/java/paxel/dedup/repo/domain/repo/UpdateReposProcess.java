@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.*;
 import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.terminal.StatisticPrinter;
@@ -12,6 +13,7 @@ import paxel.lib.Result;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
@@ -28,29 +30,38 @@ public class UpdateReposProcess {
     private final DedupConfig dedupConfig;
     private final boolean progress;
     private final boolean refreshFingerprints;
+    private final FileSystem fileSystem;
 
-    public int update() {
+    public UpdateReposProcess(CliParameter cliParameter, List<String> names, boolean all, int threads, DedupConfig dedupConfig, boolean progress, boolean refreshFingerprints) {
+        this(cliParameter, names, all, threads, dedupConfig, progress, refreshFingerprints, new NioFileSystemAdapter());
+    }
 
+    public Result<Integer, DedupError> update() {
+        Result<List<Repo>, DedupError> reposToUpdate;
         if (all) {
-            Result<List<Repo>, DedupError> lsResult = dedupConfig.getRepos();
-            if (lsResult.hasFailed()) {
-                if (lsResult.error().exception() != null) lsResult.error().exception().printStackTrace();
-                return -50;
+            reposToUpdate = dedupConfig.getRepos();
+        } else {
+            List<Repo> repos = new ArrayList<>();
+            for (String name : names) {
+                Result<Repo, DedupError> getRepoResult = dedupConfig.getRepo(name);
+                if (getRepoResult.isSuccess()) {
+                    repos.add(getRepoResult.value());
+                }
             }
-            for (Repo repo : lsResult.value()) {
-                updateRepo(RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter()));
-            }
-            return 0;
+            reposToUpdate = Result.ok(repos);
         }
 
-        for (String name : names) {
-            Result<Repo, DedupError> getRepoResult = dedupConfig.getRepo(name);
-            if (getRepoResult.isSuccess()) {
-                Repo repo = getRepoResult.value();
-                updateRepo(RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter()));
+        if (reposToUpdate.hasFailed()) {
+            return Result.err(reposToUpdate.error());
+        }
+
+        for (Repo repo : reposToUpdate.value()) {
+            Result<Statistics, DedupError> result = updateRepo(RepoManager.forRepo(repo, dedupConfig, fileSystem));
+            if (result.hasFailed()) {
+                return result.map(s -> -51, Function.identity());
             }
         }
-        return 0;
+        return Result.ok(0);
     }
 
 
@@ -66,7 +77,7 @@ public class UpdateReposProcess {
             progressPrinter.set(repoManager.getRepo().name(), repoManager.getRepo().absolutePath());
             progressPrinter.setProgress("...stand by... collecting info");
             Statistics statistics = new Statistics(repoManager.getRepo().absolutePath());
-            new ResilientFileWalker(new UpdateProgressPrinter(remainingPaths, progressPrinter, repoManager, statistics, sha1Hasher, refreshFingerprints), new NioFileSystemAdapter()).walk(Paths.get(repoManager.getRepo().absolutePath()));
+            new ResilientFileWalker(new UpdateProgressPrinter(remainingPaths, progressPrinter, repoManager, statistics, sha1Hasher, refreshFingerprints), fileSystem).walk(Paths.get(repoManager.getRepo().absolutePath()));
 
             for (RepoFile value : remainingPaths.values()) {
                 repoManager.addRepoFile(value.withMissing(true));

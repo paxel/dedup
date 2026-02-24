@@ -68,7 +68,7 @@ class MoveRepoProcessTest {
         PrintStream oldOut = System.out;
         System.setOut(new PrintStream(outBuf));
         try {
-            int code = new MoveRepoProcess(params, "oldName", "newName", cfg).move();
+            int code = new MoveRepoProcess(params, "oldName", "newName", cfg).move().value();
 
             assertThat(code).isEqualTo(0);
             String stdout = outBuf.toString();
@@ -93,13 +93,10 @@ class MoveRepoProcessTest {
         PrintStream oldErr = System.err;
         System.setErr(new PrintStream(errBuf));
         try {
-            int code = new MoveRepoProcess(params, "oldName", "newName", cfg).move();
+            Result<Integer, DedupError> result = new MoveRepoProcess(params, "oldName", "newName", cfg).move();
 
-            assertThat(code).isEqualTo(-90);
-            String stderr = errBuf.toString();
-            assertThat(stderr)
-                    .contains("Renaming repo oldName to newName has failed:")
-                    .contains("/tmp/config/newName");
+            assertThat(result.hasFailed()).isTrue();
+            assertThat(result.error().description()).contains("/tmp/config/newName");
         } finally {
             System.setErr(oldErr);
         }

@@ -15,20 +15,19 @@ public class MoveRepoProcess {
     private final String destinationRepo;
     private final DedupConfig dedupConfig;
 
-    public int move() {
+    public Result<Integer, DedupError> move() {
 
         if (cliParameter.isVerbose()) {
             log.info("Renaming repo {} to {}", sourceRepo, destinationRepo);
         }
         Result<Boolean, DedupError> result = dedupConfig.renameRepo(sourceRepo, destinationRepo);
         if (result.hasFailed()) {
-            log.error("Renaming repo {} to {} has failed: {}", sourceRepo, destinationRepo, result.error());
-            return -90;
+            return Result.err(result.error());
         }
         if (cliParameter.isVerbose()) {
             log.info("Renamed repo {} to {}", sourceRepo, destinationRepo);
         }
 
-        return 0;
+        return Result.ok(0);
     }
 }

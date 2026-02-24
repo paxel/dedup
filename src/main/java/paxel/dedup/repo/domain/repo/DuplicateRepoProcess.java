@@ -72,21 +72,25 @@ public class DuplicateRepoProcess {
     }
 
     public Result<Integer, DedupError> dupes() {
+        Result<List<Repo>, DedupError> reposToProcess;
         if (all) {
-            Result<List<Repo>, DedupError> reposResult = dedupConfig.getRepos();
-            if (reposResult.hasFailed()) {
-                return Result.err(reposResult.error());
+            reposToProcess = dedupConfig.getRepos();
+        } else {
+            List<Repo> repos = new ArrayList<>();
+            for (String name : names) {
+                Result<Repo, DedupError> repoResult = dedupConfig.getRepo(name);
+                if (repoResult.isSuccess()) {
+                    repos.add(repoResult.value());
+                }
             }
-            return Result.ok(dupe(reposResult.value()));
+            reposToProcess = Result.ok(repos);
         }
-        List<Repo> repos = new ArrayList<>();
-        for (String name : names) {
-            Result<Repo, DedupError> repoResult = dedupConfig.getRepo(name);
-            if (repoResult.isSuccess()) {
-                repos.add(repoResult.value());
-            }
+
+        if (reposToProcess.hasFailed()) {
+            return Result.err(reposToProcess.error());
         }
-        return Result.ok(dupe(repos));
+
+        return Result.ok(dupe(reposToProcess.value()));
     }
 
     private int dupe(List<Repo> repos) {
@@ -405,17 +409,16 @@ public class DuplicateRepoProcess {
             op = "=";
             numStr = e;
         }
-        int target;
         try {
-            target = Integer.parseInt(numStr.trim());
+            int target = Integer.parseInt(numStr.trim());
+            if ("<".equals(op)) return value < target;
+            if ("<=".equals(op)) return value <= target;
+            if (">".equals(op)) return value > target;
+            if (">=".equals(op)) return value >= target;
+            return value == target; // '=' or default
         } catch (NumberFormatException ex) {
             return false;
         }
-        if ("<".equals(op)) return value < target;
-        if ("<=".equals(op)) return value <= target;
-        if (">".equals(op)) return value > target;
-        if (">=".equals(op)) return value >= target;
-        return value == target; // '=' or default
     }
 
     private int hammingDistance(java.math.BigInteger b1, java.math.BigInteger b2) {
@@ -423,8 +426,7 @@ public class DuplicateRepoProcess {
     }
 
     private boolean matchesDimensionFilters(RepoFile rf) {
-        boolean anyFilter = widthFilter != null || heightFilter != null;
-        if (!anyFilter) return true;
+        if (widthFilter == null && heightFilter == null) return true;
         Dimension is = rf.imageSize();
         if (is == null) return false; // exclude entries without dimensions when any filter is set
         if (widthFilter != null && !eval(widthFilter, is.getWidth())) return false;

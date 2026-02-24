@@ -63,7 +63,7 @@ class UpdateReposProcessTest {
         );
 
         // Act
-        int exitCode = process.update();
+        int exitCode = process.update().value();
 
         // Debug: list config dir
         System.out.println("[DEBUG_LOG] Config dir contents: " + Files.list(configRepoDir).toList());

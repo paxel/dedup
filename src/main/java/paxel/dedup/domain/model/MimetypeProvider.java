@@ -11,6 +11,10 @@ import java.nio.file.Path;
 public class MimetypeProvider {
     private static final Tika TIKA = new Tika();
 
+    public static Tika getTika() {
+        return TIKA;
+    }
+
     public Result<String, DedupError> get(Path file) {
         try {
             return Result.ok(TIKA.detect(file));

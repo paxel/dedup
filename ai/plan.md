@@ -45,13 +45,13 @@ Real acoustic fingerprinting (Chromaprint) is heavy.
 
 To provide immediate value with minimal code changes, we follow this sequence:
 
-### Phase 1: Metadata Enrichment (Total Effort: 4 hours)
+### Phase 1: Metadata Enrichment (COMPLETED)
 *   **Goal:** Capture stable metadata during `repo update`.
 *   **Action:** Update `RepoFile` to include a `Map<String, String> attributes`.
 *   **Indexing:** `RepoManager` uses `Tika` to populate attributes like `duration`, `width`, `height`, `pages`, `artist`.
 *   **Result:** `repo dupes` can now group by `Duration` (for media) or `PageCount` (for PDF) as a "soft" similarity check.
 
-### Phase 2: Video/PDF Thumbnails (Total Effort: 6 hours)
+### Phase 2: Video/PDF Thumbnails (COMPLETED)
 *   **Goal:** Visual verification in `--interactive` mode.
 *   **Action:** 
     *   Integrate `JCodec` for video frame extraction.

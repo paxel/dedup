@@ -57,11 +57,15 @@ class UpdateProgressPrinter implements FileObserver {
     @Override
     public void file(Path absolutePath) {
         RepoFile existing = remainingPaths.remove(absolutePath);
-        progressPrinter.setFiles(files.incrementAndGet() + " last: " + absolutePath);
+        long currentFiles = files.incrementAndGet();
+        progressPrinter.setFiles(currentFiles + " last: " + absolutePath);
         progressPrinter.setDeleted("" + remainingPaths.size());
 
         if (!scanFinished.get()) {
-            progressPrinter.setProgress("Scanning... Found " + files.get() + " files and " + allDirs.get() + " directories");
+            progressPrinter.setProgress("Scanning... Found " + currentFiles + " files and " + allDirs.get() + " directories");
+        } else {
+            // Already finished scanning, we can show progress for hashing/processing
+            calcUpdate(start, progressPrinter, betterPrediction, files.get(), hash.get() + unchanged.get());
         }
 
         boolean forceUpdate = false;
@@ -154,12 +158,12 @@ class UpdateProgressPrinter implements FileObserver {
                 double remainingPercent = (double) remaining / total;
                 Duration estimation = Duration.between(start, clock.instant());
 
-                if (estimation.minusMillis(30000).isPositive()) {
+                if (estimation.minusMillis(5000).isPositive()) {
                     // Scale baseline proportionally to remaining work without truncation to zero
-                    estimation = estimation.multipliedBy(remaining).dividedBy(total);
+                    estimation = estimation.multipliedBy(remaining).dividedBy(Math.max(1, processed));
                     estimation = getBetterDuration(betterPrediction, estimation, total, remaining);
                     ZonedDateTime eta = ZonedDateTime.now(clock).plus(estimation);
-                    progressPrinter.setProgress("%.2f %% estimated remaining duration: %s ETA: %s".formatted((1.0 - remainingPercent) * 100,
+                    progressPrinter.setProgress("%.2f %% estimated remaining: %s ETA: %s".formatted((1.0 - remainingPercent) * 100,
                             DurationFormatUtils.formatDurationWords(estimation.toMillis(), true, true),
                             dateTimeFormatter.withZone(ZoneId.systemDefault()).format(eta)));
                 }

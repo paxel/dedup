@@ -69,7 +69,7 @@ class RmReposProcessTest {
         System.setOut(new PrintStream(outBuf));
         try {
             // Act
-            int code = new RmReposProcess(params, "r1", cfg).delete();
+            int code = new RmReposProcess(params, "r1", cfg).delete().value();
 
             // Assert
             assertThat(code).isEqualTo(0);
@@ -94,12 +94,11 @@ class RmReposProcessTest {
         System.setErr(new PrintStream(errBuf));
         try {
             // Act
-            int code = new RmReposProcess(params, "r1", cfg).delete();
+            Result<Integer, DedupError> result = new RmReposProcess(params, "r1", cfg).delete();
 
             // Assert
-            assertThat(code).isEqualTo(-40);
-            String stderr = errBuf.toString();
-            assertThat(stderr).contains("While deleting r1 2 exceptions happened");
+            assertThat(result.hasFailed()).isTrue();
+            assertThat(result.error().description()).contains("While deleting r1 2 exceptions happened");
         } finally {
             System.setErr(oldErr);
         }

@@ -25,10 +25,9 @@ public class CopyRepoProcess {
     private final String path;
     private final DedupConfig dedupConfig;
 
-    public int copy() {
+    public Result<Integer, DedupError> copy() {
         if (sourceRepo.equals(destinationRepo)) {
-            log.error("Cannot copy to the same directory: {}", sourceRepo);
-            return -62;
+            return Result.err(DedupError.of(paxel.dedup.domain.model.errors.ErrorType.MODIFY_REPO, "Cannot copy to the same directory: " + sourceRepo));
         }
 
         if (cliParameter.isVerbose()) {
@@ -36,19 +35,17 @@ public class CopyRepoProcess {
         }
         List<IOException> ioExceptions = copyDirectory(dedupConfig.getRepoDir().resolve(sourceRepo), dedupConfig.getRepoDir().resolve(destinationRepo));
 
-        ioExceptions.forEach(ex -> log.error("Copying file failed:", ex));
         if (!ioExceptions.isEmpty()) {
-            return -61;
+            return Result.err(DedupError.of(paxel.dedup.domain.model.errors.ErrorType.WRITE, "Copying file failed", ioExceptions.getFirst()));
         }
         Result<Repo, DedupError> repoModifyRepoErrorResult = dedupConfig.changePath(destinationRepo, Paths.get(path));
         if (repoModifyRepoErrorResult.hasFailed()) {
-            log.error("cloning {} to {} failed: {}", sourceRepo, destinationRepo, repoModifyRepoErrorResult.error());
-            return -60;
+            return Result.err(repoModifyRepoErrorResult.error());
         }
         if (cliParameter.isVerbose()) {
             log.info("cloning {} to {}", sourceRepo, destinationRepo);
         }
-        return 0;
+        return Result.ok(0);
     }
 
     public List<IOException> copyDirectory(Path from, Path to) {

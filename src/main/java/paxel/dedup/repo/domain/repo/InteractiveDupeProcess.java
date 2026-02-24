@@ -155,6 +155,7 @@ public class InteractiveDupeProcess {
                     String mime = rrf.file().mimeType();
                     boolean isVideo = mime != null && mime.startsWith("video/");
                     boolean isAudio = mime != null && mime.startsWith("audio/");
+                    boolean isPdf = mime != null && "application/pdf".equals(mime);
                     if (isVideo) {
                         // Generate a small filmstrip preview
                         try {
@@ -166,6 +167,18 @@ public class InteractiveDupeProcess {
                                     html.append("<img src='data:image/jpeg;base64,").append(b64).append("' alt='frame'>");
                                 }
                                 html.append("</div>");
+                            } else {
+                                html.append("<div class='filmstrip'><div>No preview available</div></div>");
+                            }
+                        } catch (Exception e) {
+                            html.append("<div class='filmstrip'><div>Preview error</div></div>");
+                        }
+                    } else if (isPdf) {
+                        try {
+                            String b64 = new PdfThumbnailGenerator(fileSystem)
+                                    .generateBase64Thumbnail(java.nio.file.Paths.get(path));
+                            if (b64 != null) {
+                                html.append("<img src='data:image/jpeg;base64,").append(b64).append("' alt='pdf thumbnail'>");
                             } else {
                                 html.append("<div class='filmstrip'><div>No preview available</div></div>");
                             }

@@ -25,6 +25,9 @@ public class FilterFactory {
         }
     }
 
+    private interface Filter extends Predicate<RepoFile> {
+    }
+
     public Predicate<RepoFile> createFilter(String filter) {
         if (filter == null || filter.isBlank()) {
             return a -> true;

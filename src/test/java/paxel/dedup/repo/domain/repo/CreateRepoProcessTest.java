@@ -70,7 +70,7 @@ class CreateRepoProcessTest {
         System.setOut(new PrintStream(outBuf));
         try {
             // Act
-            int code = new CreateRepoProcess(params, "repoA", "/data/repoA", 2, cfg).create();
+            int code = new CreateRepoProcess(params, "repoA", "/data/repoA", 2, cfg).create().value();
 
             // Assert
             assertThat(code).isEqualTo(0);
@@ -99,12 +99,11 @@ class CreateRepoProcessTest {
         System.setErr(new PrintStream(errBuf));
         try {
             // Act
-            int code = new CreateRepoProcess(params, "repoA", "/data/repoA", 2, cfg).create();
+            Result<Integer, DedupError> result = new CreateRepoProcess(params, "repoA", "/data/repoA", 2, cfg).create();
 
             // Assert
-            assertThat(code).isEqualTo(-10);
-            String stderr = errBuf.toString();
-            assertThat(stderr).contains(errPath.toString()).contains("not a valid repo relativePath");
+            assertThat(result.hasFailed()).isTrue();
+            assertThat(result.error().description()).contains(errPath.toString()).contains("not a valid repo relativePath");
         } finally {
             System.setErr(oldErr);
         }

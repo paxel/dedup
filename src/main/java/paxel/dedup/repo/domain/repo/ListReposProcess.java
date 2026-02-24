@@ -19,20 +19,11 @@ public class ListReposProcess {
     private final CliParameter cliParameter;
     private final DedupConfig dedupConfig;
 
-    public int list() {
+    public Result<Integer, DedupError> list() {
 
         Result<List<Repo>, DedupError> getReposResult = dedupConfig.getRepos();
         if (!getReposResult.isSuccess()) {
-            DedupError err = getReposResult.error();
-            // Preserve legacy substring "Invalid" to keep test expectations
-            String desc = err.description();
-            String msg = firstNonBlankLocal(desc, "Invalid");
-            if (err.exception() != null) {
-                log.error("{} {}", msg, "Invalid", err.exception());
-            } else {
-                log.error("{}", msg);
-            }
-            return -20;
+            return Result.err(getReposResult.error());
         }
         getReposResult.value().stream()
                 .sorted(Comparator.comparing(Repo::name, String::compareTo))
@@ -44,7 +35,7 @@ public class ListReposProcess {
                     }
                 })
                 .forEach(line -> log.info("{}", line));
-        return 0;
+        return Result.ok(0);
     }
 
     private String firstNonBlankLocal(String preferred, String fallback) {

@@ -40,7 +40,12 @@ public class RepoCommand {
             @Option(names = {"--strict"}, description = "Fail if selected codec is unavailable") boolean strict) {
         initDefaultConfig();
 
-        int rc = new CreateRepoProcess(cliParameter, name, path, indices, dedupConfig).create();
+        Result<Integer, DedupError> result = new CreateRepoProcess(cliParameter, name, path, indices, dedupConfig).create();
+        if (result.hasFailed()) {
+            new DedupConfigErrorHandler().dump(result.error());
+            return -10;
+        }
+        int rc = result.value();
         if (rc == 0) {
             // Persist codec selection in repo YAML via config API
             Repo.Codec target = switch (codec.toLowerCase()) {
@@ -70,7 +75,12 @@ public class RepoCommand {
             @Parameters(description = "Name of the repo") String name) {
         initDefaultConfig();
 
-        return new RmReposProcess(cliParameter, name, dedupConfig).delete();
+        Result<Integer, DedupError> result = new RmReposProcess(cliParameter, name, dedupConfig).delete();
+        if (result.hasFailed()) {
+            new DedupConfigErrorHandler().dump(result.error());
+            return -40;
+        }
+        return result.value();
     }
 
 
@@ -78,7 +88,12 @@ public class RepoCommand {
     public int list() {
         initDefaultConfig();
 
-        return new ListReposProcess(cliParameter, dedupConfig).list();
+        Result<Integer, DedupError> result = new ListReposProcess(cliParameter, dedupConfig).list();
+        if (result.hasFailed()) {
+            new DedupConfigErrorHandler().dump(result.error());
+            return -20;
+        }
+        return result.value();
     }
 
     @Command(name = "update", description = "Reads all file changes from the path into the Repos DB", mixinStandardHelpOptions = true)
@@ -95,8 +110,13 @@ public class RepoCommand {
             return CommandLine.ExitCode.USAGE;
         }
         List<String> allNames = repos == null ? List.of() : repos;
-        return new UpdateReposProcess(cliParameter, allNames, all, threads, dedupConfig,
-                !noProgress, refreshFingerprints).update();
+        Result<Integer, DedupError> result = new UpdateReposProcess(cliParameter, allNames, all, threads, dedupConfig,
+                !noProgress, refreshFingerprints, infrastructureConfig.getFileSystem()).update();
+        if (result.hasFailed()) {
+            new DedupConfigErrorHandler().dump(result.error());
+            return -50;
+        }
+        return result.value();
     }
 
     @Command(name = "config", description = "Configures a repo", mixinStandardHelpOptions = true)
@@ -175,7 +195,12 @@ public class RepoCommand {
             @Parameters(description = "Path of the new repo") String path) {
         initDefaultConfig();
 
-        return new CopyRepoProcess(cliParameter, sourceRepo, destinationRepo, path, dedupConfig).copy();
+        Result<Integer, DedupError> result = new CopyRepoProcess(cliParameter, sourceRepo, destinationRepo, path, dedupConfig).copy();
+        if (result.hasFailed()) {
+            new DedupConfigErrorHandler().dump(result.error());
+            return -60;
+        }
+        return result.value();
     }
 
     @Command(name = "rel", description = "Relocates the path of a Repo. The entries remain unchanged.", mixinStandardHelpOptions = true)
@@ -184,7 +209,12 @@ public class RepoCommand {
             @Parameters(description = "The relocated path") String path) {
         initDefaultConfig();
 
-        return new RelocateRepoProcess(cliParameter, repo, path, dedupConfig).move();
+        Result<Integer, DedupError> result = new RelocateRepoProcess(cliParameter, repo, path, dedupConfig).move();
+        if (result.hasFailed()) {
+            new DedupConfigErrorHandler().dump(result.error());
+            return -70;
+        }
+        return result.value();
     }
 
     @Command(name = "mv", description = "Moves the repos to a new Repo. The entries remain unchanged.", mixinStandardHelpOptions = true)
@@ -193,7 +223,12 @@ public class RepoCommand {
             @Parameters(description = "Target Repo") String destinationRepo) {
         initDefaultConfig();
 
-        return new MoveRepoProcess(cliParameter, sourceRepo, destinationRepo, dedupConfig).move();
+        Result<Integer, DedupError> result = new MoveRepoProcess(cliParameter, sourceRepo, destinationRepo, dedupConfig).move();
+        if (result.hasFailed()) {
+            new DedupConfigErrorHandler().dump(result.error());
+            return -90;
+        }
+        return result.value();
     }
 
     @Command(name = "dupes", description = "Manage duplicates in one or more repos.", mixinStandardHelpOptions = true)

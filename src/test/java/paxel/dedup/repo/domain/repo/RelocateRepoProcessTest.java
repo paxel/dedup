@@ -68,7 +68,7 @@ class RelocateRepoProcessTest {
         PrintStream oldOut = System.out;
         System.setOut(new PrintStream(outBuf));
         try {
-            int code = new RelocateRepoProcess(params, "r1", "/new/path", cfg).move();
+            int code = new RelocateRepoProcess(params, "r1", "/new/path", cfg).move().value();
 
             assertThat(code).isEqualTo(0);
             String stdout = outBuf.toString();
@@ -93,13 +93,10 @@ class RelocateRepoProcessTest {
         PrintStream oldErr = System.err;
         System.setErr(new PrintStream(errBuf));
         try {
-            int code = new RelocateRepoProcess(params, "r1", "/new/path", cfg).move();
+            Result<Integer, DedupError> result = new RelocateRepoProcess(params, "r1", "/new/path", cfg).move();
 
-            assertThat(code).isEqualTo(-70);
-            String stderr = errBuf.toString();
-            assertThat(stderr)
-                    .contains("Relocating r1 to /new/path failed:")
-                    .contains("/new/path");
+            assertThat(result.hasFailed()).isTrue();
+            assertThat(result.error().description()).contains("/new/path");
         } finally {
             System.setErr(oldErr);
         }
