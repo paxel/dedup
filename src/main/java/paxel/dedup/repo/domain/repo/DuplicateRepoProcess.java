@@ -237,6 +237,7 @@ public class DuplicateRepoProcess {
         List<RepoRepoFile> images = new ArrayList<>();
         List<RepoRepoFile> videos = new ArrayList<>();
         List<RepoRepoFile> pdfs = new ArrayList<>();
+        List<RepoRepoFile> audios = new ArrayList<>();
 
         for (Repo repo : repos) {
             RepoManager r = RepoManager.forRepo(repo, dedupConfig, fileSystem);
@@ -257,6 +258,9 @@ public class DuplicateRepoProcess {
                         if (rf.pdfHash() != null && !rf.pdfHash().isBlank()) {
                             pdfs.add(new RepoRepoFile(repo, rf));
                         }
+                        if (rf.audioHash() != null && !rf.audioHash().isBlank()) {
+                            audios.add(new RepoRepoFile(repo, rf));
+                        }
                     });
         }
 
@@ -275,6 +279,11 @@ public class DuplicateRepoProcess {
         // PDF Similarity (Exact Match of text hash)
         if (!pdfs.isEmpty()) {
             groups.addAll(groupByExactHash(pdfs, RepoFile::pdfHash));
+        }
+
+        // Audio Similarity (Duration + Chunk Hash)
+        if (!audios.isEmpty()) {
+            groups.addAll(groupByAudio(audios));
         }
 
         if (groups.isEmpty()) {
@@ -332,6 +341,45 @@ public class DuplicateRepoProcess {
             }
         }
         return map.values().stream().filter(g -> g.size() > 1).toList();
+    }
+
+    private List<List<RepoRepoFile>> groupByAudio(List<RepoRepoFile> audios) {
+        List<List<RepoRepoFile>> groups = new ArrayList<>();
+        Set<Integer> handled = new HashSet<>();
+        for (int i = 0; i < audios.size(); i++) {
+            if (handled.contains(i)) continue;
+
+            List<RepoRepoFile> group = new ArrayList<>();
+            group.add(audios.get(i));
+            RepoFile r1 = audios.get(i).file;
+            double d1 = parseDuration(r1.attributes().get("duration"));
+
+            for (int j = i + 1; j < audios.size(); j++) {
+                if (handled.contains(j)) continue;
+
+                RepoFile r2 = audios.get(j).file;
+                if (Objects.equals(r1.audioHash(), r2.audioHash())) {
+                    double d2 = parseDuration(r2.attributes().get("duration"));
+                    if (Math.abs(d1 - d2) <= 2.0) { // 2s tolerance
+                        group.add(audios.get(j));
+                        handled.add(j);
+                    }
+                }
+            }
+            if (group.size() > 1) {
+                groups.add(group);
+            }
+        }
+        return groups;
+    }
+
+    private double parseDuration(String duration) {
+        if (duration == null) return -10.0;
+        try {
+            return Double.parseDouble(duration);
+        } catch (NumberFormatException e) {
+            return -10.0;
+        }
     }
 
     private boolean eval(String expr, int value) {

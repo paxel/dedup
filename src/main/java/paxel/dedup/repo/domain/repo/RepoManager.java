@@ -185,6 +185,7 @@ public class RepoManager {
             String fingerprint = null;
             String videoHash = null;
             String pdfHash = null;
+            String audioHash = null;
             Dimension imageSize = null;
             Map<String, String> attributes = Map.of();
             if (mimeType != null) {
@@ -200,6 +201,7 @@ public class RepoManager {
                     pdfHash = new PdfFingerprinter(fileSystem).calculatePdfHash(absolutePath);
                 } else if (mimeType.startsWith("audio/")) {
                     attributes = new MetadataExtractor(fileSystem).extract(absolutePath);
+                    audioHash = new AudioFingerprinter(fileSystem).calculateAudioHash(absolutePath);
                 }
             }
 
@@ -212,6 +214,7 @@ public class RepoManager {
                     .fingerprint(fingerprint)
                     .videoHash(videoHash)
                     .pdfHash(pdfHash)
+                    .audioHash(audioHash)
                     .imageSize(imageSize)
                     .attributes(attributes)
                     .build();

@@ -415,6 +415,39 @@ class DuplicateRepoProcessTest {
     }
 
     @Test
+    void shouldFindSimilarAudiosWhenAudioHashIsPresent() throws IOException {
+        // Arrange
+        Path repoPath = tempDir.resolve("repo_audio");
+        Files.createDirectories(repoPath);
+        Repo repo = new Repo("repo_audio", repoPath.toString(), 1);
+        when(dedupConfig.getRepo("repo_audio")).thenReturn(Result.ok(repo));
+
+        String ah = "audio-chunk-hash";
+        // Duration within 2s tolerance
+        RepoFile file1 = RepoFile.builder().hash("h1").relativePath("a1.mp3").size(100L).audioHash(ah).mimeType("audio/mpeg")
+                .attributes(java.util.Map.of("duration", "120.5")).build();
+        RepoFile file2 = RepoFile.builder().hash("h2").relativePath("a2.mp3").size(100L).audioHash(ah).mimeType("audio/mpeg")
+                .attributes(java.util.Map.of("duration", "121.8")).build();
+
+        RepoManager repoManager = RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter());
+        repoManager.load();
+        repoManager.addRepoFile(file1);
+        repoManager.addRepoFile(file2);
+        repoManager.close();
+
+        DuplicateRepoProcess process = new DuplicateRepoProcess(
+                cliParameter, List.of("repo_audio"), false, dedupConfig, 90,
+                DuplicateRepoProcess.DupePrintMode.QUIET, null, null, null, false, false, new NioFileSystemAdapter()
+        );
+
+        // Act
+        Result<Integer, paxel.dedup.domain.model.errors.DedupError> result = process.dupes();
+
+        // Assert
+        assertThat(result.isSuccess()).isTrue();
+    }
+
+    @Test
     void shouldIncludeAttributesInReports() throws IOException {
         // Arrange
         Path repoPath = tempDir.resolve("repo_attr");

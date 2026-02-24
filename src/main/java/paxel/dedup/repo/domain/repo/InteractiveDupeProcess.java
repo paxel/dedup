@@ -154,6 +154,7 @@ public class InteractiveDupeProcess {
 
                     String mime = rrf.file().mimeType();
                     boolean isVideo = mime != null && mime.startsWith("video/");
+                    boolean isAudio = mime != null && mime.startsWith("audio/");
                     if (isVideo) {
                         // Generate a small filmstrip preview
                         try {
@@ -171,6 +172,10 @@ public class InteractiveDupeProcess {
                         } catch (Exception e) {
                             html.append("<div class='filmstrip'><div>Preview error</div></div>");
                         }
+                    } else if (isAudio) {
+                        html.append("<div style='margin-bottom: 10px; text-align: center;'>");
+                        html.append("<audio controls style='width: 100%;'><source src='/image?path=").append(encodedPath).append("' type='").append(mime).append("'></audio>");
+                        html.append("</div>");
                     } else {
                         html.append("<img src='/image?path=").append(encodedPath).append("' alt='thumbnail'>");
                     }

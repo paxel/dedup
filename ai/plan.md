@@ -58,10 +58,10 @@ To provide immediate value with minimal code changes, we follow this sequence:
     *   Use `Tika/PDFBox` for PDF first-page rendering.
 *   **Result:** Users see what's inside a video/PDF without opening external apps.
 
-### Phase 3: Advanced Similarity Hashing (Total Effort: 8 hours)
+### Phase 3: Advanced Similarity Hashing (COMPLETED)
 *   **Goal:** Automated similarity grouping.
-*   **Action:** Implement the "Keyframe Hashing" and "Text Hashing" logic described in Section 2.
-*   **Result:** `repo dupes --threshold` works for Videos and PDFs.
+*   **Action:** Implement the "Keyframe Hashing", "Text Hashing", and "Audio Chunk Hashing" logic.
+*   **Result:** `repo dupes --threshold` works for Videos, PDFs, and Audios.
 
 ---
 

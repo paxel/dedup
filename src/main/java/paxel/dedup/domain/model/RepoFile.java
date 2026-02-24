@@ -21,6 +21,7 @@ public record RepoFile(
         @JsonProperty(value = "f") String fingerprint,
         @JsonProperty(value = "vh") String videoHash,
         @JsonProperty(value = "ph") String pdfHash,
+        @JsonProperty(value = "ah") String audioHash,
         @JsonProperty(value = "is") Dimension imageSize,
         @JsonProperty(value = "at") Map<String, String> attributes) {
 
@@ -35,6 +36,7 @@ public record RepoFile(
             @JsonProperty(value = "f") String fingerprint,
             @JsonProperty(value = "vh") String videoHash,
             @JsonProperty(value = "ph") String pdfHash,
+            @JsonProperty(value = "ah") String audioHash,
             @JsonProperty(value = "is") Dimension imageSize,
             @JsonProperty(value = "at") Map<String, String> attributes) {
         this.hash = hash;
@@ -46,6 +48,7 @@ public record RepoFile(
         this.fingerprint = fingerprint;
         this.videoHash = videoHash;
         this.pdfHash = pdfHash;
+        this.audioHash = audioHash;
         this.imageSize = imageSize;
         this.attributes = attributes != null ? Map.copyOf(attributes) : Map.of();
     }
