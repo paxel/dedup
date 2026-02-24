@@ -183,6 +183,8 @@ public class RepoManager {
 
             String mimeType = mimetypeProvider.get(absolutePath).getValueOr(null);
             String fingerprint = null;
+            String videoHash = null;
+            String pdfHash = null;
             Dimension imageSize = null;
             Map<String, String> attributes = Map.of();
             if (mimeType != null) {
@@ -190,7 +192,13 @@ public class RepoManager {
                     ImageFingerprinter.FingerprintResult fr = new ImageFingerprinter().calculate(absolutePath);
                     fingerprint = fr.fingerprint();
                     imageSize = fr.imageSize();
-                } else if (mimeType.startsWith("video/") || mimeType.startsWith("audio/") || mimeType.equals("application/pdf")) {
+                } else if (mimeType.startsWith("video/")) {
+                    attributes = new MetadataExtractor(fileSystem).extract(absolutePath);
+                    videoHash = new VideoFingerprinter().calculateTemporalHash(absolutePath);
+                } else if (mimeType.equals("application/pdf")) {
+                    attributes = new MetadataExtractor(fileSystem).extract(absolutePath);
+                    pdfHash = new PdfFingerprinter(fileSystem).calculatePdfHash(absolutePath);
+                } else if (mimeType.startsWith("audio/")) {
                     attributes = new MetadataExtractor(fileSystem).extract(absolutePath);
                 }
             }
@@ -202,6 +210,8 @@ public class RepoManager {
                     .hash(hashResult.value())
                     .mimeType(mimeType)
                     .fingerprint(fingerprint)
+                    .videoHash(videoHash)
+                    .pdfHash(pdfHash)
                     .imageSize(imageSize)
                     .attributes(attributes)
                     .build();

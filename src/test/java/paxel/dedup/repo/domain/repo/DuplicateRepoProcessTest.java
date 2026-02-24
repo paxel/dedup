@@ -14,7 +14,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -353,6 +352,69 @@ class DuplicateRepoProcessTest {
     }
 
     @Test
+    void shouldFindSimilarVideosWhenVideoHashIsPresent() throws IOException {
+        // Arrange
+        Path repoPath = tempDir.resolve("repo_video");
+        Files.createDirectories(repoPath);
+        Repo repo = new Repo("repo_video", repoPath.toString(), 1);
+        when(dedupConfig.getRepo("repo_video")).thenReturn(Result.ok(repo));
+
+        // 192-bit hash = 48 hex chars
+        String vh1 = "f".repeat(48);
+        String vh2 = "f".repeat(47) + "e"; // Very similar
+
+        RepoFile file1 = RepoFile.builder().hash("h1").relativePath("v1.mp4").size(1000L).videoHash(vh1).mimeType("video/mp4").build();
+        RepoFile file2 = RepoFile.builder().hash("h2").relativePath("v2.mp4").size(1000L).videoHash(vh2).mimeType("video/mp4").build();
+
+        RepoManager repoManager = RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter());
+        repoManager.load();
+        repoManager.addRepoFile(file1);
+        repoManager.addRepoFile(file2);
+        repoManager.close();
+
+        DuplicateRepoProcess process = new DuplicateRepoProcess(
+                cliParameter, List.of("repo_video"), false, dedupConfig, 95,
+                DuplicateRepoProcess.DupePrintMode.QUIET, null, null, null, false, false, new NioFileSystemAdapter()
+        );
+
+        // Act
+        Result<Integer, paxel.dedup.domain.model.errors.DedupError> result = process.dupes();
+
+        // Assert
+        assertThat(result.isSuccess()).isTrue();
+    }
+
+    @Test
+    void shouldFindSimilarPdfsWhenPdfHashIsPresent() throws IOException {
+        // Arrange
+        Path repoPath = tempDir.resolve("repo_pdf");
+        Files.createDirectories(repoPath);
+        Repo repo = new Repo("repo_pdf", repoPath.toString(), 1);
+        when(dedupConfig.getRepo("repo_pdf")).thenReturn(Result.ok(repo));
+
+        String ph = "abc123pdfhash";
+        RepoFile file1 = RepoFile.builder().hash("h1").relativePath("p1.pdf").size(100L).pdfHash(ph).mimeType("application/pdf").build();
+        RepoFile file2 = RepoFile.builder().hash("h2").relativePath("p2.pdf").size(100L).pdfHash(ph).mimeType("application/pdf").build();
+
+        RepoManager repoManager = RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter());
+        repoManager.load();
+        repoManager.addRepoFile(file1);
+        repoManager.addRepoFile(file2);
+        repoManager.close();
+
+        DuplicateRepoProcess process = new DuplicateRepoProcess(
+                cliParameter, List.of("repo_pdf"), false, dedupConfig, 90,
+                DuplicateRepoProcess.DupePrintMode.QUIET, null, null, null, false, false, new NioFileSystemAdapter()
+        );
+
+        // Act
+        Result<Integer, paxel.dedup.domain.model.errors.DedupError> result = process.dupes();
+
+        // Assert
+        assertThat(result.isSuccess()).isTrue();
+    }
+
+    @Test
     void shouldIncludeAttributesInReports() throws IOException {
         // Arrange
         Path repoPath = tempDir.resolve("repo_attr");
@@ -360,7 +422,7 @@ class DuplicateRepoProcessTest {
         Repo repo = new Repo("repo_attr", repoPath.toString(), 1);
         when(dedupConfig.getRepo("repo_attr")).thenReturn(Result.ok(repo));
 
-        Map<String, String> attrs = Map.of("duration", "00:01:23", "artist", "Test Artist");
+        java.util.Map<String, String> attrs = java.util.Map.of("duration", "00:01:23", "artist", "Test Artist");
         RepoFile file1 = RepoFile.builder().hash("h").relativePath("f1.mp3").size(100L).attributes(attrs).build();
         RepoFile file2 = RepoFile.builder().hash("h").relativePath("f2.mp3").size(100L).attributes(attrs).build();
 

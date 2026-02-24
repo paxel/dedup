@@ -235,6 +235,9 @@ public class DuplicateRepoProcess {
 
     private List<List<RepoRepoFile>> findSimilar(List<Repo> repos) {
         List<RepoRepoFile> images = new ArrayList<>();
+        List<RepoRepoFile> videos = new ArrayList<>();
+        List<RepoRepoFile> pdfs = new ArrayList<>();
+
         for (Repo repo : repos) {
             RepoManager r = RepoManager.forRepo(repo, dedupConfig, fileSystem);
             Result<Statistics, DedupError> load = r.load();
@@ -242,49 +245,68 @@ public class DuplicateRepoProcess {
                 continue;
             }
             r.stream()
-                    .filter(rf -> {
-                        if (rf.missing()) return false;
-                        String fingerprint = rf.fingerprint();
-                        if (fingerprint == null || fingerprint.isBlank()) return false;
-                        return true;
-                    })
+                    .filter(rf -> !rf.missing())
                     .filter(this::matchesDimensionFilters)
-                    .forEach(rf -> images.add(new RepoRepoFile(repo, rf)));
-        }
-
-        if (images.isEmpty()) {
-            log.info("No images with fingerprints found.");
-            return List.of();
+                    .forEach(rf -> {
+                        if (rf.fingerprint() != null && !rf.fingerprint().isBlank()) {
+                            images.add(new RepoRepoFile(repo, rf));
+                        }
+                        if (rf.videoHash() != null && !rf.videoHash().isBlank()) {
+                            videos.add(new RepoRepoFile(repo, rf));
+                        }
+                        if (rf.pdfHash() != null && !rf.pdfHash().isBlank()) {
+                            pdfs.add(new RepoRepoFile(repo, rf));
+                        }
+                    });
         }
 
         List<List<RepoRepoFile>> groups = new ArrayList<>();
-        // Naive O(n^2) comparison for similarity. 
-        // For large repos, we'd need a more efficient way like BK-tree or spatial hashing.
-        Set<Integer> handled = new HashSet<>();
-        for (int i = 0; i < images.size(); i++) {
-            if (handled.contains(i)) {
-                continue;
-            }
-            List<RepoRepoFile> group = new ArrayList<>();
-            group.add(images.get(i));
 
-            String f1 = images.get(i).file.fingerprint();
+        // Image Similarity (Hamming Distance)
+        if (!images.isEmpty()) {
+            groups.addAll(groupByHamming(images, 64)); // dHash is 64-bit
+        }
+
+        // Video Similarity (Hamming Distance on 192-bit Temporal Hash)
+        if (!videos.isEmpty()) {
+            groups.addAll(groupByHamming(videos, 192)); // 3 * 64 bits
+        }
+
+        // PDF Similarity (Exact Match of text hash)
+        if (!pdfs.isEmpty()) {
+            groups.addAll(groupByExactHash(pdfs, RepoFile::pdfHash));
+        }
+
+        if (groups.isEmpty()) {
+            log.info("No similar files found.");
+        }
+
+        return groups;
+    }
+
+    private List<List<RepoRepoFile>> groupByHamming(List<RepoRepoFile> items, int bitLength) {
+        List<List<RepoRepoFile>> groups = new ArrayList<>();
+        Set<Integer> handled = new HashSet<>();
+        for (int i = 0; i < items.size(); i++) {
+            if (handled.contains(i)) continue;
+
+            List<RepoRepoFile> group = new ArrayList<>();
+            group.add(items.get(i));
+
+            String f1 = getRelevantFingerprint(items.get(i).file, bitLength);
             java.math.BigInteger b1 = new java.math.BigInteger(f1, 16);
 
-            for (int j = i + 1; j < images.size(); j++) {
-                if (handled.contains(j)) {
-                    continue;
-                }
-                String f2 = images.get(j).file.fingerprint();
+            for (int j = i + 1; j < items.size(); j++) {
+                if (handled.contains(j)) continue;
+
+                String f2 = getRelevantFingerprint(items.get(j).file, bitLength);
                 java.math.BigInteger b2 = new java.math.BigInteger(f2, 16);
 
                 int distance = hammingDistance(b1, b2);
-                // Standard dHash is 64 bits (8x8 comparisons)
-                // Normalized distance (0-100)
-                double similarity = (1.0 - (double) distance / 64.0) * 100.0;
+                double similarity = (1.0 - (double) distance / bitLength) * 100.0;
 
                 if (similarity >= threshold) {
-                    group.add(images.get(j));
+                    group.add(items.get(j));
                     handled.add(j);
                 }
             }
@@ -293,6 +315,23 @@ public class DuplicateRepoProcess {
             }
         }
         return groups;
+    }
+
+    private String getRelevantFingerprint(RepoFile rf, int bitLength) {
+        if (bitLength == 64) return rf.fingerprint();
+        if (bitLength == 192) return rf.videoHash();
+        return null;
+    }
+
+    private List<List<RepoRepoFile>> groupByExactHash(List<RepoRepoFile> items, java.util.function.Function<RepoFile, String> hashExtractor) {
+        Map<String, List<RepoRepoFile>> map = new HashMap<>();
+        for (RepoRepoFile item : items) {
+            String hash = hashExtractor.apply(item.file);
+            if (hash != null) {
+                map.computeIfAbsent(hash, k -> new ArrayList<>()).add(item);
+            }
+        }
+        return map.values().stream().filter(g -> g.size() > 1).toList();
     }
 
     private boolean eval(String expr, int value) {

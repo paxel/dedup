@@ -18,39 +18,43 @@ public class ImageFingerprinter {
     public FingerprintResult calculate(Path path) {
         try {
             BufferedImage img = ImageIO.read(path.toFile());
-            if (img == null) return new FingerprintResult(null, null);
-
-            Dimension imageSize = new Dimension(img.getWidth(), img.getHeight());
-
-            // 1. Resize to 9x9 grayscale for normalization and dHash
-            BufferedImage scaled = new BufferedImage(9, 9, BufferedImage.TYPE_BYTE_GRAY);
-            Graphics2D g = scaled.createGraphics();
-            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-            g.drawImage(img, 0, 0, 9, 9, null);
-            g.dispose();
-
-            // 2. Extract pixels to a simple byte array to avoid multiple BufferedImage allocations
-            byte[] pixels = new byte[81];
-            scaled.getRaster().getDataElements(0, 0, 9, 9, pixels);
-
-            // 3. Canonicalize orientation (all 8 Dihedral variants)
-            pixels = canonicalize(pixels);
-
-            // 4. Compute 64-bit dHash (8x8 differences)
-            long hash = 0;
-            for (int y = 0; y < 8; y++) {
-                for (int x = 0; x < 8; x++) {
-                    int left = pixels[y * 9 + x] & 0xFF;
-                    int right = pixels[y * 9 + (x + 1)] & 0xFF;
-                    if (left > right) {
-                        hash |= (1L << (y * 8 + x));
-                    }
-                }
-            }
-            return new FingerprintResult(String.format("%016x", hash), imageSize);
+            return calculate(img);
         } catch (IOException | RuntimeException e) {
             return new FingerprintResult(null, null);
         }
+    }
+
+    public FingerprintResult calculate(BufferedImage img) {
+        if (img == null) return new FingerprintResult(null, null);
+
+        Dimension imageSize = new Dimension(img.getWidth(), img.getHeight());
+
+        // 1. Resize to 9x9 grayscale for normalization and dHash
+        BufferedImage scaled = new BufferedImage(9, 9, BufferedImage.TYPE_BYTE_GRAY);
+        Graphics2D g = scaled.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.drawImage(img, 0, 0, 9, 9, null);
+        g.dispose();
+
+        // 2. Extract pixels to a simple byte array to avoid multiple BufferedImage allocations
+        byte[] pixels = new byte[81];
+        scaled.getRaster().getDataElements(0, 0, 9, 9, pixels);
+
+        // 3. Canonicalize orientation (all 8 Dihedral variants)
+        pixels = canonicalize(pixels);
+
+        // 4. Compute 64-bit dHash (8x8 differences)
+        long hash = 0;
+        for (int y = 0; y < 8; y++) {
+            for (int x = 0; x < 8; x++) {
+                int left = pixels[y * 9 + x] & 0xFF;
+                int right = pixels[y * 9 + (x + 1)] & 0xFF;
+                if (left > right) {
+                    hash |= (1L << (y * 8 + x));
+                }
+            }
+        }
+        return new FingerprintResult(String.format("%016x", hash), imageSize);
     }
 
     private byte[] canonicalize(byte[] img) {
