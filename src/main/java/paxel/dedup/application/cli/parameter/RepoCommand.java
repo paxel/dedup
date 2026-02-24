@@ -23,6 +23,9 @@ import java.util.List;
 @Slf4j
 public class RepoCommand {
 
+    @CommandLine.Spec
+    CommandLine.Model.CommandSpec spec;
+
     @CommandLine.ParentCommand
     CliParameter cliParameter;
     private final InfrastructureConfig infrastructureConfig;
@@ -87,6 +90,10 @@ public class RepoCommand {
             @Option(names = {"--refresh-fingerprints"}, description = "Refresh fingerprints for files that don't have one") boolean refreshFingerprints) {
         initDefaultConfig();
 
+        if (!all && hasNoRepos(repos)) {
+            printUsageError("No repos specified. Provide at least one repo name or use --all.");
+            return CommandLine.ExitCode.USAGE;
+        }
         List<String> allNames = repos == null ? List.of() : repos;
         return new UpdateReposProcess(cliParameter, allNames, all, threads, dedupConfig,
                 !noProgress, refreshFingerprints).update();
@@ -136,6 +143,10 @@ public class RepoCommand {
             @Option(names = {"--change-codec"}, description = "Change codec during prune: json|messagepack") String changeCodec) {
         initDefaultConfig();
 
+        if (!all && hasNoRepos(repos)) {
+            printUsageError("No repos specified. Provide at least one repo name or use --all.");
+            return CommandLine.ExitCode.USAGE;
+        }
         Repo.Codec targetCodec = null;
         if (changeCodec != null && !changeCodec.isBlank()) {
             targetCodec = switch (changeCodec.toLowerCase()) {
@@ -190,12 +201,20 @@ public class RepoCommand {
             @Parameters(description = "Repos", arity = "0..*") List<String> repos,
             @Option(names = {"-a", "--all"}, description = "All repos") boolean all,
             @Option(names = {"--threshold"}, description = "Threshold for image fingerprint similarity (0-100, default 0 for exact match)") Integer threshold,
-            @Option(names = {"--print"}, description = "Print duplicate groups to standard out") boolean print) {
+            @Option(names = {"--print"}, description = "Print duplicate groups to standard out") boolean print,
+            @Option(names = {"--md"}, description = "Generate a Markdown report with thumbnails") String mdPath,
+            @Option(names = {"--html"}, description = "Generate an HTML report with thumbnails") String htmlPath,
+            @Option(names = {"--move"}, description = "Move duplicates to this directory, keeping the first one") String movePath,
+            @Option(names = {"--delete"}, description = "Delete duplicates, keeping the first one") boolean delete) {
         initDefaultConfig();
 
+        if (!all && hasNoRepos(repos)) {
+            printUsageError("No repos specified. Provide at least one repo name or use --all.");
+            return CommandLine.ExitCode.USAGE;
+        }
         List<String> allNames = repos == null ? List.of() : repos;
         DuplicateRepoProcess.DupePrintMode printMode = getDupePrintMode(print);
-        Result<Integer, DedupError> result = new DuplicateRepoProcess(cliParameter, allNames, all, dedupConfig, threshold, printMode).dupes();
+        Result<Integer, DedupError> result = new DuplicateRepoProcess(cliParameter, allNames, all, dedupConfig, threshold, printMode, mdPath, htmlPath, movePath, delete).dupes();
         if (result.hasFailed()) {
             new DedupConfigErrorHandler().dump(result.error());
             return -80;
@@ -213,6 +232,20 @@ public class RepoCommand {
             return DuplicateRepoProcess.DupePrintMode.PRINT;
         }
         return DuplicateRepoProcess.DupePrintMode.QUIET;
+    }
+
+    private boolean hasNoRepos(List<String> repos) {
+        if (repos == null) return true;
+        return repos.isEmpty();
+    }
+
+    private void printUsageError(String message) {
+        if (spec != null && spec.commandLine() != null) {
+            spec.commandLine().getErr().println("Error: " + message);
+            spec.commandLine().usage(spec.commandLine().getErr());
+        } else {
+            System.err.println("Error: " + message);
+        }
     }
 
 }

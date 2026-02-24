@@ -227,5 +227,10 @@ public class RepoManager {
         }
     }
 
+    public void close() {
+        for (IndexManager index : indices.values()) {
+            index.close();
+        }
+    }
 
 }

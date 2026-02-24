@@ -75,6 +75,10 @@ class DuplicateRepoProcessTest {
                 dedupConfig,
                 90, // threshold
                 DuplicateRepoProcess.DupePrintMode.PRINT,
+                null,
+                null,
+                null,
+                false,
                 new NioFileSystemAdapter()
         );
 
@@ -116,6 +120,10 @@ class DuplicateRepoProcessTest {
                 dedupConfig,
                 90,
                 DuplicateRepoProcess.DupePrintMode.PRINT,
+                null,
+                null,
+                null,
+                false,
                 new NioFileSystemAdapter()
         );
 
@@ -125,5 +133,267 @@ class DuplicateRepoProcessTest {
         // Assert
         assertThat(result.isSuccess()).isTrue();
         assertThat(result.value()).isEqualTo(0);
+    }
+
+    @Test
+    void shouldGenerateReports() throws IOException {
+        // Arrange
+        Path repoPath = tempDir.resolve("repo3");
+        Files.createDirectories(repoPath);
+        Repo repo = new Repo("repo3", repoPath.toString(), 1);
+        when(dedupConfig.getRepo("repo3")).thenReturn(Result.ok(repo));
+
+        RepoFile file1 = RepoFile.builder().hash("h").relativePath("f1.jpg").size(10L).mimeType("image/jpeg").build();
+        RepoFile file2 = RepoFile.builder().hash("h").relativePath("f2.jpg").size(10L).mimeType("image/jpeg").build();
+
+        RepoManager repoManager = RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter());
+        repoManager.load();
+        repoManager.addRepoFile(file1);
+        repoManager.addRepoFile(file2);
+        repoManager.close();
+
+        Path mdReport = tempDir.resolve("report.md");
+        Path htmlReport = tempDir.resolve("report.html");
+
+        DuplicateRepoProcess process = new DuplicateRepoProcess(
+                cliParameter,
+                List.of("repo3"),
+                false,
+                dedupConfig,
+                null,
+                DuplicateRepoProcess.DupePrintMode.QUIET,
+                mdReport.toString(),
+                htmlReport.toString(),
+                null,
+                false,
+                new NioFileSystemAdapter()
+        );
+
+        // Act
+        process.dupes();
+
+        // Assert
+        assertThat(mdReport).exists();
+        String mdContent = Files.readString(mdReport);
+        assertThat(mdContent).contains("# Duplicate/Similar Files Report");
+        assertThat(mdContent).contains("f1.jpg");
+        assertThat(mdContent).contains("![thumbnail]");
+        assertThat(mdContent).contains("Size:");
+        assertThat(mdContent).contains("Modified:");
+        assertThat(mdContent).contains("10 B"); // formatSize for 10L
+
+        assertThat(htmlReport).exists();
+        String htmlContent = Files.readString(htmlReport);
+        assertThat(htmlContent).contains("<h1>Duplicate/Similar Files Report</h1>");
+        assertThat(htmlContent).contains("f2.jpg");
+        assertThat(htmlContent).contains("<img src=");
+        assertThat(htmlContent).contains("<strong>Size:</strong> 10 B");
+        assertThat(htmlContent).contains("<strong>Modified:</strong>");
+    }
+
+    @Test
+    void shouldGenerateReportsSortedBySize() throws IOException {
+        // Arrange
+        Path repoPath = tempDir.resolve("repo4");
+        Files.createDirectories(repoPath);
+        Repo repo = new Repo("repo4", repoPath.toString(), 1);
+        when(dedupConfig.getRepo("repo4")).thenReturn(Result.ok(repo));
+
+        RepoFile small = RepoFile.builder().hash("h1").relativePath("small.jpg").size(11L).mimeType("image/jpeg").fingerprint("000000000000000e").build();
+        RepoFile large = RepoFile.builder().hash("h2").relativePath("large.jpg").size(12L).mimeType("image/jpeg").fingerprint("000000000000000f").build();
+
+        RepoManager repoManager = RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter());
+        repoManager.load();
+        repoManager.addRepoFile(small);
+        repoManager.addRepoFile(large);
+        repoManager.close();
+
+        Path mdReport = tempDir.resolve("report_sort.md");
+
+        DuplicateRepoProcess process = new DuplicateRepoProcess(
+                cliParameter,
+                List.of("repo4"),
+                false,
+                dedupConfig,
+                90, // Similarity threshold
+                DuplicateRepoProcess.DupePrintMode.QUIET,
+                mdReport.toString(),
+                null,
+                null,
+                false,
+                new NioFileSystemAdapter()
+        );
+
+        // Act
+        process.dupes();
+
+        // Assert
+        assertThat(mdReport).exists();
+        String mdContent = Files.readString(mdReport);
+        // large.jpg (100) should come before small.jpg (10)
+        assertThat(mdContent).contains("large.jpg");
+        assertThat(mdContent).contains("small.jpg");
+        int largeIndex = mdContent.indexOf("large.jpg");
+        int smallIndex = mdContent.indexOf("small.jpg");
+        assertThat(largeIndex).isLessThan(smallIndex);
+    }
+
+    @Test
+    void shouldOrderEqualSizeByOldestFirst() throws IOException {
+        // Arrange
+        Path repoPath = tempDir.resolve("repo5");
+        Files.createDirectories(repoPath);
+        Repo repo = new Repo("repo5", repoPath.toString(), 1);
+        when(dedupConfig.getRepo("repo5")).thenReturn(Result.ok(repo));
+
+        // Two files with same hash and same size but different lastModified
+        RepoFile older = RepoFile.builder()
+                .hash("same")
+                .relativePath("older.jpg")
+                .size(100L)
+                .lastModified(1_000L)
+                .mimeType("image/jpeg")
+                .build();
+        RepoFile newer = RepoFile.builder()
+                .hash("same")
+                .relativePath("newer.jpg")
+                .size(100L)
+                .lastModified(2_000L)
+                .mimeType("image/jpeg")
+                .build();
+
+        RepoManager repoManager = RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter());
+        repoManager.load();
+        repoManager.addRepoFile(older);
+        repoManager.addRepoFile(newer);
+        repoManager.close();
+
+        Path mdReport = tempDir.resolve("report_equal_size.md");
+
+        DuplicateRepoProcess process = new DuplicateRepoProcess(
+                cliParameter,
+                List.of("repo5"),
+                false,
+                dedupConfig,
+                null, // exact duplicates mode
+                DuplicateRepoProcess.DupePrintMode.QUIET,
+                mdReport.toString(),
+                null,
+                null,
+                false,
+                new NioFileSystemAdapter()
+        );
+
+        // Act
+        process.dupes();
+
+        // Assert: older should come before newer within the same group
+        String md = Files.readString(mdReport);
+        int olderIdx = md.indexOf("older.jpg");
+        int newerIdx = md.indexOf("newer.jpg");
+        assertThat(olderIdx).isGreaterThan(-1);
+        assertThat(newerIdx).isGreaterThan(-1);
+        assertThat(olderIdx).isLessThan(newerIdx);
+    }
+
+    @Test
+    void shouldDeleteDuplicates() throws IOException {
+        // Arrange
+        Path repoPath = tempDir.resolve("repo_delete");
+        Files.createDirectories(repoPath);
+        Path file1 = repoPath.resolve("keep.jpg");
+        Path file2 = repoPath.resolve("delete.jpg");
+        Files.writeString(file1, "content");
+        Files.writeString(file2, "content");
+
+        Repo repo = new Repo("repo_delete", repoPath.toString(), 1);
+        when(dedupConfig.getRepo("repo_delete")).thenReturn(Result.ok(repo));
+
+        RepoFile rf1 = RepoFile.builder().hash("h").relativePath("keep.jpg").size(7L).lastModified(1000L).build();
+        RepoFile rf2 = RepoFile.builder().hash("h").relativePath("delete.jpg").size(7L).lastModified(2000L).build();
+
+        RepoManager repoManager = RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter());
+        repoManager.load();
+        repoManager.addRepoFile(rf1);
+        repoManager.addRepoFile(rf2);
+        repoManager.close();
+
+        DuplicateRepoProcess process = new DuplicateRepoProcess(
+                cliParameter,
+                List.of("repo_delete"),
+                false,
+                dedupConfig,
+                null,
+                DuplicateRepoProcess.DupePrintMode.QUIET,
+                null,
+                null,
+                null,
+                true, // delete
+                new NioFileSystemAdapter()
+        );
+
+        // Act
+        process.dupes();
+
+        // Assert
+        assertThat(file1).exists();
+        assertThat(file2).doesNotExist();
+
+        // Verify index update
+        repoManager.load();
+        RepoFile updatedRf2 = repoManager.getByPath("delete.jpg");
+        assertThat(updatedRf2.missing()).isTrue();
+    }
+
+    @Test
+    void shouldMoveDuplicates() throws IOException {
+        // Arrange
+        Path repoPath = tempDir.resolve("repo_move");
+        Files.createDirectories(repoPath);
+        Path file1 = repoPath.resolve("keep.jpg");
+        Path file2 = repoPath.resolve("move.jpg");
+        Files.writeString(file1, "content");
+        Files.writeString(file2, "content");
+
+        Path moveDir = tempDir.resolve("moved_files");
+
+        Repo repo = new Repo("repo_move", repoPath.toString(), 1);
+        when(dedupConfig.getRepo("repo_move")).thenReturn(Result.ok(repo));
+
+        RepoFile rf1 = RepoFile.builder().hash("h").relativePath("keep.jpg").size(7L).lastModified(1000L).build();
+        RepoFile rf2 = RepoFile.builder().hash("h").relativePath("move.jpg").size(7L).lastModified(2000L).build();
+
+        RepoManager repoManager = RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter());
+        repoManager.load();
+        repoManager.addRepoFile(rf1);
+        repoManager.addRepoFile(rf2);
+        repoManager.close();
+
+        DuplicateRepoProcess process = new DuplicateRepoProcess(
+                cliParameter,
+                List.of("repo_move"),
+                false,
+                dedupConfig,
+                null,
+                DuplicateRepoProcess.DupePrintMode.QUIET,
+                null,
+                null,
+                moveDir.toString(),
+                false,
+                new NioFileSystemAdapter()
+        );
+
+        // Act
+        process.dupes();
+
+        // Assert
+        assertThat(file1).exists();
+        assertThat(file2).doesNotExist();
+        assertThat(moveDir.resolve("move.jpg")).exists();
+
+        // Verify index update
+        repoManager.load();
+        RepoFile updatedRf2 = repoManager.getByPath("move.jpg");
+        assertThat(updatedRf2.missing()).isTrue();
     }
 }
