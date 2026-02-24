@@ -184,6 +184,7 @@ class MockedFileProcessingTest {
                 null,
                 null,
                 false,
+                false,
                 new StubFileSystem()
         );
         Result<Integer, DedupError> result = process.dupes();

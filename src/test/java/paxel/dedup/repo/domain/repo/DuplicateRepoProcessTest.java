@@ -79,6 +79,7 @@ class DuplicateRepoProcessTest {
                 null,
                 null,
                 false,
+                false,
                 new NioFileSystemAdapter()
         );
 
@@ -124,6 +125,7 @@ class DuplicateRepoProcessTest {
                 null,
                 null,
                 false,
+                false,
                 new NioFileSystemAdapter()
         );
 
@@ -165,6 +167,7 @@ class DuplicateRepoProcessTest {
                 mdReport.toString(),
                 htmlReport.toString(),
                 null,
+                false,
                 false,
                 new NioFileSystemAdapter()
         );
@@ -220,6 +223,7 @@ class DuplicateRepoProcessTest {
                 mdReport.toString(),
                 null,
                 null,
+                false,
                 false,
                 new NioFileSystemAdapter()
         );
@@ -281,6 +285,7 @@ class DuplicateRepoProcessTest {
                 null,
                 null,
                 false,
+                false,
                 new NioFileSystemAdapter()
         );
 
@@ -329,6 +334,7 @@ class DuplicateRepoProcessTest {
                 null,
                 null,
                 true, // delete
+                false,
                 new NioFileSystemAdapter()
         );
 
@@ -379,6 +385,7 @@ class DuplicateRepoProcessTest {
                 null,
                 null,
                 moveDir.toString(),
+                false,
                 false,
                 new NioFileSystemAdapter()
         );

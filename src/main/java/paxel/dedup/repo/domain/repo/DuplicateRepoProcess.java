@@ -30,13 +30,14 @@ public class DuplicateRepoProcess {
     private final String htmlPath;
     private final String movePath;
     private final boolean delete;
+    private final boolean interactive;
     private final FileSystem fileSystem;
 
-    public DuplicateRepoProcess(CliParameter cliParameter, List<String> names, boolean all, DedupConfig dedupConfig, Integer threshold, DupePrintMode printMode, String mdPath, String htmlPath, String movePath, boolean delete) {
-        this(cliParameter, names, all, dedupConfig, threshold, printMode, mdPath, htmlPath, movePath, delete, new NioFileSystemAdapter());
+    public DuplicateRepoProcess(CliParameter cliParameter, List<String> names, boolean all, DedupConfig dedupConfig, Integer threshold, DupePrintMode printMode, String mdPath, String htmlPath, String movePath, boolean delete, boolean interactive) {
+        this(cliParameter, names, all, dedupConfig, threshold, printMode, mdPath, htmlPath, movePath, delete, interactive, new NioFileSystemAdapter());
     }
 
-    public DuplicateRepoProcess(CliParameter cliParameter, List<String> names, boolean all, DedupConfig dedupConfig, Integer threshold, DupePrintMode printMode, String mdPath, String htmlPath, String movePath, boolean delete, FileSystem fileSystem) {
+    public DuplicateRepoProcess(CliParameter cliParameter, List<String> names, boolean all, DedupConfig dedupConfig, Integer threshold, DupePrintMode printMode, String mdPath, String htmlPath, String movePath, boolean delete, boolean interactive, FileSystem fileSystem) {
         this.cliParameter = cliParameter;
         this.names = names;
         this.all = all;
@@ -47,20 +48,21 @@ public class DuplicateRepoProcess {
         this.htmlPath = htmlPath;
         this.movePath = movePath;
         this.delete = delete;
+        this.interactive = interactive;
         this.fileSystem = fileSystem;
     }
 
     public DuplicateRepoProcess(CliParameter cliParameter, List<String> names, boolean all, DedupConfig dedupConfig, Integer threshold, DupePrintMode printMode, String mdPath, String htmlPath) {
-        this(cliParameter, names, all, dedupConfig, threshold, printMode, mdPath, htmlPath, null, false, new NioFileSystemAdapter());
+        this(cliParameter, names, all, dedupConfig, threshold, printMode, mdPath, htmlPath, null, false, false, new NioFileSystemAdapter());
     }
 
     public Result<Integer, DedupError> dupes() {
         if (all) {
-            Result<List<Repo>, DedupError> repos = dedupConfig.getRepos();
-            if (repos.hasFailed()) {
-                return Result.err(repos.error());
+            Result<List<Repo>, DedupError> reposResult = dedupConfig.getRepos();
+            if (reposResult.hasFailed()) {
+                return Result.err(reposResult.error());
             }
-            return Result.ok(dupe(repos.value()));
+            return Result.ok(dupe(reposResult.value()));
         }
         List<Repo> repos = new ArrayList<>();
         for (String name : names) {
@@ -114,6 +116,10 @@ public class DuplicateRepoProcess {
 
         if (movePath != null) {
             moveOthers(groups);
+        }
+
+        if (interactive) {
+            new InteractiveDupeProcess(dedupConfig, fileSystem, threshold).start(groups);
         }
 
         return 0;
