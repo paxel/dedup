@@ -16,7 +16,8 @@ public record RepoFile(
         @JsonProperty(value = "l") long lastModified,
         @JsonProperty(value = "d", defaultValue = "false") boolean missing,
         @JsonProperty(value = "m") String mimeType,
-        @JsonProperty(value = "f") String fingerprint) {
+        @JsonProperty(value = "f") String fingerprint,
+        @JsonProperty(value = "is") Dimension imageSize) {
 
     @JsonCreator
     public RepoFile(
@@ -26,7 +27,8 @@ public record RepoFile(
             @JsonProperty(value = "l") long lastModified,
             @JsonProperty(value = "d", defaultValue = "false") boolean missing,
             @JsonProperty(value = "m") String mimeType,
-            @JsonProperty(value = "f") String fingerprint) {
+            @JsonProperty(value = "f") String fingerprint,
+            @JsonProperty(value = "is") Dimension imageSize) {
         this.hash = hash;
         this.relativePath = relativePath;
         this.size = size != null ? size : 0L;
@@ -34,5 +36,6 @@ public record RepoFile(
         this.missing = missing;
         this.mimeType = mimeType;
         this.fingerprint = fingerprint;
+        this.imageSize = imageSize;
     }
 }

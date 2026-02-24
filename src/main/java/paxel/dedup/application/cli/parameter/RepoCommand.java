@@ -206,7 +206,9 @@ public class RepoCommand {
             @Option(names = {"--html"}, description = "Generate an HTML report with thumbnails") String htmlPath,
             @Option(names = {"--move"}, description = "Move duplicates to this directory, keeping the first one") String movePath,
             @Option(names = {"--delete"}, description = "Delete duplicates, keeping the first one") boolean delete,
-            @Option(names = {"--interactive"}, description = "Interactive mode with a web UI") boolean interactive) {
+            @Option(names = {"--interactive"}, description = "Interactive mode with a web UI") boolean interactive,
+            @Option(names = {"--width"}, description = "Width filter expression (e.g. >=1920, <=800, =1024)") String widthFilter,
+            @Option(names = {"--height"}, description = "Height filter expression (e.g. >=1080, <720, =600)") String heightFilter) {
         initDefaultConfig();
 
         if (!all && hasNoRepos(repos)) {
@@ -215,7 +217,7 @@ public class RepoCommand {
         }
         List<String> allNames = repos == null ? List.of() : repos;
         DuplicateRepoProcess.DupePrintMode printMode = getDupePrintMode(print);
-        Result<Integer, DedupError> result = new DuplicateRepoProcess(cliParameter, allNames, all, dedupConfig, threshold, printMode, mdPath, htmlPath, movePath, delete, interactive).dupes();
+        Result<Integer, DedupError> result = new DuplicateRepoProcess(cliParameter, allNames, all, dedupConfig, threshold, printMode, mdPath, htmlPath, movePath, delete, interactive, widthFilter, heightFilter).dupes();
         if (result.hasFailed()) {
             new DedupConfigErrorHandler().dump(result.error());
             return -80;

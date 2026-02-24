@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import paxel.dedup.domain.model.Dimension;
 import paxel.dedup.domain.model.Statistics;
 import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.domain.port.out.FileSystem;
@@ -153,6 +154,9 @@ public class InteractiveDupeProcess {
                     html.append("<strong>Repo:</strong> ").append(rrf.repo().name()).append("<br>");
                     html.append("<strong>Path:</strong> ").append(rrf.file().relativePath()).append("<br>");
                     html.append("<strong>Size:</strong> ").append(formatSize(rrf.file().size())).append("<br>");
+                    Dimension is = rrf.file().imageSize();
+                    if (is != null)
+                        html.append("<strong>Image:</strong> ").append(is).append("<br>");
                     html.append("<strong>Modified:</strong> ").append(formatDate(rrf.file().lastModified()));
                     html.append("</div>");
                     html.append("<div class='controls'>");

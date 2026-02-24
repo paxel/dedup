@@ -8,14 +8,19 @@ import java.nio.file.Path;
 
 public class ImageFingerprinter {
 
+    public record FingerprintResult(String fingerprint, Dimension imageSize) {
+    }
+
     /**
-     * Calculates a simple dHash (difference hash) for an image.
+     * Calculates a simple dHash (difference hash) for an image and returns its size.
      * The image is normalized (rotation and mirroring) to be invariant to these transformations.
      */
-    public String calculateFingerprint(Path path) {
+    public FingerprintResult calculate(Path path) {
         try {
             BufferedImage img = ImageIO.read(path.toFile());
-            if (img == null) return null;
+            if (img == null) return new FingerprintResult(null, null);
+
+            Dimension imageSize = new Dimension(img.getWidth(), img.getHeight());
 
             // 1. Resize to 9x9 grayscale for normalization and dHash
             BufferedImage scaled = new BufferedImage(9, 9, BufferedImage.TYPE_BYTE_GRAY);
@@ -42,9 +47,9 @@ public class ImageFingerprinter {
                     }
                 }
             }
-            return String.format("%016x", hash);
+            return new FingerprintResult(String.format("%016x", hash), imageSize);
         } catch (IOException | RuntimeException e) {
-            return null;
+            return new FingerprintResult(null, null);
         }
     }
 

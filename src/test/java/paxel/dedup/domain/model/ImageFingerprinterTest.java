@@ -32,7 +32,7 @@ class ImageFingerprinterTest {
         ImageIO.write(baseImg, "png", baseFile.toFile());
 
         ImageFingerprinter fingerprinter = new ImageFingerprinter();
-        String baseFingerprint = fingerprinter.calculateFingerprint(baseFile);
+        String baseFingerprint = fingerprinter.calculate(baseFile).fingerprint();
         assertThat(baseFingerprint).isNotNull();
 
         // Test rotations
@@ -40,7 +40,7 @@ class ImageFingerprinterTest {
             BufferedImage rotatedImg = rotate(baseImg, angle);
             Path rotatedFile = tempDir.resolve("rotated_" + angle + ".png");
             ImageIO.write(rotatedImg, "png", rotatedFile.toFile());
-            String rotatedFingerprint = fingerprinter.calculateFingerprint(rotatedFile);
+            String rotatedFingerprint = fingerprinter.calculate(rotatedFile).fingerprint();
             assertThat(rotatedFingerprint).isEqualTo(baseFingerprint)
                     .as("Fingerprint for " + angle + " rotation should match");
         }
@@ -49,7 +49,7 @@ class ImageFingerprinterTest {
         BufferedImage flippedHImg = flipHorizontal(baseImg);
         Path flippedHFile = tempDir.resolve("flippedH.png");
         ImageIO.write(flippedHImg, "png", flippedHFile.toFile());
-        String flippedHFingerprint = fingerprinter.calculateFingerprint(flippedHFile);
+        String flippedHFingerprint = fingerprinter.calculate(flippedHFile).fingerprint();
         assertThat(flippedHFingerprint).isEqualTo(baseFingerprint)
                 .as("Fingerprint for horizontal flip should match");
 
@@ -57,7 +57,7 @@ class ImageFingerprinterTest {
         BufferedImage flippedVImg = flipVertical(baseImg);
         Path flippedVFile = tempDir.resolve("flippedV.png");
         ImageIO.write(flippedVImg, "png", flippedVFile.toFile());
-        String flippedVFingerprint = fingerprinter.calculateFingerprint(flippedVFile);
+        String flippedVFingerprint = fingerprinter.calculate(flippedVFile).fingerprint();
         assertThat(flippedVFingerprint).isEqualTo(baseFingerprint)
                 .as("Fingerprint for vertical flip should match");
     }

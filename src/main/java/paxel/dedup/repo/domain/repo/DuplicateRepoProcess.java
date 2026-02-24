@@ -2,6 +2,7 @@ package paxel.dedup.repo.domain.repo;
 
 import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
+import paxel.dedup.domain.model.Dimension;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
@@ -31,13 +32,15 @@ public class DuplicateRepoProcess {
     private final String movePath;
     private final boolean delete;
     private final boolean interactive;
+    private final String widthFilter;
+    private final String heightFilter;
     private final FileSystem fileSystem;
 
     public DuplicateRepoProcess(CliParameter cliParameter, List<String> names, boolean all, DedupConfig dedupConfig, Integer threshold, DupePrintMode printMode, String mdPath, String htmlPath, String movePath, boolean delete, boolean interactive) {
-        this(cliParameter, names, all, dedupConfig, threshold, printMode, mdPath, htmlPath, movePath, delete, interactive, new NioFileSystemAdapter());
+        this(cliParameter, names, all, dedupConfig, threshold, printMode, mdPath, htmlPath, movePath, delete, interactive, null, null, new NioFileSystemAdapter());
     }
 
-    public DuplicateRepoProcess(CliParameter cliParameter, List<String> names, boolean all, DedupConfig dedupConfig, Integer threshold, DupePrintMode printMode, String mdPath, String htmlPath, String movePath, boolean delete, boolean interactive, FileSystem fileSystem) {
+    public DuplicateRepoProcess(CliParameter cliParameter, List<String> names, boolean all, DedupConfig dedupConfig, Integer threshold, DupePrintMode printMode, String mdPath, String htmlPath, String movePath, boolean delete, boolean interactive, String widthFilter, String heightFilter, FileSystem fileSystem) {
         this.cliParameter = cliParameter;
         this.names = names;
         this.all = all;
@@ -49,11 +52,23 @@ public class DuplicateRepoProcess {
         this.movePath = movePath;
         this.delete = delete;
         this.interactive = interactive;
+        this.widthFilter = widthFilter;
+        this.heightFilter = heightFilter;
         this.fileSystem = fileSystem;
     }
 
+    public DuplicateRepoProcess(CliParameter cliParameter, List<String> names, boolean all, DedupConfig dedupConfig, Integer threshold, DupePrintMode printMode, String mdPath, String htmlPath, String movePath, boolean delete, boolean interactive, FileSystem fileSystem) {
+        this(cliParameter, names, all, dedupConfig, threshold, printMode, mdPath, htmlPath, movePath, delete, interactive, null, null, fileSystem);
+    }
+
     public DuplicateRepoProcess(CliParameter cliParameter, List<String> names, boolean all, DedupConfig dedupConfig, Integer threshold, DupePrintMode printMode, String mdPath, String htmlPath) {
-        this(cliParameter, names, all, dedupConfig, threshold, printMode, mdPath, htmlPath, null, false, false, new NioFileSystemAdapter());
+        this(cliParameter, names, all, dedupConfig, threshold, printMode, mdPath, htmlPath, null, false, false, null, null, new NioFileSystemAdapter());
+    }
+
+    public DuplicateRepoProcess(CliParameter cliParameter, List<String> names, boolean all, DedupConfig dedupConfig, Integer threshold,
+                                DupePrintMode printMode, String mdPath, String htmlPath, String movePath, boolean delete, boolean interactive,
+                                String widthFilter, String heightFilter) {
+        this(cliParameter, names, all, dedupConfig, threshold, printMode, mdPath, htmlPath, movePath, delete, interactive, widthFilter, heightFilter, new NioFileSystemAdapter());
     }
 
     public Result<Integer, DedupError> dupes() {
@@ -86,14 +101,19 @@ public class DuplicateRepoProcess {
             return -81;
         }
 
-        // Sort files within each group by size (desc), and in case of equal size by lastModified (asc = older first)
+        // Sort files within each group by image area (desc), then file size (desc), then lastModified (asc older first), then path
         for (List<RepoRepoFile> group : groups) {
             group.sort((a, b) -> {
+                Dimension isA = a.file.imageSize();
+                Dimension isB = b.file.imageSize();
+                long areaA = isA != null ? isA.area() : -1;
+                long areaB = isB != null ? isB.area() : -1;
+                int byArea = Long.compare(areaB, areaA); // desc
+                if (byArea != 0) return byArea;
                 int bySize = b.file.size().compareTo(a.file.size());
                 if (bySize != 0) return bySize;
                 int byTime = Long.compare(a.file.lastModified(), b.file.lastModified());
                 if (byTime != 0) return byTime;
-                // Stable fallback to keep output deterministic
                 return a.file.relativePath().compareToIgnoreCase(b.file.relativePath());
             });
         }
@@ -201,6 +221,7 @@ public class DuplicateRepoProcess {
             }
             r.stream()
                     .filter(repoFile1 -> !repoFile1.missing())
+                    .filter(this::matchesDimensionFilters)
                     .forEach(repoFile ->
                             all.computeIfAbsent(new UniqueHash(repoFile.hash(), repoFile.size()),
                                     k -> new ArrayList<>()).add(new RepoRepoFile(repo, repoFile)));
@@ -222,18 +243,12 @@ public class DuplicateRepoProcess {
             }
             r.stream()
                     .filter(rf -> {
-                        if (rf.missing()) {
-                            return false;
-                        }
+                        if (rf.missing()) return false;
                         String fingerprint = rf.fingerprint();
-                        if (fingerprint == null) {
-                            return false;
-                        }
-                        if (fingerprint.isBlank()) {
-                            return false;
-                        }
+                        if (fingerprint == null || fingerprint.isBlank()) return false;
                         return true;
                     })
+                    .filter(this::matchesDimensionFilters)
                     .forEach(rf -> images.add(new RepoRepoFile(repo, rf)));
         }
 
@@ -280,8 +295,54 @@ public class DuplicateRepoProcess {
         return groups;
     }
 
+    private boolean eval(String expr, int value) {
+        String e = expr.trim();
+        String op;
+        String numStr;
+        if (e.startsWith(">=")) {
+            op = ">=";
+            numStr = e.substring(2);
+        } else if (e.startsWith("<=")) {
+            op = "<=";
+            numStr = e.substring(2);
+        } else if (e.startsWith(">")) {
+            op = ">";
+            numStr = e.substring(1);
+        } else if (e.startsWith("<")) {
+            op = "<";
+            numStr = e.substring(1);
+        } else if (e.startsWith("=")) {
+            op = "=";
+            numStr = e.substring(1);
+        } else {
+            op = "=";
+            numStr = e;
+        }
+        int target;
+        try {
+            target = Integer.parseInt(numStr.trim());
+        } catch (NumberFormatException ex) {
+            return false;
+        }
+        if ("<".equals(op)) return value < target;
+        if ("<=".equals(op)) return value <= target;
+        if (">".equals(op)) return value > target;
+        if (">=".equals(op)) return value >= target;
+        return value == target; // '=' or default
+    }
+
     private int hammingDistance(java.math.BigInteger b1, java.math.BigInteger b2) {
         return b1.xor(b2).bitCount();
+    }
+
+    private boolean matchesDimensionFilters(RepoFile rf) {
+        boolean anyFilter = widthFilter != null || heightFilter != null;
+        if (!anyFilter) return true;
+        Dimension is = rf.imageSize();
+        if (is == null) return false; // exclude entries without dimensions when any filter is set
+        if (widthFilter != null && !eval(widthFilter, is.getWidth())) return false;
+        if (heightFilter != null && !eval(heightFilter, is.getHeight())) return false;
+        return true;
     }
 
     private void printGroups(List<List<RepoRepoFile>> groups) {
@@ -297,9 +358,11 @@ public class DuplicateRepoProcess {
     private void printSimilarGroup(List<RepoRepoFile> group) {
         log.info("Similar Group (Threshold: {}%):", threshold);
         for (RepoRepoFile rrf : group) {
-            log.info(String.format("  %s: %s/%s (size: %s, modified: %s, fingerprint: %s)",
+            Dimension is = rrf.file.imageSize();
+            String isInfo = is != null ? ", image: " + is : "";
+            log.info(String.format("  %s: %s/%s (size: %s%s, modified: %s, fingerprint: %s)",
                     rrf.repo.name(), rrf.repo.absolutePath(), rrf.file.relativePath(),
-                    formatSize(rrf.file.size()), formatDate(rrf.file.lastModified()), rrf.file.fingerprint()));
+                    formatSize(rrf.file.size()), isInfo, formatDate(rrf.file.lastModified()), rrf.file.fingerprint()));
         }
     }
 
@@ -307,13 +370,23 @@ public class DuplicateRepoProcess {
         log.info(String.format("%s%n %d bytes", repoRepoFiles.getFirst().file.hash(), repoRepoFiles.getFirst().file.size()));
         repoRepoFiles.stream()
                 .sorted((a, b) -> {
+                    Dimension isA = a.file.imageSize();
+                    Dimension isB = b.file.imageSize();
+                    long areaA = isA != null ? isA.area() : -1;
+                    long areaB = isB != null ? isB.area() : -1;
+                    int byArea = Long.compare(areaB, areaA);
+                    if (byArea != 0) return byArea;
                     int bySize = b.file.size().compareTo(a.file.size());
                     if (bySize != 0) return bySize;
                     return Long.compare(a.file.lastModified(), b.file.lastModified());
                 })
-                .forEach(repoRepoFile -> log.info(String.format("  %s%n   %s/%s (size: %s, modified: %s)",
-                        repoRepoFile.repo.name(), repoRepoFile.repo.absolutePath(), repoRepoFile.file.relativePath(),
-                        formatSize(repoRepoFile.file.size()), formatDate(repoRepoFile.file.lastModified()))));
+                .forEach(repoRepoFile -> {
+                    Dimension is = repoRepoFile.file.imageSize();
+                    String isInfo = is != null ? ", image: " + is : "";
+                    log.info(String.format("  %s%n   %s/%s (size: %s%s, modified: %s)",
+                            repoRepoFile.repo.name(), repoRepoFile.repo.absolutePath(), repoRepoFile.file.relativePath(),
+                            formatSize(repoRepoFile.file.size()), isInfo, formatDate(repoRepoFile.file.lastModified())));
+                });
     }
 
     private String formatSize(long size) {
@@ -348,6 +421,8 @@ public class DuplicateRepoProcess {
                 sb.append("- **Repo:** ").append(rrf.repo.name()).append("\n");
                 sb.append("  - **Path:** `").append(rrf.file.relativePath()).append("`\n");
                 sb.append("  - **Size:** ").append(formatSize(rrf.file.size())).append("\n");
+                if (rrf.file.imageSize() != null)
+                    sb.append("  - **Image:** ").append(rrf.file.imageSize()).append("\n");
                 sb.append("  - **Modified:** ").append(formatDate(rrf.file.lastModified())).append("\n");
                 if (rrf.file.mimeType() != null && rrf.file.mimeType().startsWith("image/")) {
                     sb.append("  - ![thumbnail](").append(new java.io.File(fullPath).toURI().toString()).append(")\n");
@@ -395,6 +470,8 @@ public class DuplicateRepoProcess {
                 sb.append("<strong>Repo:</strong> ").append(rrf.repo.name()).append("<br>\n");
                 sb.append("<strong>Path:</strong> <code>").append(rrf.file.relativePath()).append("</code><br>\n");
                 sb.append("<strong>Size:</strong> ").append(formatSize(rrf.file.size())).append("<br>\n");
+                if (rrf.file.imageSize() != null)
+                    sb.append("<strong>Image:</strong> ").append(rrf.file.imageSize()).append("<br>\n");
                 sb.append("<strong>Modified:</strong> ").append(formatDate(rrf.file.lastModified())).append("<br>\n");
                 if (rrf.file.mimeType() != null && rrf.file.mimeType().startsWith("image/")) {
                     sb.append("<img src=\"").append(new java.io.File(fullPath).toURI().toString()).append("\" alt=\"thumbnail\">\n");

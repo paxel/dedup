@@ -183,8 +183,11 @@ public class RepoManager {
 
             String mimeType = mimetypeProvider.get(absolutePath).getValueOr(null);
             String fingerprint = null;
+            Dimension imageSize = null;
             if (mimeType != null && mimeType.startsWith("image/")) {
-                fingerprint = new ImageFingerprinter().calculateFingerprint(absolutePath);
+                ImageFingerprinter.FingerprintResult fr = new ImageFingerprinter().calculate(absolutePath);
+                fingerprint = fr.fingerprint();
+                imageSize = fr.imageSize();
             }
 
             RepoFile repoFile = RepoFile.builder()
@@ -194,6 +197,7 @@ public class RepoManager {
                     .hash(hashResult.value())
                     .mimeType(mimeType)
                     .fingerprint(fingerprint)
+                    .imageSize(imageSize)
                     .build();
 
             return addRepoFile(repoFile);
