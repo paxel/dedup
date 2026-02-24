@@ -6,6 +6,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.With;
 
+import java.util.Map;
+
 @Builder(toBuilder = true)
 @With
 @JsonInclude(JsonInclude.Include.NON_EMPTY)
@@ -17,7 +19,8 @@ public record RepoFile(
         @JsonProperty(value = "d", defaultValue = "false") boolean missing,
         @JsonProperty(value = "m") String mimeType,
         @JsonProperty(value = "f") String fingerprint,
-        @JsonProperty(value = "is") Dimension imageSize) {
+        @JsonProperty(value = "is") Dimension imageSize,
+        @JsonProperty(value = "at") Map<String, String> attributes) {
 
     @JsonCreator
     public RepoFile(
@@ -28,7 +31,8 @@ public record RepoFile(
             @JsonProperty(value = "d", defaultValue = "false") boolean missing,
             @JsonProperty(value = "m") String mimeType,
             @JsonProperty(value = "f") String fingerprint,
-            @JsonProperty(value = "is") Dimension imageSize) {
+            @JsonProperty(value = "is") Dimension imageSize,
+            @JsonProperty(value = "at") Map<String, String> attributes) {
         this.hash = hash;
         this.relativePath = relativePath;
         this.size = size != null ? size : 0L;
@@ -37,5 +41,6 @@ public record RepoFile(
         this.mimeType = mimeType;
         this.fingerprint = fingerprint;
         this.imageSize = imageSize;
+        this.attributes = attributes != null ? Map.copyOf(attributes) : Map.of();
     }
 }

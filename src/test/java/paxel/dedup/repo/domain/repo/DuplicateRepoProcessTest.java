@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -352,39 +353,36 @@ class DuplicateRepoProcessTest {
     }
 
     @Test
-    void shouldMoveDuplicates() throws IOException {
+    void shouldIncludeAttributesInReports() throws IOException {
         // Arrange
-        Path repoPath = tempDir.resolve("repo_move");
+        Path repoPath = tempDir.resolve("repo_attr");
         Files.createDirectories(repoPath);
-        Path file1 = repoPath.resolve("keep.jpg");
-        Path file2 = repoPath.resolve("move.jpg");
-        Files.writeString(file1, "content");
-        Files.writeString(file2, "content");
+        Repo repo = new Repo("repo_attr", repoPath.toString(), 1);
+        when(dedupConfig.getRepo("repo_attr")).thenReturn(Result.ok(repo));
 
-        Path moveDir = tempDir.resolve("moved_files");
-
-        Repo repo = new Repo("repo_move", repoPath.toString(), 1);
-        when(dedupConfig.getRepo("repo_move")).thenReturn(Result.ok(repo));
-
-        RepoFile rf1 = RepoFile.builder().hash("h").relativePath("keep.jpg").size(7L).lastModified(1000L).build();
-        RepoFile rf2 = RepoFile.builder().hash("h").relativePath("move.jpg").size(7L).lastModified(2000L).build();
+        Map<String, String> attrs = Map.of("duration", "00:01:23", "artist", "Test Artist");
+        RepoFile file1 = RepoFile.builder().hash("h").relativePath("f1.mp3").size(100L).attributes(attrs).build();
+        RepoFile file2 = RepoFile.builder().hash("h").relativePath("f2.mp3").size(100L).attributes(attrs).build();
 
         RepoManager repoManager = RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter());
         repoManager.load();
-        repoManager.addRepoFile(rf1);
-        repoManager.addRepoFile(rf2);
+        repoManager.addRepoFile(file1);
+        repoManager.addRepoFile(file2);
         repoManager.close();
+
+        Path mdReport = tempDir.resolve("report_attr.md");
+        Path htmlReport = tempDir.resolve("report_attr.html");
 
         DuplicateRepoProcess process = new DuplicateRepoProcess(
                 cliParameter,
-                List.of("repo_move"),
+                List.of("repo_attr"),
                 false,
                 dedupConfig,
                 null,
                 DuplicateRepoProcess.DupePrintMode.QUIET,
+                mdReport.toString(),
+                htmlReport.toString(),
                 null,
-                null,
-                moveDir.toString(),
                 false,
                 false,
                 new NioFileSystemAdapter()
@@ -394,13 +392,14 @@ class DuplicateRepoProcessTest {
         process.dupes();
 
         // Assert
-        assertThat(file1).exists();
-        assertThat(file2).doesNotExist();
-        assertThat(moveDir.resolve("move.jpg")).exists();
+        assertThat(mdReport).exists();
+        String mdContent = Files.readString(mdReport);
+        assertThat(mdContent).contains("**duration:** 00:01:23");
+        assertThat(mdContent).contains("**artist:** Test Artist");
 
-        // Verify index update
-        repoManager.load();
-        RepoFile updatedRf2 = repoManager.getByPath("move.jpg");
-        assertThat(updatedRf2.missing()).isTrue();
+        assertThat(htmlReport).exists();
+        String htmlContent = Files.readString(htmlReport);
+        assertThat(htmlContent).contains("<strong>duration:</strong> 00:01:23");
+        assertThat(htmlContent).contains("<strong>artist:</strong> Test Artist");
     }
 }

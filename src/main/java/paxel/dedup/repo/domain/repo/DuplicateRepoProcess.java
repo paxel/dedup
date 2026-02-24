@@ -363,6 +363,9 @@ public class DuplicateRepoProcess {
             log.info(String.format("  %s: %s/%s (size: %s%s, modified: %s, fingerprint: %s)",
                     rrf.repo.name(), rrf.repo.absolutePath(), rrf.file.relativePath(),
                     formatSize(rrf.file.size()), isInfo, formatDate(rrf.file.lastModified()), rrf.file.fingerprint()));
+            if (rrf.file.attributes() != null && !rrf.file.attributes().isEmpty()) {
+                log.info("    Attributes: " + rrf.file.attributes());
+            }
         }
     }
 
@@ -386,6 +389,9 @@ public class DuplicateRepoProcess {
                     log.info(String.format("  %s%n   %s/%s (size: %s%s, modified: %s)",
                             repoRepoFile.repo.name(), repoRepoFile.repo.absolutePath(), repoRepoFile.file.relativePath(),
                             formatSize(repoRepoFile.file.size()), isInfo, formatDate(repoRepoFile.file.lastModified())));
+                    if (repoRepoFile.file.attributes() != null && !repoRepoFile.file.attributes().isEmpty()) {
+                        log.info("    Attributes: " + repoRepoFile.file.attributes());
+                    }
                 });
     }
 
@@ -423,6 +429,11 @@ public class DuplicateRepoProcess {
                 sb.append("  - **Size:** ").append(formatSize(rrf.file.size())).append("\n");
                 if (rrf.file.imageSize() != null)
                     sb.append("  - **Image:** ").append(rrf.file.imageSize()).append("\n");
+
+                if (rrf.file.attributes() != null && !rrf.file.attributes().isEmpty()) {
+                    rrf.file.attributes().forEach((k, v) -> sb.append("  - **").append(k).append(":** ").append(v).append("\n"));
+                }
+
                 sb.append("  - **Modified:** ").append(formatDate(rrf.file.lastModified())).append("\n");
                 if (rrf.file.mimeType() != null && rrf.file.mimeType().startsWith("image/")) {
                     sb.append("  - ![thumbnail](").append(new java.io.File(fullPath).toURI().toString()).append(")\n");
@@ -472,6 +483,13 @@ public class DuplicateRepoProcess {
                 sb.append("<strong>Size:</strong> ").append(formatSize(rrf.file.size())).append("<br>\n");
                 if (rrf.file.imageSize() != null)
                     sb.append("<strong>Image:</strong> ").append(rrf.file.imageSize()).append("<br>\n");
+
+                if (rrf.file.attributes() != null && !rrf.file.attributes().isEmpty()) {
+                    rrf.file.attributes().forEach((k, v) ->
+                            sb.append("<strong>").append(k).append(":</strong> ").append(v).append("<br>\n")
+                    );
+                }
+
                 sb.append("<strong>Modified:</strong> ").append(formatDate(rrf.file.lastModified())).append("<br>\n");
                 if (rrf.file.mimeType() != null && rrf.file.mimeType().startsWith("image/")) {
                     sb.append("<img src=\"").append(new java.io.File(fullPath).toURI().toString()).append("\" alt=\"thumbnail\">\n");

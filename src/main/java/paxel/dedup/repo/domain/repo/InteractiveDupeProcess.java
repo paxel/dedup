@@ -113,6 +113,8 @@ public class InteractiveDupeProcess {
             html.append(".files-scroll { display: flex; overflow-x: auto; gap: 15px; padding-bottom: 10px; }");
             html.append(".file-card { flex: 0 0 250px; border: 1px solid #ddd; padding: 10px; border-radius: 4px; display: flex; flex-direction: column; }");
             html.append(".file-card img { max-width: 100%; height: 200px; object-fit: contain; background: #eee; margin-bottom: 10px; }");
+            html.append(".filmstrip { display: flex; gap: 2px; margin-bottom: 10px; }");
+            html.append(".filmstrip img { flex: 1; height: 100px; object-fit: contain; background: #eee; }");
             html.append(".file-info { font-size: 0.8em; flex-grow: 1; }");
             html.append(".file-card.selected { border-color: #4CAF50; background-color: #e8f5e9; }");
             html.append(".controls { margin-top: 10px; }");
@@ -149,7 +151,30 @@ public class InteractiveDupeProcess {
                     String checkedAttr = preselected ? "checked" : "";
 
                     html.append("<div class='file-card ").append(selectedClass).append("' id='card-").append(g).append("-").append(f).append("'>");
-                    html.append("<img src='/image?path=").append(encodedPath).append("' alt='thumbnail'>");
+
+                    String mime = rrf.file().mimeType();
+                    boolean isVideo = mime != null && mime.startsWith("video/");
+                    if (isVideo) {
+                        // Generate a small filmstrip preview
+                        try {
+                            java.util.List<String> frames = new VideoFilmstripGenerator(fileSystem)
+                                    .generateBase64Filmstrip(java.nio.file.Paths.get(path));
+                            if (!frames.isEmpty()) {
+                                html.append("<div class='filmstrip'>");
+                                for (String b64 : frames) {
+                                    html.append("<img src='data:image/jpeg;base64,").append(b64).append("' alt='frame'>");
+                                }
+                                html.append("</div>");
+                            } else {
+                                html.append("<div class='filmstrip'><div>No preview available</div></div>");
+                            }
+                        } catch (Exception e) {
+                            html.append("<div class='filmstrip'><div>Preview error</div></div>");
+                        }
+                    } else {
+                        html.append("<img src='/image?path=").append(encodedPath).append("' alt='thumbnail'>");
+                    }
+
                     html.append("<div class='file-info'>");
                     html.append("<strong>Repo:</strong> ").append(rrf.repo().name()).append("<br>");
                     html.append("<strong>Path:</strong> ").append(rrf.file().relativePath()).append("<br>");
@@ -157,6 +182,13 @@ public class InteractiveDupeProcess {
                     Dimension is = rrf.file().imageSize();
                     if (is != null)
                         html.append("<strong>Image:</strong> ").append(is).append("<br>");
+
+                    if (rrf.file().attributes() != null && !rrf.file().attributes().isEmpty()) {
+                        rrf.file().attributes().forEach((k, v) ->
+                                html.append("<strong>").append(k).append(":</strong> ").append(v).append("<br>")
+                        );
+                    }
+
                     html.append("<strong>Modified:</strong> ").append(formatDate(rrf.file().lastModified()));
                     html.append("</div>");
                     html.append("<div class='controls'>");
