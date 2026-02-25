@@ -4,13 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
 import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
-import paxel.dedup.infrastructure.adapter.out.serialization.JacksonMapperLineCodec;
-import paxel.dedup.infrastructure.adapter.out.serialization.JsonFrameIterator;
-import paxel.dedup.infrastructure.adapter.out.serialization.JsonFrameWriter;
+import paxel.dedup.infrastructure.adapter.out.serialization.*;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -35,6 +34,59 @@ class IndexManagerTest {
         objectMapper = new ObjectMapper();
         // Default to real FS for most tests, or we can use the mock
         indexManager = new IndexManager(indexFile, new JacksonMapperLineCodec<>(objectMapper, RepoFile.class), new NioFileSystemAdapter(), JsonFrameIterator::new, JsonFrameWriter::new);
+    }
+
+    @Test
+    void testCompressedIndex() throws IOException {
+        // Arrange
+        indexFile = tempDir.resolve("test.idx.gz");
+        Files.createFile(indexFile);
+        FrameIteratorFactoryFactory ffff = new FrameIteratorFactoryFactory();
+        IndexManager compressedManager = new IndexManager(indexFile, new JacksonMapperLineCodec<>(objectMapper, RepoFile.class), new NioFileSystemAdapter(), ffff.forReader(Repo.Codec.JSON, true), ffff.forWriter(Repo.Codec.JSON, true));
+
+        RepoFile file1 = RepoFile.builder().hash("h1").relativePath("p1").size(10L).build();
+        RepoFile file2 = RepoFile.builder().hash("h2").relativePath("p2").size(20L).build();
+
+        // Act
+        compressedManager.add(file1);
+        compressedManager.close();
+
+        compressedManager.add(file2);
+        compressedManager.close();
+
+        // Assert
+        assertThat(indexFile).exists();
+        byte[] bytes = Files.readAllBytes(indexFile);
+        assertThat(bytes[0]).isEqualTo((byte) 0x1f);
+        assertThat(bytes[1]).isEqualTo((byte) 0x8b);
+
+        // Load it back
+        IndexManager reader = new IndexManager(indexFile, new JacksonMapperLineCodec<>(objectMapper, RepoFile.class), new NioFileSystemAdapter(), ffff.forReader(Repo.Codec.JSON, true), ffff.forWriter(Repo.Codec.JSON, true));
+        reader.load();
+        List<RepoFile> files = reader.stream().toList();
+        assertThat(files).hasSize(2);
+        assertThat(files).extracting(RepoFile::relativePath).containsExactlyInAnyOrder("p1", "p2");
+    }
+
+    @Test
+    void testMsgPackIndex() throws IOException {
+        // Arrange
+        indexFile = tempDir.resolve("test.idx.mp");
+        Files.createFile(indexFile);
+        ObjectMapper mpMapper = new ObjectMapper(new org.msgpack.jackson.dataformat.MessagePackFactory());
+        IndexManager mpManager = new IndexManager(indexFile, new JacksonMapperLineCodec<>(mpMapper, RepoFile.class), new NioFileSystemAdapter(), MsgPackFrameIterator::new, MsgPackFrameWriter::new);
+
+        RepoFile file1 = RepoFile.builder().hash("h1").relativePath("p1").size(10L).build();
+
+        // Act
+        mpManager.add(file1);
+        mpManager.close();
+
+        // Assert
+        IndexManager reader = new IndexManager(indexFile, new JacksonMapperLineCodec<>(mpMapper, RepoFile.class), new NioFileSystemAdapter(), MsgPackFrameIterator::new, MsgPackFrameWriter::new);
+        reader.load();
+        assertThat(reader.stream().toList()).hasSize(1);
+        assertThat(reader.getByPath("p1").hash()).isEqualTo("h1");
     }
 
     @Test
@@ -113,5 +165,37 @@ class IndexManagerTest {
                 assertThat(value).isEqualTo(1);
             }
         });
+    }
+
+    @Test
+    void shouldLoadValidEntriesAndFixCorruptIndex() throws IOException {
+        // Arrange: 1 valid, 1 corrupt (partial JSON), 1 valid
+        RepoFile file1 = RepoFile.builder().hash("h1").relativePath("p1").size(10L).build();
+        RepoFile file3 = RepoFile.builder().hash("h3").relativePath("p3").size(30L).build();
+
+        String valid1 = objectMapper.writeValueAsString(file1);
+        String corrupt = "{\"hash\":\"h2\", \"relativePath\":\"p2\", \"size\":"; // Partial JSON
+        String valid3 = objectMapper.writeValueAsString(file3);
+
+        Files.writeString(indexFile, valid1 + "\n" + corrupt + "\n" + valid3 + "\n");
+
+        // Act
+        indexManager.load();
+
+        // Assert: We should have loaded p1 and p3
+        List<RepoFile> files = indexManager.stream().toList();
+        assertThat(files).extracting(RepoFile::relativePath).containsExactlyInAnyOrder("p1", "p3");
+
+        // Assert: Index file should have been fixed (only contains 2 valid lines now)
+        List<String> lines = Files.readAllLines(indexFile);
+        assertThat(lines).hasSize(2);
+        assertThat(lines).anyMatch(l -> l.contains("p1"));
+        assertThat(lines).anyMatch(l -> l.contains("p3"));
+        assertThat(lines).noneMatch(l -> l.contains("h2"));
+
+        // Assert: Backup file should exist
+        Path backup = indexFile.resolveSibling(indexFile.getFileName().toString() + ".bak");
+        assertThat(backup).exists();
+        assertThat(Files.readString(backup)).contains("h2");
     }
 }

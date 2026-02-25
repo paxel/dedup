@@ -66,22 +66,33 @@ public interface DedupConfig {
     Result<Boolean, DedupError> renameRepo(String oldName, String newName);
 
     /**
-     * Updates the codec setting of the repo YAML while keeping name, path, and indices the same.
+     * Updates the config of the repo YAML while keeping name, path, and indices the same.
      */
     @NonNull
-    default Result<Repo, DedupError> setRepoConfig(@NonNull String name, @NonNull Repo.Codec codec) {
+    default Result<Repo, DedupError> setRepoConfig(@NonNull String name, @NonNull Repo.Codec codec, boolean compressed) {
         return Result.err(DedupError.of(paxel.dedup.domain.model.errors.ErrorType.MODIFY_REPO,
                 getRepoDir().resolve(name).resolve("dedup_repo.yml") + ": failed persisting repo config"));
     }
 
     /**
+     * Updates the codec setting of the repo YAML while keeping name, path, and indices the same.
+     *
+     * @deprecated Use {@link #setRepoConfig(String, Repo.Codec, boolean)} instead.
+     */
+    @Deprecated
+    @NonNull
+    default Result<Repo, DedupError> setRepoConfig(@NonNull String name, @NonNull Repo.Codec codec) {
+        return setRepoConfig(name, codec, false);
+    }
+
+    /**
      * Updates the codec of the repo YAML while keeping name, path, and indices the same.
      *
-     * @deprecated Use {@link #setRepoConfig(String, Repo.Codec)} instead.
+     * @deprecated Use {@link #setRepoConfig(String, Repo.Codec, boolean)} instead.
      */
     @Deprecated
     @NonNull
     default Result<Repo, DedupError> setCodec(@NonNull String name, @NonNull Repo.Codec codec) {
-        return setRepoConfig(name, codec);
+        return setRepoConfig(name, codec, false);
     }
 }

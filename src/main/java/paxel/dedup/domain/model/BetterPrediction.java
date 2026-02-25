@@ -11,6 +11,7 @@ public class BetterPrediction {
     public static final int COUNT = 1000;
     private final Queue<Instant> lastInstants = new ArrayBlockingQueue<>(COUNT + 1);
     private final Clock clock;
+    private Instant lastTriggerInstant;
 
     public BetterPrediction() {
         this(Clock.systemUTC());
@@ -21,17 +22,24 @@ public class BetterPrediction {
     }
 
     public void trigger() {
-        lastInstants.add(clock.instant());
+        lastTriggerInstant = clock.instant();
+        lastInstants.add(lastTriggerInstant);
         if (lastInstants.size() == COUNT + 1)
             lastInstants.poll();
     }
 
     public Duration get() {
-        Instant peek = lastInstants.peek();
-        if (peek == null || lastInstants.size() < COUNT)
+        Instant first = lastInstants.peek();
+        if (first == null || lastInstants.size() < 2)
             return null;
-        // Use current clock instant; callers may prefer exact last trigger span,
-        // but for compatibility we keep measuring up to "now".
-        return Duration.between(peek, clock.instant());
+
+        // Use duration between first and last recorded trigger in the window.
+        // This gives the time taken for (lastInstants.size() - 1) operations.
+        return Duration.between(first, lastTriggerInstant);
+    }
+
+    public int getCount() {
+        if (lastInstants.isEmpty()) return 0;
+        return lastInstants.size() - 1;
     }
 }

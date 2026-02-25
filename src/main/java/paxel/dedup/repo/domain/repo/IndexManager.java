@@ -56,51 +56,94 @@ public class IndexManager {
         // MVP: we load everything to memory
         Statistics statistics = new Statistics(indexFile.toAbsolutePath().toString());
         statistics.start(LOAD);
+        boolean corrupted = false;
         try (FrameIterator frameIterator = frameIteratorFactory.apply(fileSystem.newInputStream(indexFile))) {
-            while (frameIterator.hasNext()) {
-                ByteBuffer s = frameIterator.next();
-                if (s == null)
+            while (true) {
+                ByteBuffer s;
+                try {
+                    if (!frameIterator.hasNext()) {
+                        break;
+                    }
+                    s = frameIterator.next();
+                } catch (Exception e) {
+                    log.error("{}: error during iteration, index might be corrupted", indexFile, e);
+                    corrupted = true;
                     break;
-                statistics.inc(LINES);
-                RepoFile repoFile = readValid(s);
-                if (repoFile != null) {
-                    // the same hash can exist as multiple paths. so we store the paths per hash
-                    hashes.computeIfAbsent(repoFile.hash(), h -> new HashSet<>()).add(repoFile.relativePath());
+                }
 
-                    // we store only the latest path
-                    // if a file has changed in time
-                    RepoFile put = paths.put(repoFile.relativePath(), repoFile);
-                    if (put != null) {
-                        statistics.inc(CHANGES);
-                        if (!put.hash().equals(repoFile.hash())) {
-                            // The hash for the file has changed and we clean up the lookup
-                            hashes.get(put.hash()).remove(put.relativePath());
+                if (s == null) {
+                    break;
+                }
+
+                statistics.inc(LINES);
+                try {
+                    RepoFile repoFile = readValid(s);
+                    if (repoFile != null) {
+                        // the same hash can exist as multiple paths. so we store the paths per hash
+                        hashes.computeIfAbsent(repoFile.hash(), h -> new HashSet<>()).add(repoFile.relativePath());
+
+                        // we store only the latest path
+                        // if a file has changed in time
+                        RepoFile put = paths.put(repoFile.relativePath(), repoFile);
+                        if (put != null) {
+                            statistics.inc(CHANGES);
+                            if (!put.hash().equals(repoFile.hash())) {
+                                // The hash for the file has changed and we clean up the lookup
+                                hashes.get(put.hash()).remove(put.relativePath());
+                            }
                         }
                     }
+                } catch (Exception e) {
+                    log.error("{}: error decoding record, skipping line", indexFile, e);
+                    corrupted = true;
                 }
             }
-            // count existing and missing files
-            long files = paths.values().stream().filter(r -> !r.missing()).count();
-            long missing = paths.size() - files;
-            // count duplicates
-            int duplicates = paths.values().stream()
-                    .filter(r -> !r.missing())
-                    .map(RepoFile::hash)
-                    // duplicates times a hash exists
-                    .collect(Collectors.toMap(Function.identity(), f -> 1, Integer::sum))
-                    .values()
-                    .stream()
-                    // reduce by 1
-                    .mapToInt(i -> i - 1)
-                    // number of duplicate files
-                    .sum();
-            statistics.set(FILES, files);
-            statistics.set(MISSING, missing);
-            statistics.set(DUPLICATES, duplicates);
-            statistics.stop(LOAD);
-            return Result.ok(statistics);
         } catch (IOException e) {
             return Result.err(DedupError.of(ErrorType.LOAD, indexFile + ": load failed", e));
+        }
+
+        if (corrupted) {
+            log.info("{}: corruption detected, repairing index file", indexFile);
+            Result<Void, DedupError> repairResult = repair();
+            if (repairResult.hasFailed()) {
+                return Result.err(repairResult.error());
+            }
+        }
+
+        // count existing and missing files
+        long files = paths.values().stream().filter(r -> !r.missing()).count();
+        long missing = paths.size() - files;
+        // count duplicates
+        int duplicates = paths.values().stream()
+                .filter(r -> !r.missing())
+                .map(RepoFile::hash)
+                // duplicates times a hash exists
+                .collect(Collectors.toMap(Function.identity(), f -> 1, Integer::sum))
+                .values()
+                .stream()
+                // reduce by 1
+                .mapToInt(i -> i - 1)
+                // number of duplicate files
+                .sum();
+        statistics.set(FILES, files);
+        statistics.set(MISSING, missing);
+        statistics.set(DUPLICATES, duplicates);
+        statistics.stop(LOAD);
+        return Result.ok(statistics);
+    }
+
+    private Result<Void, DedupError> repair() {
+        try {
+            Path backup = indexFile.resolveSibling(indexFile.getFileName().toString() + ".bak");
+            fileSystem.move(indexFile, backup);
+            try (FrameWriter writer = frameWriterFactory.apply(fileSystem.newOutputStream(indexFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING))) {
+                for (RepoFile repoFile : paths.values()) {
+                    writer.write(lineCodec.encode(repoFile));
+                }
+            }
+            return Result.ok(null);
+        } catch (IOException e) {
+            return Result.err(DedupError.of(ErrorType.WRITE, indexFile + ": repair failed", e));
         }
     }
 
@@ -140,7 +183,11 @@ public class IndexManager {
                     return o;
                 else {
                     try {
-                        return frameWriterFactory.apply(fileSystem.newOutputStream(indexFile, StandardOpenOption.APPEND));
+                        StandardOpenOption option = StandardOpenOption.APPEND;
+                        // GZIPOutputStream does not support appending to a file in a way that continues the same stream.
+                        // However, multiple GZIP members can be concatenated, and GZIPInputStream will read them as a single stream.
+                        // To achieve this, we just need to open the file in APPEND mode and GZIPOutputStream will write a new member.
+                        return frameWriterFactory.apply(fileSystem.newOutputStream(indexFile, option));
                     } catch (IOException e) {
                         throw new TunneledIoException(e);
                     }

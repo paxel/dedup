@@ -12,26 +12,24 @@ public record Repo(
         String name,
         String absolutePath,
         int indices,
-        Codec codec
+        Codec codec,
+        boolean compressed
 ) {
 
     public enum Codec {JSON, MESSAGEPACK}
 
     @JsonCreator
-    public Repo(@JsonProperty("name") String name,
-                @JsonProperty("absolutePath") String absolutePath,
-                @JsonProperty("indices") int indices,
-                @JsonProperty("codec") Codec codec) {
-        this.name = name;
-        this.absolutePath = absolutePath;
-        this.indices = indices;
-        // Backward compatibility: default to JSON when field missing/null
-        this.codec = codec != null ? codec : Codec.JSON;
+    public static Repo create(@JsonProperty("name") String name,
+                              @JsonProperty("absolutePath") String absolutePath,
+                              @JsonProperty("indices") int indices,
+                              @JsonProperty("codec") Codec codec,
+                              @JsonProperty("compressed") Boolean compressed) {
+        return new Repo(name, absolutePath, indices, codec != null ? codec : Codec.JSON, compressed != null ? compressed : false);
     }
 
     // Backward-compatible convenience constructor used in code/tests
     public Repo(String name, String absolutePath, int indices) {
-        this(name, absolutePath, indices, Codec.JSON);
+        this(name, absolutePath, indices, Codec.JSON, false);
     }
 
     @Override

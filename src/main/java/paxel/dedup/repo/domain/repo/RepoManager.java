@@ -93,7 +93,7 @@ public class RepoManager {
             }
 
             FrameIteratorFactoryFactory ffff = new FrameIteratorFactoryFactory();
-            IndexManager indexManager = new IndexManager(indexPath, lineCodec, fileSystem, ffff.forReader(repo.codec()), ffff.forWriter(repo.codec()));
+            IndexManager indexManager = new IndexManager(indexPath, lineCodec, fileSystem, ffff.forReader(repo.codec(), repo.compressed()), ffff.forWriter(repo.codec(), repo.compressed()));
             Result<Statistics, DedupError> load = indexManager.load();
             if (load.hasFailed()) {
                 return load;

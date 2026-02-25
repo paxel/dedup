@@ -548,6 +548,7 @@ public class DuplicateRepoProcess {
         sb.append(".group { border: 1px solid #ccc; padding: 10px; margin-bottom: 20px; border-radius: 5px; }\n");
         sb.append(".file { margin-bottom: 10px; }\n");
         sb.append("img { max-width: 200px; max-height: 200px; display: block; margin-top: 5px; }\n");
+        sb.append(".filmstrip img { max-width: calc(33.3% - 2px); height: auto; }\n");
         sb.append("code { background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }\n");
         sb.append("</style>\n</head>\n<body>\n");
         sb.append("<h1>Duplicate/Similar Files Report</h1>\n");

@@ -117,6 +117,7 @@ public class InteractiveDupeProcess {
             html.append(".filmstrip img { flex: 1; height: 100px; object-fit: contain; background: #eee; }");
             html.append(".file-info { font-size: 0.8em; flex-grow: 1; }");
             html.append(".file-card.selected { border-color: #4CAF50; background-color: #e8f5e9; }");
+            html.append(".filmstrip img { max-width: calc(33.3% - 2px); height: auto; }");
             html.append(".controls { margin-top: 10px; }");
             html.append(".delete-btn { background-color: #f44336; color: white; border: none; padding: 15px 32px; text-align: center; text-decoration: none; display: inline-block; font-size: 16px; margin: 4px 2px; cursor: pointer; border-radius: 8px; font-weight: bold; }");
             html.append(".sticky-footer { position: fixed; bottom: 0; left: 0; width: 100%; background: white; padding: 15px; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); text-align: center; z-index: 100; }");

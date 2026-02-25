@@ -128,7 +128,7 @@ public final class DefaultDedupConfig implements DedupConfig {
 
 
     private Result<Repo, IOException> writeRepoFile(String name, Path path, int indices, Path ymlFile) {
-        Repo repo = new Repo(name, path.toAbsolutePath().toString(), indices, Repo.Codec.MESSAGEPACK);
+        Repo repo = new Repo(name, path.toAbsolutePath().toString(), indices, Repo.Codec.MESSAGEPACK, false);
         try {
             fileSystem.write(ymlFile, objectMapper.writeValueAsBytes(repo));
         } catch (IOException e) {
@@ -225,14 +225,14 @@ public final class DefaultDedupConfig implements DedupConfig {
     }
 
     @Override
-    public @NonNull Result<Repo, DedupError> setRepoConfig(@NonNull String name, @NonNull Repo.Codec codec) {
+    public @NonNull Result<Repo, DedupError> setRepoConfig(@NonNull String name, @NonNull Repo.Codec codec, boolean compressed) {
         Result<Repo, DedupError> repo = this.getRepo(name);
         if (repo.hasFailed()) {
             return repo.mapError(e -> DedupError.of(ErrorType.MODIFY_REPO, e.describe(), e.exception()));
         }
         Path ymlFile = repoRootPath.resolve(name).resolve(DEDUP_REPO_YML);
         try {
-            Repo updated = new Repo(name, repo.value().absolutePath(), repo.value().indices(), codec);
+            Repo updated = new Repo(name, repo.value().absolutePath(), repo.value().indices(), codec, compressed);
             fileSystem.write(ymlFile, objectMapper.writeValueAsBytes(updated));
             return Result.ok(updated);
         } catch (IOException e) {

@@ -12,16 +12,25 @@ public class MsgPackFrameIterator implements FrameIterator {
 
 
     private final DataInputStream in;
+    private boolean eof = false;
 
     @SneakyThrows
     public MsgPackFrameIterator(InputStream inputStream) {
-        this.in = new DataInputStream(inputStream);
+        this.in = new DataInputStream(inputStream.markSupported() ? inputStream : new java.io.BufferedInputStream(inputStream));
     }
 
     @Override
     public boolean hasNext() {
+        if (eof) return false;
         try {
-            return in.available() > 0;
+            in.mark(1);
+            int read = in.read();
+            if (read == -1) {
+                eof = true;
+                return false;
+            }
+            in.reset();
+            return true;
         } catch (IOException e) {
             return false;
         }
