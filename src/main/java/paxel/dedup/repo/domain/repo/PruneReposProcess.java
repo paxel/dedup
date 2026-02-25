@@ -1,40 +1,43 @@
 package paxel.dedup.repo.domain.repo;
+
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.time.DurationFormatUtils;
-import paxel.dedup.infrastructure.config.DedupConfig;
+import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
-import paxel.dedup.domain.model.errors.*;
-import paxel.dedup.application.cli.parameter.CliParameter;
+import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.domain.model.errors.ErrorType;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
-import paxel.dedup.domain.port.out.LineCodec;
+import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
-import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.List;
 
 @RequiredArgsConstructor
+@Slf4j
 public class PruneReposProcess {
     private final CliParameter cliParameter;
     private final List<String> names;
     private final boolean all;
     private final int indices;
     private final DedupConfig dedupConfig;
-    private final LineCodec<RepoFile> repoFileCodec;
+    private final boolean keepDeleted;
+    private final Repo.Codec targetCodec;
 
-    public int prune() {
+    public Result<Integer, DedupError> prune() {
         if (all) {
             return pruneAll();
         }
 
-        return pruneByNames();
+        return Result.ok(pruneByNames());
     }
 
     private int pruneByNames() {
         for (String name : names) {
-            Result<Repo, OpenRepoError> repoResult = dedupConfig.getRepo(name);
+            Result<Repo, DedupError> repoResult = dedupConfig.getRepo(name);
             if (repoResult.isSuccess()) {
                 pruneRepo(repoResult.value());
             }
@@ -42,89 +45,89 @@ public class PruneReposProcess {
         return 0;
     }
 
-    private int pruneAll() {
-        Result<List<Repo>, OpenRepoError> lsResult = dedupConfig.getRepos();
+    private Result<Integer, DedupError> pruneAll() {
+        Result<List<Repo>, DedupError> lsResult = dedupConfig.getRepos();
         if (lsResult.hasFailed()) {
-            IOException ioException = lsResult.error().ioException();
-            if (ioException != null) {
-                ioException.printStackTrace();
-            }
-            return -30;
+            return Result.err(lsResult.error());
         }
         for (Repo repo : lsResult.value()) {
             pruneRepo(repo);
         }
-        return 0;
+        return Result.ok(0);
     }
 
     private void pruneRepo(Repo repo) {
         if (cliParameter.isVerbose()) {
-            System.out.println("Pruning " + repo.name());
+            log.info("Pruning {}", repo.name());
         }
 
-        Result<Statistics, UpdateRepoError> result = pruneRepo(new RepoManager(repo, dedupConfig, repoFileCodec, new NioFileSystemAdapter()), indices);
+        Result<Statistics, DedupError> result = pruneRepo(RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter()), indices);
 
         if (result.hasFailed()) {
-            System.err.println("Could not prune " + repo.name() + " " + result.error());
+            log.error("Could not prune {} {}", repo.name(), result.error());
         } else if (cliParameter.isVerbose()) {
-            result.value().forCounter((a, b) -> System.out.println(a + ": " + b));
-            result.value().forTimer((a, b) -> System.out.println(a + ": " + DurationFormatUtils.formatDurationWords(b.toMillis(), true, true)));
+            result.value().forCounter((a, b) -> log.info("{}: {}", a, b));
+            result.value().forTimer((a, b) -> log.info("{}: {}", a, DurationFormatUtils.formatDurationWords(b.toMillis(), true, true)));
         }
     }
 
-    private Result<Statistics, UpdateRepoError> pruneRepo(RepoManager repoManager, int indices) {
+    private Result<Statistics, DedupError> pruneRepo(RepoManager repoManager, int indices) {
         // create new Temporary Repo
         Repo oldRepo = repoManager.getRepo();
         String name = oldRepo.name();
         String newName = name + "_temp";
         Statistics statistics = new Statistics(newName);
-        Result<Statistics, LoadError> load = repoManager.load();
+        Result<Statistics, DedupError> load = repoManager.load();
         if (load.hasFailed()) {
-            return load.mapError(f -> UpdateRepoError.ioException(repoManager.getRepoDir(), load.error().ioException()));
+            return load.mapError(f -> DedupError.of(ErrorType.UPDATE_REPO, repoManager.getRepoDir() + ": load failed", f.exception()));
         }
-        Result<Repo, CreateRepoError> repo = dedupConfig.createRepo(newName, Paths.get(oldRepo.absolutePath()), indices);
+        Result<Repo, DedupError> repo = dedupConfig.createRepo(newName, Paths.get(oldRepo.absolutePath()), indices);
         // Stream existing files into the repo
         if (repo.isSuccess()) {
-            Result<Statistics, UpdateRepoError> loadNew = streamRepo(repoManager, statistics, repo.value());
+            if (targetCodec != null) {
+                // Set codec on the temp repo before we start writing
+                dedupConfig.setCodec(newName, targetCodec);
+            }
+            Result<Statistics, DedupError> loadNew = streamRepo(repoManager, statistics, repo.value());
             if (loadNew.hasFailed())
                 return loadNew;
         }
         // rename old repo
-        Result<Boolean, RenameRepoError> result = dedupConfig.renameRepo(name, name + "_del");
+        Result<Boolean, DedupError> result = dedupConfig.renameRepo(name, name + "_del");
         if (result.hasFailed())
-            return result.mapError(f -> new UpdateRepoError(f.resolve(), f.ioExceptions(), null));
+            return result.mapError(f -> DedupError.of(ErrorType.UPDATE_REPO, f.describe(), f.exception()));
         if (!result.value()) {
-            System.err.println("Could not rename " + name + " to " + name + "_del");
-            return Result.err(UpdateRepoError.description("Could not rename repo from " + name + " to " + name + "_del"));
+            log.error("Could not rename {} to {}", name, name + "_del");
+            return Result.err(DedupError.of(ErrorType.UPDATE_REPO, "Could not rename repo from " + name + " to " + name + "_del"));
         }
         // rename new repo
-        Result<Boolean, RenameRepoError> otherResult = dedupConfig.renameRepo(newName, name);
+        Result<Boolean, DedupError> otherResult = dedupConfig.renameRepo(newName, name);
         if (otherResult.hasFailed())
-            return otherResult.mapError(f -> new UpdateRepoError(f.resolve(), f.ioExceptions(), null));
+            return otherResult.mapError(f -> DedupError.of(ErrorType.UPDATE_REPO, f.describe(), f.exception()));
         if (!otherResult.value()) {
-            System.err.println("Could not rename " + newName + " to " + name);
-            return Result.err(UpdateRepoError.description("Could not rename repo from " + newName + " to " + name));
+            log.error("Could not rename {} to {}", newName, name);
+            return Result.err(DedupError.of(ErrorType.UPDATE_REPO, "Could not rename repo from " + newName + " to " + name));
         }
         //delete old repo
-        Result<Boolean, DeleteRepoError> deleteResult = dedupConfig.deleteRepo(name + "_del");
+        Result<Boolean, DedupError> deleteResult = dedupConfig.deleteRepo(name + "_del");
         if (deleteResult.hasFailed())
-            return result.mapError(f -> new UpdateRepoError(f.resolve(), f.ioExceptions(), null));
+            return result.mapError(f -> DedupError.of(ErrorType.UPDATE_REPO, f.describe(), f.exception()));
         if (!deleteResult.value()) {
-            System.err.println("Could not delete " + name + "_del");
-            return Result.err(UpdateRepoError.description("Could not delete " + name + "_del"));
+            log.error("Could not delete {}", name + "_del");
+            return Result.err(DedupError.of(ErrorType.UPDATE_REPO, "Could not delete " + name + "_del"));
         }
 
         return Result.ok(statistics);
     }
 
-    private Result<Statistics, UpdateRepoError> streamRepo(RepoManager repoManager, Statistics statistics, Repo newRepo) {
-        RepoManager temp = new RepoManager(newRepo, dedupConfig, repoFileCodec, new NioFileSystemAdapter());
-        Result<Statistics, LoadError> loadNew = temp.load();
+    private Result<Statistics, DedupError> streamRepo(RepoManager repoManager, Statistics statistics, Repo newRepo) {
+        RepoManager temp = RepoManager.forRepo(newRepo, dedupConfig, new NioFileSystemAdapter());
+        Result<Statistics, DedupError> loadNew = temp.load();
         if (loadNew.hasFailed()) {
-            return loadNew.mapError(f -> UpdateRepoError.ioException(repoManager.getRepoDir(), loadNew.error().ioException()));
+            return loadNew.mapError(f -> DedupError.of(ErrorType.UPDATE_REPO, repoManager.getRepoDir() + ": load failed", f.exception()));
         }
-        repoManager.stream().filter(f -> !f.missing()).forEach(repoFile -> {
-            Result<RepoFile, WriteError> result = temp.addRepoFile(repoFile);
+        repoManager.stream().filter(f -> keepDeleted || !f.missing()).forEach(repoFile -> {
+            Result<RepoFile, DedupError> result = temp.addRepoFile(repoFile);
             if (result.isSuccess()) {
                 if (result.value() != null)
                     statistics.inc("files");

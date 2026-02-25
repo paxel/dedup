@@ -1,20 +1,25 @@
 package paxel.dedup.domain.model;
 
 import org.apache.tika.Tika;
-import paxel.dedup.domain.model.errors.IoError;
+import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.domain.model.errors.ErrorType;
 import paxel.lib.Result;
 
 import java.io.IOException;
 import java.nio.file.Path;
 
 public class MimetypeProvider {
+    private static final Tika TIKA = new Tika();
 
-    public Result<String, IoError> get(Path file) {
+    public static Tika getTika() {
+        return TIKA;
+    }
+
+    public Result<String, DedupError> get(Path file) {
         try {
-            Tika tika = new Tika();
-            return Result.ok(tika.detect(file));
+            return Result.ok(TIKA.detect(file));
         } catch (IOException e) {
-            return Result.err(new IoError(e, file, null));
+            return Result.err(DedupError.of(ErrorType.IO, file + ": mimetype detection failed", e));
         }
     }
 }

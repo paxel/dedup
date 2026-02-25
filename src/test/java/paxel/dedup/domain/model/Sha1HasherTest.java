@@ -4,7 +4,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import paxel.dedup.domain.model.errors.LoadError;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.lib.Result;
 
 import java.nio.file.Files;
@@ -35,7 +35,7 @@ class Sha1HasherTest {
         Path file = tempDir.resolve("test.txt");
         Files.writeString(file, "hello world");
 
-        Result<String, LoadError> result = hasher.hash(file).get();
+        Result<String, DedupError> result = hasher.hash(file).get();
 
         assertThat(result.isSuccess()).isTrue();
         // SHA-1 of "hello world" is 2aae6c35c94fcfb415dbe95f408b9ce91ee846ed
@@ -47,7 +47,7 @@ class Sha1HasherTest {
         Path file = tempDir.resolve("empty.txt");
         Files.createFile(file);
 
-        Result<String, LoadError> result = hasher.hash(file).get();
+        Result<String, DedupError> result = hasher.hash(file).get();
 
         assertThat(result.isSuccess()).isTrue();
         // SHA-1 of empty string is da39a3ee5e6b4b0d3255bfef95601890afd80709

@@ -3,7 +3,8 @@ package paxel.dedup.repo.domain.repo;
 import org.junit.jupiter.api.Test;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.errors.*;
+import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.domain.model.errors.ErrorType;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
@@ -18,15 +19,42 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CopyRepoProcessTest {
 
     private static class StubConfig implements DedupConfig {
-        Result<Repo, ModifyRepoError> changePathResult = Result.ok(new Repo("dest", "/repo/dest", 2));
+        Result<Repo, DedupError> changePathResult = Result.ok(new Repo("dest", "/repo/dest", 2));
 
-        @Override public Result<List<Repo>, OpenRepoError> getRepos() { return Result.ok(List.of()); }
-        @Override public Result<Repo, OpenRepoError> getRepo(String name) { return Result.err(null); }
-        @Override public Result<Repo, CreateRepoError> createRepo(String name, Path path, int indices) { return Result.err(null); }
-        @Override public Result<Repo, ModifyRepoError> changePath(String name, Path path) { return changePathResult; }
-        @Override public Result<Boolean, DeleteRepoError> deleteRepo(String name) { return Result.ok(false); }
-        @Override public Path getRepoDir() { return Path.of("/tmp/config"); }
-        @Override public Result<Boolean, RenameRepoError> renameRepo(String oldName, String newName) { return Result.ok(false); }
+        @Override
+        public Result<List<Repo>, DedupError> getRepos() {
+            return Result.ok(List.of());
+        }
+
+        @Override
+        public Result<Repo, DedupError> getRepo(String name) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Repo, DedupError> createRepo(String name, Path path, int indices) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Repo, DedupError> changePath(String name, Path path) {
+            return changePathResult;
+        }
+
+        @Override
+        public Result<Boolean, DedupError> deleteRepo(String name) {
+            return Result.ok(false);
+        }
+
+        @Override
+        public Path getRepoDir() {
+            return Path.of("/tmp/config");
+        }
+
+        @Override
+        public Result<Boolean, DedupError> renameRepo(String oldName, String newName) {
+            return Result.ok(false);
+        }
     }
 
     /**
@@ -39,9 +67,10 @@ class CopyRepoProcessTest {
         cli.setVerbose(false);
         StubConfig cfg = new StubConfig();
 
-        int code = new CopyRepoProcess(cli, "same", "same", "/path", cfg).copy();
+        Result<Integer, DedupError> result = new CopyRepoProcess(cli, "same", "same", "/path", cfg).copy();
 
-        assertThat(code).isEqualTo(-62);
+        assertThat(result.hasFailed()).isTrue();
+        assertThat(result.error().type()).isEqualTo(ErrorType.MODIFY_REPO);
     }
 
     /**
@@ -55,13 +84,15 @@ class CopyRepoProcessTest {
         StubConfig cfg = new StubConfig();
 
         CopyRepoProcess proc = new CopyRepoProcess(cli, "src", "dst", "/p", cfg) {
-            @Override public List<IOException> copyDirectory(Path from, Path to) {
+            @Override
+            public List<IOException> copyDirectory(Path from, Path to) {
                 return List.of(new IOException("boom"));
             }
         };
 
-        int code = proc.copy();
-        assertThat(code).isEqualTo(-61);
+        Result<Integer, DedupError> result = proc.copy();
+        assertThat(result.hasFailed()).isTrue();
+        assertThat(result.error().type()).isEqualTo(ErrorType.WRITE);
     }
 
     /**
@@ -73,14 +104,18 @@ class CopyRepoProcessTest {
         cli.setVerbose(false);
         StubConfig cfg = new StubConfig();
         IOException io = new IOException("bad path");
-        cfg.changePathResult = Result.err(ModifyRepoError.ioError(Path.of("/bad"), io));
+        cfg.changePathResult = Result.err(DedupError.of(ErrorType.MODIFY_REPO, "/bad modify failed", io));
 
         CopyRepoProcess proc = new CopyRepoProcess(cli, "src", "dst", "/p", cfg) {
-            @Override public List<IOException> copyDirectory(Path from, Path to) { return List.of(); }
+            @Override
+            public List<IOException> copyDirectory(Path from, Path to) {
+                return List.of();
+            }
         };
 
-        int code = proc.copy();
-        assertThat(code).isEqualTo(-60);
+        Result<Integer, DedupError> result = proc.copy();
+        assertThat(result.hasFailed()).isTrue();
+        assertThat(result.error().type()).isEqualTo(ErrorType.MODIFY_REPO);
     }
 
     /**
@@ -97,10 +132,13 @@ class CopyRepoProcessTest {
         System.setOut(new PrintStream(outBuf));
         try {
             CopyRepoProcess proc = new CopyRepoProcess(cli, "src", "dst", "/p", cfg) {
-                @Override public List<IOException> copyDirectory(Path from, Path to) { return List.of(); }
+                @Override
+                public List<IOException> copyDirectory(Path from, Path to) {
+                    return List.of();
+                }
             };
 
-            int code = proc.copy();
+            int code = proc.copy().value();
             assertThat(code).isEqualTo(0);
 
             String out = outBuf.toString();

@@ -6,7 +6,8 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.errors.*;
+import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.domain.model.errors.ErrorType;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.lib.Result;
 
@@ -34,87 +35,102 @@ public final class DefaultDedupConfig implements DedupConfig {
 
 
     @Override
-    public @NonNull Result<List<Repo>, OpenRepoError> getRepos() {
+    public @NonNull Result<List<Repo>, DedupError> getRepos() {
         if (!fileSystem.exists(repoRootPath)) {
-            return Result.err(OpenRepoError.notFound(repoRootPath));
+            return Result.err(DedupError.of(ErrorType.OPEN_REPO, repoRootPath + " not found"));
         }
         try (Stream<Path> list = fileSystem.list(repoRootPath)) {
             return Result.ok(list.filter(fileSystem::isDirectory).map(p -> getRepo(p.getFileName().toString())).filter(Result::isSuccess).map(Result::value).toList());
         } catch (IOException e) {
-            return Result.err(OpenRepoError.ioError(repoRootPath, e));
+            return Result.err(DedupError.of(ErrorType.OPEN_REPO, repoRootPath + " Invalid", e));
         }
     }
 
     @Override
-    public @NonNull Result<Repo, OpenRepoError> getRepo(@NonNull String name) {
+    public @NonNull Result<Repo, DedupError> getRepo(@NonNull String name) {
         Path repoPath = repoRootPath.resolve(name);
         if (!fileSystem.exists(repoPath)) {
-            return Result.err(OpenRepoError.notFound(repoPath));
+            return Result.err(DedupError.of(ErrorType.OPEN_REPO, repoPath + " not found"));
         }
         Path resolve = repoPath.resolve(DEDUP_REPO_YML);
         if (!fileSystem.exists(resolve)) {
-            return Result.err(OpenRepoError.notFound(resolve));
+            return Result.err(DedupError.of(ErrorType.OPEN_REPO, resolve + " not found"));
         }
 
         try {
-            return Result.ok(objectMapper.readerFor(Repo.class).readValue(fileSystem.readAllBytes(resolve), Repo.class));
+            byte[] yaml = fileSystem.readAllBytes(resolve);
+            Repo loaded = objectMapper.readValue(yaml, Repo.class);
+            if (loaded.name() == null || loaded.name().isBlank()) {
+                loaded = loaded.withName(name);
+            }
+            return Result.ok(loaded);
         } catch (IOException e) {
-            return Result.err(OpenRepoError.ioError(resolve, e));
+            return Result.err(DedupError.of(ErrorType.OPEN_REPO, resolve + " Invalid", e));
         }
 
     }
 
     @Override
-    public @NonNull Result<Repo, CreateRepoError> createRepo(@NonNull String name, @NonNull Path path, int indices) {
+    public @NonNull Result<Repo, DedupError> createRepo(@NonNull String name, @NonNull Path path, int indices) {
+        if (!isValidRepoName(name)) {
+            return Result.err(DedupError.of(ErrorType.CREATE_REPO, "Invalid repo name: " + name + " (only alphanumeric characters allowed)"));
+        }
         Path repoPath = repoRootPath.resolve(name);
         if (fileSystem.exists(repoPath)) {
-            return Result.err(CreateRepoError.exists(repoPath));
+            return Result.err(DedupError.of(ErrorType.CREATE_REPO, repoPath + " already exists"));
         }
         try {
             fileSystem.createDirectories(repoPath);
         } catch (IOException e) {
-            return Result.err(CreateRepoError.ioError(repoPath, e));
+            return Result.err(DedupError.of(ErrorType.CREATE_REPO, repoPath + " not a valid repo relativePath", e));
         }
         Path ymlFile = repoPath.resolve(DEDUP_REPO_YML);
         if (fileSystem.exists(ymlFile)) {
-            return Result.err(CreateRepoError.exists(ymlFile));
+            return Result.err(DedupError.of(ErrorType.CREATE_REPO, ymlFile + " already exists"));
         }
 
         return writeRepoFiles(name, path, indices, ymlFile);
     }
 
     @Override
-    public @NonNull Result<Repo, ModifyRepoError> changePath(@NonNull String name, @NonNull Path path) {
+    public @NonNull Result<Repo, DedupError> changePath(@NonNull String name, @NonNull Path path) {
 
-        Result<Repo, OpenRepoError> repo = this.getRepo(name);
+        Result<Repo, DedupError> repo = this.getRepo(name);
         if (repo.hasFailed()) {
-            return repo.mapError(e -> new ModifyRepoError(e.path(), e.ioException()));
+            return repo.mapError(e -> DedupError.of(ErrorType.MODIFY_REPO, e.describe(), e.exception()));
         }
         Path ymlFile = repoRootPath.resolve(name).resolve(DEDUP_REPO_YML);
         return writeRepoFile(name, path, repo.value().indices(), ymlFile)
-                .map(Function.identity(), e -> new ModifyRepoError(path, e));
+                .map(Function.identity(), e -> DedupError.of(ErrorType.MODIFY_REPO, path + " modify failed", e));
     }
 
-    private Result<Repo, CreateRepoError> writeRepoFiles(String name, Path path, int indices, Path ymlFile) {
+    private boolean isValidRepoName(String name) {
+        if (name == null || name.isBlank()) {
+            return false;
+        }
+        return name.chars().allMatch(c -> Character.isLetterOrDigit(c) || c == '_');
+    }
+
+    private Result<Repo, DedupError> writeRepoFiles(String name, Path path, int indices, Path ymlFile) {
         try {
             Result<Repo, IOException> repo = writeRepoFile(name, path, indices, ymlFile);
             if (repo.hasFailed())
-                return repo.mapError(e -> new CreateRepoError(path, repo.error()));
+                return repo.mapError(e -> DedupError.of(ErrorType.CREATE_REPO, path + " write failed", repo.error()));
 
             for (int i = 0; i < indices; i++) {
                 fileSystem.newOutputStream(ymlFile.resolveSibling(i + ".idx")).close();
             }
             return Result.ok(repo.value());
         } catch (IOException e) {
-            return Result.err(CreateRepoError.ioError(ymlFile, e));
+            return Result.err(DedupError.of(ErrorType.CREATE_REPO, ymlFile + " write failed", e));
         }
     }
 
 
     private Result<Repo, IOException> writeRepoFile(String name, Path path, int indices, Path ymlFile) {
-        Repo repo = new Repo(name, path.toAbsolutePath().toString(), indices);
+        Repo repo = new Repo(name, path.toAbsolutePath().toString(), indices, Repo.Codec.MESSAGEPACK, false);
         try {
-            fileSystem.write(ymlFile, objectMapper.writerFor(Repo.class).writeValueAsBytes(repo));
+            fileSystem.write(ymlFile, objectMapper.writeValueAsBytes(repo));
         } catch (IOException e) {
             return Result.err(e);
         }
@@ -122,20 +138,32 @@ public final class DefaultDedupConfig implements DedupConfig {
     }
 
     @Override
-    public @NonNull Result<Boolean, DeleteRepoError> deleteRepo(@NonNull String name) {
+    public @NonNull Result<Boolean, DedupError> deleteRepo(@NonNull String name) {
         Path repoPath = repoRootPath.resolve(name);
         if (!fileSystem.exists(repoPath)) {
             return Result.ok(false);
         }
         List<Exception> exceptions = new ArrayList<>();
-        Result<Boolean, DeleteRepoError> deleteResult = deleteAllFiles(repoPath, exceptions);
+        Result<Boolean, DedupError> deleteResult = deleteAllFiles(repoPath, exceptions);
 
         if (deleteResult.hasFailed()) {
             return deleteResult;
         }
 
         if (!deleteResult.value()) {
-            return Result.err(DeleteRepoError.ioErrors(repoPath, exceptions));
+            Exception cause;
+            if (exceptions.isEmpty()) {
+                cause = null;
+            } else {
+                var first = exceptions.getFirst();
+                if (first instanceof Exception ex) {
+                    cause = ex;
+                } else {
+                    cause = new Exception(first);
+                }
+            }
+            return Result.err(DedupError.of(ErrorType.DELETE_REPO, "While deleting " + name + " " + exceptions.size() + " exceptions happened",
+                    cause));
         }
 
 
@@ -144,7 +172,7 @@ public final class DefaultDedupConfig implements DedupConfig {
     }
 
     @NonNull
-    private Result<Boolean, DeleteRepoError> deleteAllFiles(Path repoPath, List<Exception> exceptions) {
+    private Result<Boolean, DedupError> deleteAllFiles(Path repoPath, List<Exception> exceptions) {
         try {
             Path resolve = repoPath.resolveSibling(repoPath.getFileName().toString() + "_del");
             fileSystem.move(repoPath, resolve);
@@ -163,7 +191,7 @@ public final class DefaultDedupConfig implements DedupConfig {
             }
             return Result.ok(false);
         } catch (IOException e) {
-            return Result.err(DeleteRepoError.ioError(repoPath, e));
+            return Result.err(DedupError.of(ErrorType.DELETE_REPO, repoPath + " delete failed", e));
         }
     }
 
@@ -173,10 +201,13 @@ public final class DefaultDedupConfig implements DedupConfig {
     }
 
     @Override
-    public Result<Boolean, RenameRepoError> renameRepo(String oldName, String newName) {
+    public Result<Boolean, DedupError> renameRepo(String oldName, String newName) {
+        if (!isValidRepoName(newName)) {
+            return Result.err(DedupError.of(ErrorType.RENAME_REPO, "Invalid new repo name: " + newName + " (only alphanumeric characters allowed)"));
+        }
         if (oldName.equals(newName))
             return Result.ok(false);
-        Result<Repo, OpenRepoError> repo = getRepo(oldName);
+        Result<Repo, DedupError> repo = getRepo(oldName);
         if (repo.hasFailed())
             return Result.ok(false);
         try {
@@ -184,13 +215,35 @@ public final class DefaultDedupConfig implements DedupConfig {
             Path resolve2 = repoRootPath.resolve(newName);
             fileSystem.move(resolve1, resolve2);
         } catch (IOException e) {
-            return Result.err(RenameRepoError.ioError(repoRootPath.resolve(newName), e));
+            return Result.err(DedupError.of(ErrorType.RENAME_REPO, repoRootPath.resolve(newName) + " rename failed", e));
         }
         Path ymlFile = repoRootPath.resolve(newName).resolve(DEDUP_REPO_YML);
         Result<Repo, IOException> repoIOExceptionResult = writeRepoFile(newName, Paths.get(repo.value().absolutePath()), repo.value().indices(), ymlFile);
 
         return repoIOExceptionResult
-                .map(a -> true, e -> new RenameRepoError(ymlFile, List.of(e)));
+                .map(a -> true, e -> DedupError.of(ErrorType.RENAME_REPO, ymlFile + " write failed", e));
+    }
+
+    @Override
+    public @NonNull Result<Repo, DedupError> setRepoConfig(@NonNull String name, @NonNull Repo.Codec codec, boolean compressed) {
+        Result<Repo, DedupError> repo = this.getRepo(name);
+        if (repo.hasFailed()) {
+            return repo.mapError(e -> DedupError.of(ErrorType.MODIFY_REPO, e.describe(), e.exception()));
+        }
+        Path ymlFile = repoRootPath.resolve(name).resolve(DEDUP_REPO_YML);
+        try {
+            Repo updated = new Repo(name, repo.value().absolutePath(), repo.value().indices(), codec, compressed);
+            fileSystem.write(ymlFile, objectMapper.writeValueAsBytes(updated));
+            return Result.ok(updated);
+        } catch (IOException e) {
+            return Result.err(DedupError.of(ErrorType.MODIFY_REPO, ymlFile + " write failed", e));
+        }
+    }
+
+    @Override
+    @Deprecated
+    public @NonNull Result<Repo, DedupError> setCodec(@NonNull String name, @NonNull Repo.Codec codec) {
+        return setRepoConfig(name, codec);
     }
 
 
@@ -210,6 +263,46 @@ public final class DefaultDedupConfig implements DedupConfig {
     @Override
     public String toString() {
         return "DefaultDedupConfig[" + "repoRootPath=" + repoRootPath + ']';
+    }
+
+    // --- helpers for YAML <-> Repo mapping without reflection on records ---
+    private String stringOf(Object o) {
+        if (o == null) {
+            return null;
+        }
+        return o.toString();
+    }
+
+    private int intOf(Object o) {
+        if (o == null) return 1;
+        if (o instanceof Number n) return n.intValue();
+        try {
+            return Integer.parseInt(o.toString());
+        } catch (NumberFormatException e) {
+            return 1;
+        }
+    }
+
+    private Repo.Codec codecOf(String s) {
+        if (s == null || s.isBlank()) return Repo.Codec.JSON; // backward-compatible default
+        try {
+            return Repo.Codec.valueOf(s.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return Repo.Codec.JSON;
+        }
+    }
+
+    // Centralized YAML keys to avoid primitive obsession with map keys
+    enum RepoYamlKey {
+        NAME("name"),
+        ABSOLUTE_PATH("absolutePath"),
+        INDICES("indices"),
+        CODEC("codec");
+        final String key;
+
+        RepoYamlKey(String key) {
+            this.key = key;
+        }
     }
 
 }

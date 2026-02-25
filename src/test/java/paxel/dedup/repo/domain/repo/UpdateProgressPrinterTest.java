@@ -6,10 +6,10 @@ import org.junit.jupiter.api.io.TempDir;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
-import paxel.dedup.domain.model.errors.LoadError;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
-import paxel.dedup.infrastructure.adapter.out.serialization.JacksonLineCodec;
+import paxel.dedup.infrastructure.adapter.out.serialization.JacksonMapperLineCodec;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.terminal.StatisticPrinter;
 import paxel.lib.Result;
@@ -17,29 +17,69 @@ import paxel.lib.Result;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 class UpdateProgressPrinterTest {
 
     @TempDir
     Path tempDir;
 
-    /** Minimal stub that only exposes the repo config directory. */
+    /**
+     * Minimal stub that only exposes the repo config directory.
+     */
     static class StubDedupConfig implements DedupConfig {
         private final Path repoDir;
-        StubDedupConfig(Path repoDir) { this.repoDir = repoDir; }
-        @Override public Result<List<Repo>, paxel.dedup.domain.model.errors.OpenRepoError> getRepos() { return Result.ok(List.of()); }
-        @Override public Result<Repo, paxel.dedup.domain.model.errors.OpenRepoError> getRepo(String name) { return Result.err(null); }
-        @Override public Result<Repo, paxel.dedup.domain.model.errors.CreateRepoError> createRepo(String name, Path path, int indices) { return Result.err(null); }
-        @Override public Result<Repo, paxel.dedup.domain.model.errors.ModifyRepoError> changePath(String name, Path path) { return Result.err(null); }
-        @Override public Result<Boolean, paxel.dedup.domain.model.errors.DeleteRepoError> deleteRepo(String name) { return Result.ok(false); }
-        @Override public Path getRepoDir() { return repoDir; }
-        @Override public Result<Boolean, paxel.dedup.domain.model.errors.RenameRepoError> renameRepo(String oldName, String newName) { return Result.ok(false); }
+
+        StubDedupConfig(Path repoDir) {
+            this.repoDir = repoDir;
+        }
+
+        @Override
+        public Result<List<Repo>, DedupError> getRepos() {
+            return Result.ok(List.of());
+        }
+
+        @Override
+        public Result<Repo, DedupError> getRepo(String name) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Repo, DedupError> createRepo(String name, Path path, int indices) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Repo, DedupError> changePath(String name, Path path) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Boolean, DedupError> deleteRepo(String name) {
+            return Result.ok(false);
+        }
+
+        @Override
+        public Path getRepoDir() {
+            return repoDir;
+        }
+
+        @Override
+        public Result<Boolean, DedupError> renameRepo(String oldName, String newName) {
+            return Result.ok(false);
+        }
+
+        @Override
+        public Result<Repo, DedupError> setRepoConfig(String name, Repo.Codec codec) {
+            return Result.err(null);
+        }
     }
 
     @Test
@@ -57,41 +97,50 @@ class UpdateProgressPrinterTest {
         DedupConfig config = new StubDedupConfig(configRoot);
         ObjectMapper mapper = new ObjectMapper();
         FileSystem fs = new NioFileSystemAdapter();
-        RepoManager repoManager = new RepoManager(repo, config,new JacksonLineCodec<>( mapper,RepoFile.class), fs);
+        RepoManager repoManager = new RepoManager(repo, config, new JacksonMapperLineCodec<>(mapper, RepoFile.class), fs);
 
         // Ensure index dir exists; RepoManager.load() will also create 0.idx if missing.
         Files.createDirectories(configRoot.resolve("r1"));
-        Result<Statistics, LoadError> load = repoManager.load();
+        Result<Statistics, DedupError> load = repoManager.load();
         assertThat(load.hasFailed()).isFalse();
 
-        // Remaining paths map: include the file (will be removed) and a second leftover
+        // Remaining paths map: exclude the file (will be removed) and a second leftover
         Map<Path, RepoFile> remaining = new HashMap<>();
-        remaining.put(file, RepoFile.builder().relativePath("a.txt").size(5L).hash("h").build());
+        // Note: we do NOT put 'file' in remaining, so it's treated as a new file and hashed
         Path leftover = dataDir.resolve("leftover.bin");
         remaining.put(leftover, RepoFile.builder().relativePath("leftover.bin").size(1L).hash("x").build());
 
         StatisticPrinter sp = new StatisticPrinter();
         // No-op change listener so calls don't NPE
-        sp.registerChangeListener(() -> {});
+        sp.registerChangeListener(() -> {
+        });
 
         Statistics stats = new Statistics("s");
 
         // FileHasher stub that returns a completed future immediately
         paxel.dedup.domain.model.FileHasher hasher = new paxel.dedup.domain.model.FileHasher() {
-            @Override public CompletableFuture<paxel.lib.Result<String, LoadError>> hash(Path path) {
+            @Override
+            public CompletableFuture<paxel.lib.Result<String, DedupError>> hash(Path path) {
                 return CompletableFuture.completedFuture(Result.ok("HASH-OK"));
             }
-            @Override public void close() { /* nothing */ }
+
+            @Override
+            public void close() { /* nothing */ }
         };
 
-        UpdateProgressPrinter upp = new UpdateProgressPrinter(remaining, sp, repoManager, stats, hasher);
+        UpdateProgressPrinter upp = new UpdateProgressPrinter(remaining, sp, repoManager, stats, hasher, false);
 
         // Act: simulate traversal
         upp.addDir(dataDir);
         upp.file(file);         // processes and removes it from remaining
+        // Wait for asynchronous processing to complete
+        await().atMost(Duration.ofSeconds(5)).until(() -> sp.getLineAt(5).contains("1"));
+
         upp.finishedDir(dataDir);
         upp.scanFinished();
         upp.close();
+        Result<Statistics, DedupError> loadAfterUpdate = repoManager.load(); // Flush indices by reloading
+        assertThat(loadAfterUpdate.isSuccess()).isTrue();
 
         // Assert: StatisticPrinter lines reflect changes deterministically
         // Directories line should contain finishedDirs / allDirs (1 / 1) and a scan finished marker at some point
@@ -99,7 +148,7 @@ class UpdateProgressPrinterTest {
         assertThat(dirLine).contains("1");
 
         // Deleted count should be the size of the remaining map after processing the file (leftover only => 1)
-        String deletedLine = sp.getLineAt(6); // "    Deleted: ..."
+        String deletedLine = sp.getLineAt(5); // "    Deleted: ..."
         assertThat(deletedLine).contains("1");
 
         // Files line contains "finished" after close
@@ -107,8 +156,10 @@ class UpdateProgressPrinterTest {
         assertThat(filesLine).contains("finished");
 
         // Statistics updated with deleted count
-        final long[] deletedStat = { -1 };
-        stats.forCounter((k, v) -> { if ("deleted".equals(k)) deletedStat[0] = v; });
+        final long[] deletedStat = {-1};
+        stats.forCounter((k, v) -> {
+            if ("deleted".equals(k)) deletedStat[0] = v;
+        });
         assertThat(deletedStat[0]).isEqualTo(1L);
 
         // Index file should have been appended to with the processed file

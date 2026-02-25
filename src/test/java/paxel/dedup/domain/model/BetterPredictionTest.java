@@ -1,21 +1,28 @@
 package paxel.dedup.domain.model;
 
 import org.junit.jupiter.api.Test;
+
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 class BetterPredictionTest {
 
     @Test
-    void testGetReturnsNullWhenNotEnoughTriggers() {
+    void testGetReturnsNullWhenNoTriggers() {
         BetterPrediction prediction = new BetterPrediction();
-        for (int i = 0; i < BetterPrediction.COUNT - 1; i++) {
-            prediction.trigger();
-        }
         assertThat(prediction.get()).isNull();
+    }
+
+    @Test
+    void testGetReturnsNotNullWithTwoTriggers() {
+        BetterPrediction prediction = new BetterPrediction();
+        prediction.trigger();
+        prediction.trigger();
+        assertThat(prediction.get()).isNotNull();
     }
 
     @Test
@@ -58,11 +65,24 @@ class BetterPredictionTest {
                 this.zone = zone;
             }
 
-            void tick(Duration d) { this.current = this.current.plus(d); }
+            void tick(Duration d) {
+                this.current = this.current.plus(d);
+            }
 
-            @Override public ZoneId getZone() { return zone; }
-            @Override public Clock withZone(ZoneId zone) { return new MutableClock(current, zone); }
-            @Override public Instant instant() { return current; }
+            @Override
+            public ZoneId getZone() {
+                return zone;
+            }
+
+            @Override
+            public Clock withZone(ZoneId zone) {
+                return new MutableClock(current, zone);
+            }
+
+            @Override
+            public Instant instant() {
+                return current;
+            }
         }
 
         MutableClock clock = new MutableClock(Instant.EPOCH, ZoneId.of("UTC"));
@@ -76,10 +96,11 @@ class BetterPredictionTest {
         }
 
         Duration duration = prediction.get();
-        // With COUNT timestamps spaced by 1s, and duration measured to "now",
-        // expected span is (COUNT - 1) * step
+        // With COUNT triggers spaced by 1s, the first trigger is at T+1s, the 1000th at T+1000s.
+        // Duration between them is 999s.
         Duration expected = step.multipliedBy(BetterPrediction.COUNT - 1L);
         assertThat(duration).isNotNull();
         assertThat(duration).isEqualTo(expected);
+        assertThat(prediction.getCount()).isEqualTo(BetterPrediction.COUNT - 1);
     }
 }

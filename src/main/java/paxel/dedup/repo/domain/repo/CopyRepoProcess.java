@@ -1,10 +1,11 @@
 package paxel.dedup.repo.domain.repo;
 
 import lombok.RequiredArgsConstructor;
-import paxel.dedup.infrastructure.config.DedupConfig;
-import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.errors.ModifyRepoError;
+import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
+import paxel.dedup.domain.model.Repo;
+import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.stream.Stream;
 
 @RequiredArgsConstructor
+@Slf4j
 public class CopyRepoProcess {
     private final CliParameter cliParameter;
     private final String sourceRepo;
@@ -23,30 +25,27 @@ public class CopyRepoProcess {
     private final String path;
     private final DedupConfig dedupConfig;
 
-    public int copy() {
+    public Result<Integer, DedupError> copy() {
         if (sourceRepo.equals(destinationRepo)) {
-            System.err.println("Can not copy to same directory");
-            return -62;
+            return Result.err(DedupError.of(paxel.dedup.domain.model.errors.ErrorType.MODIFY_REPO, "Cannot copy to the same directory: " + sourceRepo));
         }
 
         if (cliParameter.isVerbose()) {
-            System.out.printf("cloning %s to %s%n", sourceRepo, destinationRepo);
+            log.info("cloning {} to {}", sourceRepo, destinationRepo);
         }
         List<IOException> ioExceptions = copyDirectory(dedupConfig.getRepoDir().resolve(sourceRepo), dedupConfig.getRepoDir().resolve(destinationRepo));
 
-        ioExceptions.forEach(Throwable::printStackTrace);
         if (!ioExceptions.isEmpty()) {
-            return -61;
+            return Result.err(DedupError.of(paxel.dedup.domain.model.errors.ErrorType.WRITE, "Copying file failed", ioExceptions.getFirst()));
         }
-        Result<Repo, ModifyRepoError> repoModifyRepoErrorResult = dedupConfig.changePath(destinationRepo, Paths.get(path));
+        Result<Repo, DedupError> repoModifyRepoErrorResult = dedupConfig.changePath(destinationRepo, Paths.get(path));
         if (repoModifyRepoErrorResult.hasFailed()) {
-            System.err.printf("cloning %s to %s failed: %s%n", sourceRepo, destinationRepo, repoModifyRepoErrorResult.error());
-            return -60;
+            return Result.err(repoModifyRepoErrorResult.error());
         }
         if (cliParameter.isVerbose()) {
-            System.out.printf("cloning %s to %s%n", sourceRepo, destinationRepo);
+            log.info("cloning {} to {}", sourceRepo, destinationRepo);
         }
-        return 0;
+        return Result.ok(0);
     }
 
     public List<IOException> copyDirectory(Path from, Path to) {

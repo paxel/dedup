@@ -2,6 +2,7 @@ package paxel.dedup.terminal;
 
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.fusesource.jansi.Ansi;
 import org.fusesource.jansi.AnsiConsole;
 
@@ -10,6 +11,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 @RequiredArgsConstructor
+@Slf4j
 public class JansiTerminalProgress implements TerminalProgress {
     private final ProgressPrinter progressPrinter;
     private int lastSize;
@@ -48,7 +50,7 @@ public class JansiTerminalProgress implements TerminalProgress {
         try {
             AnsiConsole.systemInstall();
         } catch (Exception e) {
-            System.err.println(e.getMessage());
+            log.warn("{}", e.getMessage());
             // ignore for now
         }
     }

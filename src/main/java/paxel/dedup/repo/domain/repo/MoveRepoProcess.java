@@ -1,32 +1,33 @@
 package paxel.dedup.repo.domain.repo;
 
 import lombok.RequiredArgsConstructor;
-import paxel.dedup.infrastructure.config.DedupConfig;
-import paxel.dedup.domain.model.errors.RenameRepoError;
+import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
+import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
 @RequiredArgsConstructor
+@Slf4j
 public class MoveRepoProcess {
     private final CliParameter cliParameter;
     private final String sourceRepo;
     private final String destinationRepo;
     private final DedupConfig dedupConfig;
 
-    public int move() {
+    public Result<Integer, DedupError> move() {
 
         if (cliParameter.isVerbose()) {
-            System.out.printf("Renaming repo %s to %s%n", sourceRepo, destinationRepo);
+            log.info("Renaming repo {} to {}", sourceRepo, destinationRepo);
         }
-        Result<Boolean, RenameRepoError> result = dedupConfig.renameRepo(sourceRepo, destinationRepo);
+        Result<Boolean, DedupError> result = dedupConfig.renameRepo(sourceRepo, destinationRepo);
         if (result.hasFailed()) {
-            System.err.printf("Renaming repo %s to %s has failed:%s%n", sourceRepo, destinationRepo, result.error());
-            return -90;
+            return Result.err(result.error());
         }
         if (cliParameter.isVerbose()) {
-            System.out.printf("Renamed repo %s to %s%n", sourceRepo, destinationRepo);
+            log.info("Renamed repo {} to {}", sourceRepo, destinationRepo);
         }
 
-        return 0;
+        return Result.ok(0);
     }
 }

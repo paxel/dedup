@@ -1,9 +1,12 @@
 package paxel.dedup.domain.model;
 
 import org.junit.jupiter.api.Test;
+
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 class StatisticsTest {
 
@@ -28,15 +31,18 @@ class StatisticsTest {
     }
 
     @Test
-    void testTimer() throws InterruptedException {
+    void testTimer() {
         Statistics stats = new Statistics("test");
         stats.start("op");
-        Thread.sleep(10);
+        await().atLeast(Duration.ofMillis(100)).until(() -> {
+            // we just wait
+            return true;
+        });
         stats.stop("op");
 
         stats.forTimer((k, v) -> {
             if (k.equals("op")) {
-                assertThat(v).isCloseTo(Duration.ofMillis(10), Duration.ofMillis(50));
+                assertThat(v).isCloseTo(Duration.ofMillis(100), Duration.ofMillis(100));
             }
         });
     }

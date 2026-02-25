@@ -3,10 +3,10 @@ package paxel.dedup.repo.domain.repo;
 import org.junit.jupiter.api.Test;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.errors.*;
+import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.domain.model.errors.ErrorType;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
-import paxel.dedup.infrastructure.adapter.out.serialization.JacksonLineCodec;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -18,16 +18,43 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PruneReposProcessTest {
 
     private static class StubConfig implements DedupConfig {
-        Result<List<Repo>, OpenRepoError> reposResult = Result.ok(List.of());
-        Result<Repo, OpenRepoError> repoByName = Result.err(null);
+        Result<List<Repo>, DedupError> reposResult = Result.ok(List.of());
+        Result<Repo, DedupError> repoByName = Result.err(null);
 
-        @Override public Result<List<Repo>, OpenRepoError> getRepos() { return reposResult; }
-        @Override public Result<Repo, OpenRepoError> getRepo(String name) { return repoByName; }
-        @Override public Result<Repo, CreateRepoError> createRepo(String name, Path path, int indices) { return Result.err(null); }
-        @Override public Result<Repo, ModifyRepoError> changePath(String name, Path path) { return Result.err(null); }
-        @Override public Result<Boolean, DeleteRepoError> deleteRepo(String name) { return Result.ok(false); }
-        @Override public Path getRepoDir() { return Path.of("/tmp/config"); }
-        @Override public Result<Boolean, RenameRepoError> renameRepo(String oldName, String newName) { return Result.ok(false); }
+        @Override
+        public Result<List<Repo>, DedupError> getRepos() {
+            return reposResult;
+        }
+
+        @Override
+        public Result<Repo, DedupError> getRepo(String name) {
+            return repoByName;
+        }
+
+        @Override
+        public Result<Repo, DedupError> createRepo(String name, Path path, int indices) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Repo, DedupError> changePath(String name, Path path) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Boolean, DedupError> deleteRepo(String name) {
+            return Result.ok(false);
+        }
+
+        @Override
+        public Path getRepoDir() {
+            return Path.of("/tmp/config");
+        }
+
+        @Override
+        public Result<Boolean, DedupError> renameRepo(String oldName, String newName) {
+            return Result.ok(false);
+        }
     }
 
     @Test
@@ -38,13 +65,14 @@ class PruneReposProcessTest {
         StubConfig cfg = new StubConfig();
         IOException ioEx = new IOException("boom");
         Path errPath = Path.of("/tmp/bad");
-        cfg.reposResult = Result.err(OpenRepoError.ioError(errPath, ioEx));
+        cfg.reposResult = Result.err(DedupError.of(ErrorType.OPEN_REPO, errPath + " Invalid", ioEx));
 
         // Act
-        int code = new PruneReposProcess(cli, List.of(), true, 2, cfg, new JacksonLineCodec<>(new com.fasterxml.jackson.databind.ObjectMapper(), paxel.dedup.domain.model.RepoFile.class)).prune();
+        Result<Integer, DedupError> result = new PruneReposProcess(cli, List.of(), true, 2, cfg, false, null).prune();
 
         // Assert
-        assertThat(code).isEqualTo(-30);
+        assertThat(result.hasFailed()).isTrue();
+        assertThat(result.error().type()).isEqualTo(ErrorType.OPEN_REPO);
     }
 
     @Test
@@ -53,12 +81,13 @@ class PruneReposProcessTest {
         CliParameter cli = new CliParameter();
         cli.setVerbose(false);
         StubConfig cfg = new StubConfig();
-        cfg.repoByName = Result.err(OpenRepoError.ioError(Path.of("/x"), new IOException("nf")));
+        cfg.repoByName = Result.err(DedupError.of(ErrorType.OPEN_REPO, Path.of("/x") + " Invalid", new IOException("nf")));
 
         // Act
-        int code = new PruneReposProcess(cli, new ArrayList<>(List.of("missing1", "missing2")), false, 2, cfg, new JacksonLineCodec<>(new com.fasterxml.jackson.databind.ObjectMapper(), paxel.dedup.domain.model.RepoFile.class)).prune();
+        Result<Integer, DedupError> result = new PruneReposProcess(cli, new ArrayList<>(List.of("missing1", "missing2")), false, 2, cfg, false, null).prune();
 
         // Assert
-        assertThat(code).isEqualTo(0);
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.value()).isEqualTo(0);
     }
 }

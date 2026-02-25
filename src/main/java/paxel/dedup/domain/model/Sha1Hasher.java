@@ -2,7 +2,8 @@ package paxel.dedup.domain.model;
 
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
-import paxel.dedup.domain.model.errors.LoadError;
+import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.domain.model.errors.ErrorType;
 import paxel.lib.Result;
 
 import java.io.InputStream;
@@ -20,12 +21,12 @@ public class Sha1Hasher implements FileHasher {
     private final ExecutorService executorService;
 
     @Override
-    public CompletableFuture<Result<String, LoadError>> hash(Path path) {
+    public CompletableFuture<Result<String, DedupError>> hash(Path path) {
         return CompletableFuture.supplyAsync(() -> hashMe(path), executorService);
         //  return CompletableFuture.completedFuture(hashMe(path));
     }
 
-    private Result<String, LoadError> hashMe(Path path) {
+    private Result<String, DedupError> hashMe(Path path) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-1");
             byte[] buffer = new byte[8192];
@@ -39,7 +40,7 @@ public class Sha1Hasher implements FileHasher {
 
             return Result.ok(hexStringer.format(hashBytes));
         } catch (Exception e) {
-            return Result.err(new LoadError(path, e, e.toString()));
+            return Result.err(DedupError.of(ErrorType.LOAD, path + ": " + e, e));
         }
     }
 
@@ -47,7 +48,8 @@ public class Sha1Hasher implements FileHasher {
     @Override
     public void close() {
         executorService.shutdown();
-        while (!executorService.awaitTermination(1, TimeUnit.HOURS)) {
+        if (!executorService.awaitTermination(1, TimeUnit.HOURS)) {
+            executorService.shutdownNow();
         }
     }
 }

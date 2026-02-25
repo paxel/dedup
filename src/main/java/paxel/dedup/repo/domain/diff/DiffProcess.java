@@ -1,16 +1,12 @@
 package paxel.dedup.repo.domain.diff;
+
 import lombok.RequiredArgsConstructor;
-import paxel.dedup.infrastructure.config.DedupConfig;
-import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.RepoFile;
-import paxel.dedup.domain.model.Statistics;
-import paxel.dedup.domain.model.errors.LoadError;
-import paxel.dedup.domain.model.errors.OpenRepoError;
-import paxel.dedup.domain.model.FilterFactory;
-import paxel.dedup.domain.model.TunneledIoException;
-import paxel.dedup.domain.port.out.FileSystem;
-import paxel.dedup.domain.port.out.LineCodec;
+import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
+import paxel.dedup.domain.model.*;
+import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.domain.port.out.FileSystem;
+import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.repo.domain.repo.RepoManager;
 import paxel.lib.Result;
 
@@ -24,13 +20,13 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 @RequiredArgsConstructor
+@Slf4j
 public class DiffProcess {
     private final CliParameter cliParameter;
     private final String source;
     private final String target;
     private final DedupConfig dedupConfig;
     private final String filter;
-    private final LineCodec<RepoFile> repoFileCodec;
     private final FileSystem fileSystem;
     private Predicate<RepoFile> repoFilter;
     private final FilterFactory filterFactory = new FilterFactory();
@@ -49,16 +45,16 @@ public class DiffProcess {
                 .forEach(r -> {
                     List<RepoFile> byHash = targetRepo.getByHashAndSize(r.hash(), r.size());
                     if (byHash.isEmpty()) {
-                        System.out.println("New: " + r.relativePath());
+                        log.info("New: {}", r.relativePath());
                     } else {
                         Optional<RepoFile> exsting = byHash.stream().filter(repoFile -> !repoFile.missing()).findAny();
                         if (exsting.isPresent()) {
                             // File exists
                             if (cliParameter.isVerbose()) {
-                                System.out.println("Equal: " + r.relativePath() + " = " + exsting.get().relativePath());
+                                log.info("Equal: {} = {}", r.relativePath(), exsting.get().relativePath());
                             }
                         } else {
-                            System.out.println("Deleted in target: " + r.relativePath());
+                            log.info("Deleted in target: {}", r.relativePath());
                         }
                     }
                 });
@@ -92,13 +88,14 @@ public class DiffProcess {
                             try {
                                 if (move) {
                                     fileSystem.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
+                                    sourceRepo.addRepoFile(r.withMissing(true));
                                     if (cliParameter.isVerbose()) {
-                                        System.out.println("Moved " + r.relativePath());
+                                        log.info("Moved {}", r.relativePath());
                                     }
                                 } else {
                                     fileSystem.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
                                     if (cliParameter.isVerbose()) {
-                                        System.out.println("Copied " + r.relativePath());
+                                        log.info("Copied {}", r.relativePath());
                                     }
                                 }
                             } catch (IOException e) {
@@ -107,7 +104,7 @@ public class DiffProcess {
                         }
                     });
         } catch (TunneledIoException e) {
-            System.err.println(e.getMessage() + " " + e.getCause().getClass().getSimpleName());
+            log.error("{} {}", e.getMessage(), e.getCause().getClass().getSimpleName());
             return -200;
         }
         return 0;
@@ -133,7 +130,7 @@ public class DiffProcess {
                             try {
                                 fileSystem.delete(sourceFile);
                                 if (cliParameter.isVerbose()) {
-                                    System.out.println("Deleted " + r.relativePath());
+                                    log.info("Deleted {}", r.relativePath());
                                 }
                             } catch (IOException e) {
                                 throw new TunneledIoException("Could not delete " + sourceFile, e);
@@ -141,10 +138,136 @@ public class DiffProcess {
                         }
                     });
         } catch (TunneledIoException e) {
-            System.err.println(e.getMessage() + " " + e.getCause().getClass().getSimpleName());
+            log.error("{} {}", e.getMessage(), e.getCause().getClass().getSimpleName());
             return -200;
         }
         return 0;
+    }
+
+    /**
+     * Sync source repo A into target repo B according to the rules:
+     * - Equality only by (hash,size), path is irrelevant for existence checks
+     * - copyNew: copy files from A that are not present in B (by content) to the same relativePath in B
+     * - never overwrite an existing file at the target path; count as skipped
+     * - after successful copy, update target index with add(missing=false)
+     * - deleteMissing: if A has a missing entry for (hash,size) and B has that content present, delete those B files
+     * - after successful delete, update target index with add(missing=true) for the deleted path
+     * - best effort: continue on errors and summarize
+     *
+     * @param copyNew       copy contents that are in A but not present in B (by content)
+     * @param deleteMissing delete contents present in B that A marks as missing
+     * @return 0 on success, negative error code on init error
+     */
+    public int sync(boolean copyNew, boolean deleteMissing) {
+        Result<Repos, Integer> init = init();
+        if (init.hasFailed()) {
+            return init.error();
+        }
+        RepoManager sourceRepo = init.value().source();
+        RepoManager targetRepo = init.value().target();
+
+        SyncCounters counters = new SyncCounters();
+
+        sourceRepo.stream()
+                .filter(repoFilter)
+                .forEach(entry -> syncEntry(entry, sourceRepo, targetRepo, copyNew, deleteMissing, counters));
+
+        log.info(counters.summary());
+        return 0;
+    }
+
+    private void syncEntry(RepoFile entry, RepoManager sourceRepo, RepoManager targetRepo, boolean copyNew, boolean deleteMissing, SyncCounters counters) {
+        try {
+            List<RepoFile> matches = targetRepo.getByHashAndSize(entry.hash(), entry.size());
+            boolean contentPresentInB = matches.stream().anyMatch(b -> !b.missing());
+
+            if (entry.missing()) {
+                handleDeleteIfRequested(deleteMissing, contentPresentInB, matches, targetRepo, counters);
+                return;
+            }
+
+            handleCopyIfRequested(copyNew, contentPresentInB, entry, sourceRepo, targetRepo, counters);
+        } catch (RuntimeException e) {
+            counters.incrementErrors();
+            log.error("Unexpected error in sync for {}: {}", entry.relativePath(), e.toString());
+        }
+    }
+
+    private void handleDeleteIfRequested(boolean deleteMissing, boolean contentPresentInB, List<RepoFile> matches, RepoManager targetRepo, SyncCounters counters) {
+        if (deleteMissing && contentPresentInB) {
+            handleDelete(matches, targetRepo, counters);
+        }
+    }
+
+    private void handleCopyIfRequested(boolean copyNew, boolean contentPresentInB, RepoFile entry, RepoManager sourceRepo, RepoManager targetRepo, SyncCounters counters) {
+        if (!copyNew) {
+            return;
+        }
+        if (contentPresentInB) {
+            counters.incrementEqual();
+            return;
+        }
+        handleCopy(entry, sourceRepo, targetRepo, counters);
+    }
+
+    private void handleCopy(RepoFile r, RepoManager sourceRepo, RepoManager targetRepo, SyncCounters counters) {
+        counters.incrementNew();
+        Path targetFile = Paths.get(targetRepo.getRepo().absolutePath()).resolve(r.relativePath());
+
+        if (fileSystem.exists(targetFile)) {
+            counters.incrementSkipped();
+            return;
+        }
+
+        if (ensureParentDirectory(targetFile, counters)) {
+            performCopy(r, sourceRepo, targetRepo, targetFile, counters);
+        }
+    }
+
+    private boolean ensureParentDirectory(Path targetFile, SyncCounters counters) {
+        Path parent = targetFile.getParent();
+        if (parent == null || fileSystem.exists(parent)) {
+            return true;
+        }
+        try {
+            fileSystem.createDirectories(parent);
+            return true;
+        } catch (IOException e) {
+            counters.incrementErrors();
+            log.error("Could not create {} {}", parent, e.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    private void performCopy(RepoFile r, RepoManager sourceRepo, RepoManager targetRepo, Path targetFile, SyncCounters counters) {
+        Path sourceFile = Paths.get(sourceRepo.getRepo().absolutePath()).resolve(r.relativePath());
+        try {
+            fileSystem.copy(sourceFile, targetFile, StandardCopyOption.COPY_ATTRIBUTES);
+            counters.incrementCopied();
+            targetRepo.addRepoFile(r.withMissing(false));
+        } catch (IOException e) {
+            counters.incrementErrors();
+            log.error("Could not copy {} to {} {}", sourceFile, targetFile, e.getClass().getSimpleName());
+        }
+    }
+
+    private void handleDelete(List<RepoFile> matches, RepoManager targetRepo, SyncCounters counters) {
+        matches.stream()
+                .filter(b -> !b.missing())
+                .forEach(b -> performDelete(b, targetRepo, counters));
+    }
+
+    private void performDelete(RepoFile b, RepoManager targetRepo, SyncCounters counters) {
+        counters.incrementDeleted();
+        Path bFile = Paths.get(targetRepo.getRepo().absolutePath()).resolve(b.relativePath());
+        try {
+            fileSystem.delete(bFile);
+            counters.incrementRemoved();
+            targetRepo.addRepoFile(b.withMissing(true));
+        } catch (IOException e) {
+            counters.incrementErrors();
+            log.error("Could not delete {} {}", bFile, e.getClass().getSimpleName());
+        }
     }
 
     private Result<Repos, Integer> init() {
@@ -160,15 +283,15 @@ public class DiffProcess {
 
 
     private Result<RepoManager, Integer> openRepo(String name, int errOffset) {
-        Result<Repo, OpenRepoError> repo = dedupConfig.getRepo(name);
+        Result<Repo, DedupError> repo = dedupConfig.getRepo(name);
         if (repo.hasFailed()) {
-            System.err.println("Could not open " + name + " " + repo.error());
+            log.error("Could not open {} {}", name, repo.error());
             return Result.err(errOffset - 1);
         }
-        RepoManager repoManager = new RepoManager(repo.value(), dedupConfig, repoFileCodec, fileSystem);
-        Result<Statistics, LoadError> loadResult = repoManager.load();
+        RepoManager repoManager = RepoManager.forRepo(repo.value(), dedupConfig, fileSystem);
+        Result<Statistics, DedupError> loadResult = repoManager.load();
         if (loadResult.hasFailed()) {
-            System.err.println("Could not load " + name + " " + loadResult.error());
+            log.error("Could not load {} {}", name, loadResult.error());
             return Result.err(errOffset - 2);
         }
         return Result.ok(repoManager);

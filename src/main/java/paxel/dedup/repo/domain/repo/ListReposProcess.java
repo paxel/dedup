@@ -1,32 +1,29 @@
 package paxel.dedup.repo.domain.repo;
 
 import lombok.RequiredArgsConstructor;
-import paxel.dedup.infrastructure.config.DedupConfig;
-import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.errors.OpenRepoError;
+import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
+import paxel.dedup.domain.model.Repo;
+import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
-import java.io.IOException;
 import java.util.Comparator;
 import java.util.List;
 
+
 @RequiredArgsConstructor
+@Slf4j
 public class ListReposProcess {
 
     private final CliParameter cliParameter;
     private final DedupConfig dedupConfig;
 
-    public int list() {
+    public Result<Integer, DedupError> list() {
 
-        Result<List<Repo>, OpenRepoError> getReposResult = dedupConfig.getRepos();
+        Result<List<Repo>, DedupError> getReposResult = dedupConfig.getRepos();
         if (!getReposResult.isSuccess()) {
-            IOException ioException = getReposResult.error().ioException();
-            if (ioException != null) {
-                System.err.println(getReposResult.error().path() + " Invalid");
-                ioException.printStackTrace();
-            }
-            return -20;
+            return Result.err(getReposResult.error());
         }
         getReposResult.value().stream()
                 .sorted(Comparator.comparing(Repo::name, String::compareTo))
@@ -37,7 +34,14 @@ public class ListReposProcess {
                         return repo.name() + ": " + repo.absolutePath();
                     }
                 })
-                .forEach(System.out::println);
-        return 0;
+                .forEach(line -> log.info("{}", line));
+        return Result.ok(0);
+    }
+
+    private String firstNonBlankLocal(String preferred, String fallback) {
+        if (preferred != null && !preferred.isBlank()) {
+            return preferred;
+        }
+        return fallback;
     }
 }

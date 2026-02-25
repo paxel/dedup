@@ -2,7 +2,7 @@ package paxel.dedup.domain.model;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import paxel.dedup.domain.model.errors.IoError;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -22,7 +22,7 @@ class MimetypeProviderTest {
     void testDetectTextFile() throws IOException {
         Path file = tempDir.resolve("test.txt");
         Files.writeString(file, "hello world");
-        Result<String, IoError> result = provider.get(file);
+        Result<String, DedupError> result = provider.get(file);
         assertThat(result.isSuccess()).isTrue();
         assertThat(result.value()).isEqualTo("text/plain");
     }
@@ -30,7 +30,7 @@ class MimetypeProviderTest {
     @Test
     void testDetectMissingFile() {
         Path file = tempDir.resolve("missing.txt");
-        Result<String, IoError> result = provider.get(file);
+        Result<String, DedupError> result = provider.get(file);
         assertThat(result.hasFailed()).isTrue();
     }
 }

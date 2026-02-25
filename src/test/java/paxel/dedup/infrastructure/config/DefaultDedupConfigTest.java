@@ -3,7 +3,7 @@ package paxel.dedup.infrastructure.config;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.errors.*;
+import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.lib.Result;
 
@@ -27,7 +27,7 @@ class DefaultDedupConfigTest {
         DefaultDedupConfig cfg = newConfig();
 
         // Act
-        Result<Repo, CreateRepoError> created = cfg.createRepo("r1", tempDir.resolve("data"), 2);
+        Result<Repo, DedupError> created = cfg.createRepo("r1", tempDir.resolve("data"), 2);
 
         // Assert
         assertThat(created.isSuccess()).isTrue();
@@ -37,7 +37,7 @@ class DefaultDedupConfigTest {
         assertThat(Files.exists(repoDir.resolve("0.idx"))).isTrue();
         assertThat(Files.exists(repoDir.resolve("1.idx"))).isTrue();
 
-        Result<Repo, OpenRepoError> loaded = cfg.getRepo("r1");
+        Result<Repo, DedupError> loaded = cfg.getRepo("r1");
         assertThat(loaded.isSuccess()).isTrue();
         assertThat(loaded.value().name()).isEqualTo("r1");
         assertThat(loaded.value().indices()).isEqualTo(2);
@@ -53,7 +53,7 @@ class DefaultDedupConfigTest {
         assertThat(cfg.createRepo("r2", pathA, 1).isSuccess()).isTrue();
 
         // Act
-        Result<Repo, ModifyRepoError> changed = cfg.changePath("r2", pathB);
+        Result<Repo, DedupError> changed = cfg.changePath("r2", pathB);
 
         // Assert
         assertThat(changed.isSuccess()).isTrue();
@@ -70,7 +70,7 @@ class DefaultDedupConfigTest {
         assertThat(Files.exists(repoDir)).isTrue();
 
         // Act
-        Result<Boolean, DeleteRepoError> del = cfg.deleteRepo("r3");
+        Result<Boolean, DedupError> del = cfg.deleteRepo("r3");
 
         // Assert
         assertThat(del.isSuccess()).isTrue();
@@ -78,7 +78,7 @@ class DefaultDedupConfigTest {
         assertThat(Files.exists(repoDir)).isFalse();
 
         // Non-existent returns false
-        Result<Boolean, DeleteRepoError> del2 = cfg.deleteRepo("nope");
+        Result<Boolean, DedupError> del2 = cfg.deleteRepo("nope");
         assertThat(del2.isSuccess()).isTrue();
         assertThat(del2.value()).isFalse();
     }
@@ -91,7 +91,7 @@ class DefaultDedupConfigTest {
         assertThat(cfg.createRepo("old", origPath, 2).isSuccess()).isTrue();
 
         // Act
-        Result<Boolean, RenameRepoError> renamed = cfg.renameRepo("old", "new");
+        Result<Boolean, DedupError> renamed = cfg.renameRepo("old", "new");
 
         // Assert
         assertThat(renamed.isSuccess()).isTrue();
@@ -99,14 +99,14 @@ class DefaultDedupConfigTest {
         assertThat(Files.exists(tempDir.resolve("old"))).isFalse();
         assertThat(Files.exists(tempDir.resolve("new"))).isTrue();
 
-        Result<Repo, OpenRepoError> after = cfg.getRepo("new");
+        Result<Repo, DedupError> after = cfg.getRepo("new");
         assertThat(after.isSuccess()).isTrue();
         assertThat(after.value().name()).isEqualTo("new");
         assertThat(after.value().absolutePath()).isEqualTo(origPath.toAbsolutePath().toString());
         assertThat(after.value().indices()).isEqualTo(2);
 
         // No-op rename returns false
-        Result<Boolean, RenameRepoError> noop = cfg.renameRepo("new", "new");
+        Result<Boolean, DedupError> noop = cfg.renameRepo("new", "new");
         assertThat(noop.isSuccess()).isTrue();
         assertThat(noop.value()).isFalse();
     }

@@ -7,7 +7,9 @@ apply: always
 This file defines the rules for development and testing in this project. These rules should be considered and extended in future changes.
 
 ## 0. General Rules
-* **Language:** All texts in the project (code, comments, documentation, CLI output) must be in English.
+* **Language:** All texts in the project (code, comments, documentation, CLI output) must be in English. No German comments.
+* **Modern Java:** Always use modern Java (21+) language features and APIs.
+* **Strict Adherence:** ONLY DO WHAT YOU ARE TOLD TO. Do not assume or implement changes that were not explicitly requested. If an instruction is unclear, or if you believe a change is necessary but wasn't requested, you MUST ask for confirmation before proceeding.
 
 ## 1. Coding Rules
 
@@ -18,6 +20,11 @@ This file defines the rules for development and testing in this project. These r
     * `infrastructure`: Contains the concrete implementations (e.g., file system access, configuration).
 * **Domain-Driven Design (DDD):** Use concepts like Aggregates, Entities, and Value Objects where appropriate (see `Repo`, `RepoFile`).
 * **Immutability:** Prefer immutable data structures (e.g., Lombok `@Value`, `@Builder`).
+* **Avoid Primitive Obsession:** Use enums/value objects instead of ad-hoc strings/ints for domain choices (e.g., `Repo.Codec` instead of string codec names). For config map keys, avoid raw string literals; centralize keys using a small enum colocated with the mapping code (no standalone constants/utility classes).
+* **Not Invented Here (NIH):** Prefer proven, well-maintained libraries over custom implementations for standard concerns (e.g., JSON/YAML parsing, serialization, collections, concurrency). Do NOT reimplement parsers/serializers or common utilities when a solid library exists, unless there is a compelling project-specific constraint (document it explicitly).
+* **Keep It Lean:** Avoid introducing unnecessary statistics helpers or generic utility classes; prefer focused, cohesive methods close to where they are used.
+* **No Utility Classes:** Do not add cross-cutting utility/helper classes (e.g., `util.More`, `util.Strings`). Place small helper methods as private/static methods inside the class where they are used, or co-locate them within the same feature/module file. Reuse via clear, local methods rather than global utilities.
+* **Avoid Static Methods:** Prefer instance methods over static ones across application/domain/infrastructure code. Allowed exceptions: `static final` constants, required entry points (e.g., `main`), framework-required factories, and enum constants. No utility classes.
 
 ### Error Handling
 * **Result-Pattern:** Use the `Result<Success, Error>` class (from `paxel.lib`) instead of exceptions for expected error states.
@@ -26,13 +33,16 @@ This file defines the rules for development and testing in this project. These r
 ### Code Style
 * **Lombok:** Use Lombok to minimize boilerplate code (`@Data`, `@Getter`, `@RequiredArgsConstructor`, etc.).
 * **Clean Code:** Clear naming, small methods, Single Responsibility Principle.
+* **No deep nesting:** Prefer early returns/guard clauses and small helpers over nested conditionals/loops.
+* **No ternary operator:** Never use the `?:` or pattern-matching ternary forms. Use clear `if/else` or dedicated helpers.
+* **Extract x-or-y helpers (colocated):** When choosing between two values based on a simple condition, use a named helper method placed in the same class or module (e.g., `firstNonNull(a,b)`, `firstNonBlank(a,b)`) instead of inline multi-line `if/else` assignments or ternaries. Do not put these in global utility classes. Prefer instance methods, not static, unless a framework constraint applies.
 
 ## 2. Testing Rules
 
 ### Test Types
 * **Unit Tests:** Every new service or process should be covered by unit tests.
-* **Mocks/Stubs:** Use stubs or mocks for infrastructure dependencies (e.g., `FileSystem`, `DedupConfig`) to keep tests fast and isolated.
-* **Integration Tests:** Use `@TempDir` to test real file system operations in an isolated environment.
+* **Mocks/Stubs (mandatory for I/O):** Do NOT perform real filesystem or network I/O in unit tests. Always mock or stub infrastructure dependencies (especially `FileSystem`) and verify interactions (e.g., that `copy`, `move`, `delete`, `createDirectories`, `newOutputStream` are called as expected).
+* **Integration Tests (opt-in):** Use `@TempDir` only for explicit integration tests that exercise the real filesystem end-to-end. Keep them minimal and clearly marked as integration tests.
 
 ### Test Frameworks
 * **JUnit 5:** As the primary test framework.
@@ -62,6 +72,7 @@ This file defines the rules for development and testing in this project. These r
 ## 3. CLI Development
 * **Picocli:** Use Picocli for defining CLI commands and parameters.
 * **Consistency:** New commands should fit into the existing structure (`repo`, `files`, `diff`).
+* **Maven Sync Reminder:** Whenever `pom.xml` is modified, explicitly remind the user to click "Sync Maven" in the IDE. This reminder must be included in the PR/commit message and in the assistant's response after any `pom.xml` change.
 
 ## 4. Future Extensions
 * (Future rules will be added here)

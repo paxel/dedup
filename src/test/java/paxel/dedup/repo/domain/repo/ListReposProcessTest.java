@@ -3,7 +3,8 @@ package paxel.dedup.repo.domain.repo;
 import org.junit.jupiter.api.Test;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.errors.*;
+import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.domain.model.errors.ErrorType;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
@@ -18,14 +19,42 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ListReposProcessTest {
 
     private static class StubConfig implements DedupConfig {
-        Result<List<Repo>, OpenRepoError> toReturn;
-        @Override public Result<List<Repo>, OpenRepoError> getRepos() { return toReturn; }
-        @Override public Result<Repo, OpenRepoError> getRepo(String name) { return Result.err(null); }
-        @Override public Result<Repo, CreateRepoError> createRepo(String name, Path path, int indices) { return Result.err(null); }
-        @Override public Result<Repo, ModifyRepoError> changePath(String name, Path path) { return Result.err(null); }
-        @Override public Result<Boolean, DeleteRepoError> deleteRepo(String name) { return Result.ok(false); }
-        @Override public Path getRepoDir() { return Path.of("/tmp/config"); }
-        @Override public Result<Boolean, RenameRepoError> renameRepo(String oldName, String newName) { return Result.ok(false); }
+        Result<List<Repo>, DedupError> toReturn;
+
+        @Override
+        public Result<List<Repo>, DedupError> getRepos() {
+            return toReturn;
+        }
+
+        @Override
+        public Result<Repo, DedupError> getRepo(String name) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Repo, DedupError> createRepo(String name, Path path, int indices) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Repo, DedupError> changePath(String name, Path path) {
+            return Result.err(null);
+        }
+
+        @Override
+        public Result<Boolean, DedupError> deleteRepo(String name) {
+            return Result.ok(false);
+        }
+
+        @Override
+        public Path getRepoDir() {
+            return Path.of("/tmp/config");
+        }
+
+        @Override
+        public Result<Boolean, DedupError> renameRepo(String oldName, String newName) {
+            return Result.ok(false);
+        }
     }
 
     @Test
@@ -44,7 +73,7 @@ class ListReposProcessTest {
         PrintStream oldOut = System.out;
         System.setOut(new PrintStream(outBuf));
         try {
-            int code = new ListReposProcess(params, cfg).list();
+            int code = new ListReposProcess(params, cfg).list().value();
             assertThat(code).isEqualTo(0);
             String[] lines = outBuf.toString().trim().split("\n");
             assertThat(lines).containsExactly(
@@ -70,7 +99,7 @@ class ListReposProcessTest {
         PrintStream oldOut = System.out;
         System.setOut(new PrintStream(outBuf));
         try {
-            int code = new ListReposProcess(params, cfg).list();
+            int code = new ListReposProcess(params, cfg).list().value();
             assertThat(code).isEqualTo(0);
             String stdout = outBuf.toString().trim();
             assertThat(stdout).isEqualTo("a: /data/a index files: 2");
@@ -85,7 +114,7 @@ class ListReposProcessTest {
         StubConfig cfg = new StubConfig();
         IOException ioEx = new IOException("bad");
         Path errPath = Path.of("/tmp/repos.yml");
-        cfg.toReturn = Result.err(OpenRepoError.ioError(errPath, ioEx));
+        cfg.toReturn = Result.err(DedupError.of(ErrorType.OPEN_REPO, errPath + " Invalid", ioEx));
 
         CliParameter params = new CliParameter();
         params.setVerbose(false);
@@ -94,10 +123,9 @@ class ListReposProcessTest {
         PrintStream oldErr = System.err;
         System.setErr(new PrintStream(errBuf));
         try {
-            int code = new ListReposProcess(params, cfg).list();
-            assertThat(code).isEqualTo(-20);
-            String stderr = errBuf.toString();
-            assertThat(stderr).contains(errPath.toString()).contains("Invalid");
+            Result<Integer, DedupError> result = new ListReposProcess(params, cfg).list();
+            assertThat(result.hasFailed()).isTrue();
+            assertThat(result.error().description()).contains(errPath.toString()).contains("Invalid");
         } finally {
             System.setErr(oldErr);
         }

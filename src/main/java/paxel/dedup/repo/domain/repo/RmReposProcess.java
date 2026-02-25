@@ -1,36 +1,32 @@
 package paxel.dedup.repo.domain.repo;
 
 import lombok.RequiredArgsConstructor;
-import paxel.dedup.infrastructure.config.DedupConfig;
-import paxel.dedup.domain.model.errors.DeleteRepoError;
+import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
+import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
-import java.util.List;
-
 @RequiredArgsConstructor
+@Slf4j
 public class RmReposProcess {
-
     private final CliParameter cliParameter;
     private final String name;
     private final DedupConfig dedupConfig;
 
-    public int delete() {
+    public Result<Integer, DedupError> delete() {
         if (cliParameter.isVerbose()) {
-            System.out.println("Deleting " + name + " from " + dedupConfig.getRepoDir());
+            log.info("Deleting {} from {}", name, dedupConfig.getRepoDir());
         }
 
-        Result<Boolean, DeleteRepoError> deleteResult = dedupConfig.deleteRepo(name);
+        Result<Boolean, DedupError> deleteResult = dedupConfig.deleteRepo(name);
         if (deleteResult.hasFailed()) {
-            List<Exception> exceptions = deleteResult.error().ioExceptions();
-            System.err.println("While deleting " + name + " " + exceptions.size() + " exceptions happened");
-            exceptions.forEach(Throwable::printStackTrace);
-            return -40;
+            return Result.err(deleteResult.error());
         }
 
         if (cliParameter.isVerbose()) {
-            System.out.println("Deleted " + name);
+            log.info("Deleted {}", name);
         }
-        return 0;
+        return Result.ok(0);
     }
 }

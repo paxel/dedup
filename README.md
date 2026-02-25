@@ -13,26 +13,31 @@ The `dedup` CLI allows managing repositories and finding/processing duplicates.
 
 Repositories are logical groupings of files at a specific path.
 
-*   **Create:** `dedup repo create <name> <path> [-i <indices>]`
+*   **Create:** `dedup repo create <name> <path> [-i <indices>] [--codec {json|messagepack}] [--strict]`
     *   Creates a new repository with the name `<name>` for the path `<path>`.
     *   `-i`: Number of index files (default: 10).
+    *   `--codec`: Persist the index line codec for this repo. Supported values: `json`, `messagepack` (default on write: `messagepack`).
+    *   `--strict`: Fail the command if persisting the selected codec fails.
 *   **List:** `dedup repo ls`
     *   Lists all registered repositories.
 *   **Remove:** `dedup repo rm <name>`
     *   Deletes the repository configuration (not the files on disk).
-*   **Update:** `dedup repo update [-R <repo> | -a] [-t <threads>] [--no-progress]`
+*   **Update:** `dedup repo update [<repo>... | -R <repo>... | -a] [-t <threads>] [--no-progress]`
     *   Scans the file system and updates the index.
-    *   `-R`: Update specific repo.
+    *   Positional arguments or `-R`: Update specific repos.
     *   `-a`: Update all repos.
     *   `-t`: Number of threads for hashing (default: 2).
-*   **Prune:** `dedup repo prune [-R <repo> | -a] [-i <indices>]`
+*   **Prune:** `dedup repo prune [<repo>... | -R <repo>... | -a] [-i <indices>] [--keep-deleted] [--change-codec {json|messagepack}]`
     *   Cleans the index from old entries and deleted files.
+    *   Positional arguments or `-R`: Prune specific repos.
 *   **Copy/Move:**
     *   `cp <source> <dest> <path>`: Copies a repo profile to a new path.
     *   `rel <repo> <path>`: Changes the base path of a repo.
     *   `mv <source> <dest>`: Renames a repo.
-*   **Find Duplicates:** `dedup repo dupes [-R <repo> | -a]`
+*   **Find Duplicates:** `dedup repo dupes [<repo>... | -R <repo>... | -a]`
     *   Finds duplicates within the specified repositories.
+    *   Positional arguments or `-R`: Check specific repos.
+    *   `-a`: Check all repos.
 
 ### 2. File Operations (`files`)
 
@@ -57,6 +62,11 @@ Compares repositories or directories.
     *   `mv <source> <reference> <target> [-f <filter>]`: Moves differences to `target`.
 *   **Remove:** `dedup diff rm <source> <reference> [-f <filter>]`
     *   Deletes files in `source` that already exist in `reference`.
+*   **Sync:** `dedup diff sync <source> <target> [--copyNew] [--deleteMissing] [--mirror] [-f <filter>]`
+    *   Synchronizes `target` repo with `source`.
+    *   `--copyNew`: Copy files that exist in `source` but not in `target` (default: true).
+    *   `--deleteMissing`: Delete files in `target` that no longer exist in `source` (default: false).
+    *   `--mirror`: Equivalent to `--copyNew --deleteMissing`.
 
 ---
 
@@ -70,11 +80,11 @@ Compares repositories or directories.
 * They are separated by modulo x filesize
 * The Repo manages the index files in a way that the outside is unaware of them
 
-~/.config/dedup/repos/myRepo/dedup_repo.cfg
+~/.config/dedup/repos/myRepo/dedup_repo.yml
 
-| Name     | Absolute Path (normalized path) | Index files |
-| -------- | ------------------------------- | ----------- |
-| immiches | /home/user/immich               | 10          |
+| Name     | Absolute Path (normalized path) | Index files | Codec        |
+| -------- | ------------------------------- | ----------- | ------------ |
+| immiches | /home/user/immich               | 10          | JSON/MESSAGEPACK |
 
 ### Concept: Index file
 
@@ -102,10 +112,10 @@ Compares repositories or directories.
 
 ### Create a Repo
 
-`dedup repo create <name> <path> -i 10`
+`dedup repo create <name> <path> -i 10 [--codec {json|messagepack}]`
 
 * Creates the config dir
-* Creates the dedup_repo.cfg
+* Creates the dedup_repo.yml (includes `codec` field; defaults to MESSAGEPACK when writing if not specified, remains backward-compatible by reading JSON when missing)
 * Creates the idx files
 
 ### List Repos
@@ -159,7 +169,7 @@ Compares repositories or directories.
 
 Pruning a repo means remove all deprecated information
 
-`dedup repo prune [<name> | --all]`
+`dedup repo prune [<name> | --all] [--keep-deleted] [--change-codec {json|messagepack}]`
 
 * Rename the index files to \[old_name].bak
 * Create new index files
