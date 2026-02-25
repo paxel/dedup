@@ -42,7 +42,7 @@ public class VideoFilmstripGenerator {
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to generate video filmstrip for {}: {}", path, e.getMessage());
+            log.info("Failed to generate video filmstrip for {}: {} (Using generic icon)", path, e.getMessage());
         }
         return filmstrip;
     }

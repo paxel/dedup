@@ -226,9 +226,14 @@ public class DuplicateRepoProcess {
             r.stream()
                     .filter(repoFile1 -> !repoFile1.missing())
                     .filter(this::matchesDimensionFilters)
-                    .forEach(repoFile ->
-                            all.computeIfAbsent(new UniqueHash(repoFile.hash(), repoFile.size()),
-                                    k -> new ArrayList<>()).add(new RepoRepoFile(repo, repoFile)));
+                    .forEach(repoFile -> {
+                        all.computeIfAbsent(new UniqueHash(repoFile.hash(), repoFile.size()),
+                                k -> new ArrayList<>()).add(new RepoRepoFile(repo, repoFile));
+                        if (repoFile.videoHash() != null && repoFile.videoHash().startsWith("fallback:")) {
+                            all.computeIfAbsent(new UniqueHash(repoFile.videoHash(), repoFile.size()),
+                                    k -> new ArrayList<>()).add(new RepoRepoFile(repo, repoFile));
+                        }
+                    });
         }
 
         return all.entrySet().stream()
@@ -332,7 +337,13 @@ public class DuplicateRepoProcess {
 
     private String getRelevantFingerprint(RepoFile rf, int bitLength) {
         if (bitLength == 64) return rf.fingerprint();
-        if (bitLength == 192) return rf.videoHash();
+        if (bitLength == 192) {
+            String vh = rf.videoHash();
+            if (vh != null && vh.startsWith("fallback:")) {
+                return null;
+            }
+            return vh;
+        }
         return null;
     }
 
@@ -581,6 +592,7 @@ public class DuplicateRepoProcess {
                 }
 
                 sb.append("<strong>Modified:</strong> ").append(formatDate(rrf.file.lastModified())).append("<br>\n");
+                sb.append("<a href=\"").append(new java.io.File(fullPath).toURI().toString()).append("\" target=\"_blank\">Open original</a><br>\n");
                 if (rrf.file.mimeType() != null && rrf.file.mimeType().startsWith("image/")) {
                     sb.append("<img src=\"").append(new java.io.File(fullPath).toURI().toString()).append("\" alt=\"thumbnail\">\n");
                 }

@@ -6,6 +6,7 @@ import com.sun.net.httpserver.HttpServer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.domain.model.Dimension;
+import paxel.dedup.domain.model.MimetypeProvider;
 import paxel.dedup.domain.model.Statistics;
 import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.domain.port.out.FileSystem;
@@ -14,6 +15,7 @@ import paxel.lib.Result;
 
 import java.awt.*;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -208,7 +210,8 @@ public class InteractiveDupeProcess {
                         );
                     }
 
-                    html.append("<strong>Modified:</strong> ").append(formatDate(rrf.file().lastModified()));
+                    html.append("<strong>Modified:</strong> ").append(formatDate(rrf.file().lastModified())).append("<br>");
+                    html.append("<a href='/image?path=").append(encodedPath).append("' target='_blank'>Open original</a>");
                     html.append("</div>");
                     html.append("<div class='controls'>");
                     html.append("<label><input type='checkbox' name='keep' value='").append(g).append(":").append(f).append("' ").append(checkedAttr);
@@ -276,16 +279,16 @@ public class InteractiveDupeProcess {
                 return;
             }
 
-            byte[] imageBytes = fileSystem.readAllBytes(path);
-            String contentType = "image/jpeg";
-            if (pathStr.toLowerCase().endsWith(".png")) contentType = "image/png";
-            else if (pathStr.toLowerCase().endsWith(".gif")) contentType = "image/gif";
-            else if (pathStr.toLowerCase().endsWith(".webp")) contentType = "image/webp";
+            String contentType = new MimetypeProvider().get(path).getValueOr("application/octet-stream");
 
             exchange.getResponseHeaders().set("Content-Type", contentType);
-            exchange.sendResponseHeaders(200, imageBytes.length);
-            try (OutputStream os = exchange.getResponseBody()) {
-                os.write(imageBytes);
+            // Use Transfer-Encoding: chunked or just readAllBytes if it's small? 
+            // For videos, readAllBytes is BAD.
+            long size = fileSystem.size(path);
+            exchange.sendResponseHeaders(200, size);
+            try (InputStream is = fileSystem.newInputStream(path);
+                 OutputStream os = exchange.getResponseBody()) {
+                is.transferTo(os);
             }
         }
     }

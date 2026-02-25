@@ -14,6 +14,8 @@ public class VideoFingerprinter {
 
     public String calculateTemporalHash(Path path) {
         try {
+            // JCodec FrameGrab can be flaky with some AVI or older codecs.
+            // We use the highest level API first.
             FrameGrab grab = FrameGrab.createFrameGrab(org.jcodec.common.io.NIOUtils.readableChannel(path.toFile()));
             double duration = grab.getVideoTrack().getMeta().getTotalDuration();
             if (duration <= 0) return null;
@@ -37,7 +39,25 @@ public class VideoFingerprinter {
             }
             return sb.toString();
         } catch (Exception e) {
-            log.warn("Failed to calculate temporal hash for {}: {}", path, e.getMessage());
+            // If JCodec fails to decode, we try a content-based fallback hash to still support duplicate detection.
+            log.info("Could not calculate temporal hash for {} using JCodec ({}). Falling back to content-based hash.", path, e.getMessage());
+            return calculateFallbackHash(path);
+        }
+    }
+
+    private String calculateFallbackHash(Path path) {
+        try (java.io.InputStream is = java.nio.file.Files.newInputStream(path)) {
+            // Skip potential 1MB header to avoid container/metadata variation
+            is.skip(1024 * 1024);
+            byte[] chunk = new byte[100 * 1024]; // 100KB chunk
+            int n = is.read(chunk);
+            if (n <= 0) return null;
+
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            digest.update(chunk, 0, n);
+            return "fallback:" + java.util.HexFormat.of().formatHex(digest.digest());
+        } catch (Exception e) {
+            log.debug("Fallback hash also failed for {}: {}", path, e.getMessage());
             return null;
         }
     }
