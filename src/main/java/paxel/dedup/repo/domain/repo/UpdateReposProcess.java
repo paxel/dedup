@@ -33,9 +33,15 @@ public class UpdateReposProcess {
     private final boolean progress;
     private final boolean refreshFingerprints;
     private final FileSystem fileSystem;
+    private paxel.dedup.domain.service.EventBus eventBus;
 
     public UpdateReposProcess(CliParameter cliParameter, List<String> names, boolean all, int threads, DedupConfig dedupConfig, boolean progress, boolean refreshFingerprints) {
         this(cliParameter, names, all, threads, dedupConfig, progress, refreshFingerprints, new NioFileSystemAdapter());
+    }
+
+    public UpdateReposProcess withEventBus(paxel.dedup.domain.service.EventBus eventBus) {
+        this.eventBus = eventBus;
+        return this;
     }
 
     public Result<Integer, DedupError> update() {
@@ -86,6 +92,9 @@ public class UpdateReposProcess {
         }
         Map<Path, RepoFile> remainingPaths = repoManager.stream().filter(r -> !r.missing()).collect(Collectors.toMap(r -> Paths.get(repoManager.getRepo().absolutePath(), r.relativePath()), Function.identity(), (old, update) -> update));
         StatisticPrinter progressPrinter = new StatisticPrinter();
+        if (eventBus != null) {
+            progressPrinter.setEventBus(eventBus);
+        }
         TerminalProgress terminalProgress = prepProgress(progressPrinter);
         PrintStream originalErr = System.err;
         if (progress) {

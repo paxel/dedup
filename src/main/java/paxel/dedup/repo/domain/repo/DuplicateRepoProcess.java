@@ -93,6 +93,29 @@ public class DuplicateRepoProcess {
         return Result.ok(dupe(reposToProcess.value()));
     }
 
+    public List<List<RepoRepoFile>> findGroups() {
+        Result<List<Repo>, DedupError> reposToProcess;
+        if (all) {
+            reposToProcess = dedupConfig.getRepos();
+        } else {
+            List<Repo> repos = new ArrayList<>();
+            for (String name : names) {
+                Result<Repo, DedupError> repoResult = dedupConfig.getRepo(name);
+                if (repoResult.isSuccess()) {
+                    repos.add(repoResult.value());
+                }
+            }
+            reposToProcess = Result.ok(repos);
+        }
+
+        if (reposToProcess.hasFailed()) return List.of();
+        if (threshold != null && threshold > 0) {
+            return findSimilar(reposToProcess.value());
+        } else {
+            return findExact(reposToProcess.value());
+        }
+    }
+
     private int dupe(List<Repo> repos) {
         List<List<RepoRepoFile>> groups;
         if (threshold != null && threshold > 0) {

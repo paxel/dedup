@@ -1,12 +1,21 @@
 package paxel.dedup.terminal;
 
-import java.util.*;
+import lombok.Setter;
+import paxel.dedup.domain.service.EventBus;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class StatisticPrinter implements ProgressPrinter {
     private final List<Supplier<String>> lines = new ArrayList<>();
     private Runnable action;
+    @Setter
+    private EventBus eventBus;
+
     private String repo = "";
     private String path = "";
     private String progress = "";
@@ -32,6 +41,26 @@ public class StatisticPrinter implements ProgressPrinter {
         lines.add(() -> " Mime-Types: " + mimetypes.entrySet().stream().sorted((o1, o2) -> Long.compare(o1.getValue(), o2.getValue()) * -1).map(e -> e.getKey() + ":" + e.getValue()).collect(Collectors.joining(", ")));
     }
 
+    private void notifyListeners() {
+        if (action != null) {
+            action.run();
+        }
+        if (eventBus != null) {
+            Map<String, Object> stats = new HashMap<>();
+            stats.put("repo", repo);
+            stats.put("path", path);
+            stats.put("progress", progress);
+            stats.put("duration", duration);
+            stats.put("directories", directories);
+            stats.put("files", files);
+            stats.put("deleted", deleted);
+            stats.put("hashed", hashed);
+            stats.put("unchanged", unchanged);
+            stats.put("errors", errors);
+            eventBus.publish("progress", stats);
+        }
+    }
+
     @Override
     public int getLines() {
         return lines.size();
@@ -40,7 +69,7 @@ public class StatisticPrinter implements ProgressPrinter {
     public void set(String repo, String path) {
         this.repo = repo;
         this.path = path;
-        action.run();
+        notifyListeners();
     }
 
 
@@ -58,46 +87,46 @@ public class StatisticPrinter implements ProgressPrinter {
 
     public void setProgress(String progress) {
         this.progress = progress;
-        action.run();
+        notifyListeners();
     }
 
     public void setFiles(String files) {
         this.files = files;
-        action.run();
+        notifyListeners();
     }
 
     public void setDeleted(String deleted) {
         this.deleted = deleted;
-        action.run();
+        notifyListeners();
     }
 
     public void addMimeType(String mimetype, long count) {
         mimetypes.put(mimetype, count);
-        action.run();
+        notifyListeners();
     }
 
     public void setHashed(String hashed) {
         this.hashed = hashed;
-        action.run();
+        notifyListeners();
     }
 
     public void setUnchanged(String unchanged) {
         this.unchanged = unchanged;
-        action.run();
+        notifyListeners();
     }
 
     public void setDuration(String duration) {
         this.duration = duration;
-        action.run();
+        notifyListeners();
     }
 
     public void setDirectories(String directories) {
         this.directories = directories;
-        action.run();
+        notifyListeners();
     }
 
     public void setErrors(String errors) {
         this.errors = errors;
-        action.run();
+        notifyListeners();
     }
 }
