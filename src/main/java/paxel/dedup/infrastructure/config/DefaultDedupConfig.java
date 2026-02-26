@@ -133,7 +133,7 @@ public final class DefaultDedupConfig implements DedupConfig {
 
 
     private Result<Repo, IOException> writeRepoFile(String name, Path path, int indices, Path ymlFile, Repo.Codec codec, boolean compressed) {
-        Repo repo = new Repo(name, path.toAbsolutePath().toString(), indices, codec, compressed);
+        Repo repo = new Repo(name, path.toAbsolutePath().toString(), indices, codec, compressed, null);
         try {
             fileSystem.write(ymlFile, objectMapper.writeValueAsBytes(repo));
         } catch (IOException e) {
@@ -237,7 +237,7 @@ public final class DefaultDedupConfig implements DedupConfig {
         }
         Path ymlFile = repoRootPath.resolve(name).resolve(DEDUP_REPO_YML);
         try {
-            Repo updated = new Repo(name, repo.value().absolutePath(), repo.value().indices(), codec, compressed);
+            Repo updated = new Repo(name, repo.value().absolutePath(), repo.value().indices(), codec, compressed, null);
             fileSystem.write(ymlFile, objectMapper.writeValueAsBytes(updated));
             return Result.ok(updated);
         } catch (IOException e) {

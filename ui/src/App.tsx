@@ -3,12 +3,19 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { Database, Activity, RefreshCw, Trash2, Plus, Folder, X, Search, FileText, ChevronRight } from 'lucide-react'
 
+interface RepoStats {
+  fileCount: number;
+  totalSize: number;
+  mimeTypeDistribution: Record<string, number>;
+}
+
 interface Repo {
   name: string;
   absolutePath: string;
   indices: number;
   codec?: 'JSON' | 'MESSAGEPACK';
   compressed?: boolean;
+  stats?: RepoStats;
 }
 
 interface RepoFile {
@@ -102,6 +109,27 @@ function App() {
     return () => ws.close()
   }, [])
 
+  const formatSize = (bytes: number) => {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  const getTopMimeTypes = (stats?: RepoStats) => {
+    if (!stats?.mimeTypeDistribution) return []
+    const total = Object.values(stats.mimeTypeDistribution).reduce((a, b) => a + b, 0)
+    return Object.entries(stats.mimeTypeDistribution)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5)
+      .map(([type, count]) => ({
+        type,
+        percentage: ((count / total) * 100).toFixed(1),
+        count
+      }))
+  }
+
   return (
     <div className="min-h-screen w-full bg-slate-950 text-slate-50 p-8">
       <header className="mb-12 flex justify-between items-center">
@@ -157,6 +185,26 @@ function App() {
                       <div className="cursor-pointer" onClick={() => setSelectedRepo(repo.name)}>
                         <h3 className="text-xl font-bold text-blue-400 group-hover:text-blue-300 transition-colors">{repo.name}</h3>
                         <p className="text-slate-400 font-mono text-sm mt-1">{repo.absolutePath}</p>
+                        {repo.stats && (
+                          <div className="flex gap-4 mt-3">
+                            <div className="text-xs text-slate-500">
+                              <span className="font-bold text-slate-300">{repo.stats.fileCount.toLocaleString()}</span> files
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              <span className="font-bold text-slate-300">{formatSize(repo.stats.totalSize)}</span>
+                            </div>
+                          </div>
+                        )}
+                        {getTopMimeTypes(repo.stats).length > 0 && (
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {getTopMimeTypes(repo.stats).map((mime, idx) => (
+                              <div key={idx} className="bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-[10px] flex items-center gap-2">
+                                <span className="text-slate-300 truncate max-w-[120px]" title={mime.type}>{mime.type.split('/').pop()}</span>
+                                <span className="text-blue-400 font-bold">{mime.percentage}%</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <button 
                         onClick={() => {

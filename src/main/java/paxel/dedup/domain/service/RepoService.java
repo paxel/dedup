@@ -10,6 +10,7 @@ import paxel.lib.Result;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -27,8 +28,32 @@ public class RepoService {
     public Result<List<Repo>, DedupError> getRepos() {
         return dedupConfig.getRepos()
                 .map(repos -> repos.stream()
+                        .map(this::enrichWithStats)
                         .sorted(Comparator.comparing(Repo::name, String::compareTo))
                         .collect(Collectors.toList()), Function.identity());
+    }
+
+    private Repo enrichWithStats(Repo repo) {
+        var repoManager = paxel.dedup.repo.domain.repo.RepoManager.forRepo(repo, dedupConfig, new paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter());
+        var loadResult = repoManager.load();
+        if (loadResult.isSuccess()) {
+            Map<String, Long> mimeDistribution = new java.util.HashMap<>();
+            long totalSize = 0;
+            long fileCount = 0;
+            for (var file : repoManager.stream().filter(f -> !f.missing()).toList()) {
+                fileCount++;
+                totalSize += file.size();
+                if (file.mimeType() != null && !file.mimeType().isBlank()) {
+                    mimeDistribution.put(file.mimeType(), mimeDistribution.getOrDefault(file.mimeType(), 0L) + 1L);
+                }
+            }
+            return repo.withStats(paxel.dedup.domain.model.RepoStats.builder()
+                    .fileCount(fileCount)
+                    .totalSize(totalSize)
+                    .mimeTypeDistribution(mimeDistribution)
+                    .build());
+        }
+        return repo;
     }
 
     /**
