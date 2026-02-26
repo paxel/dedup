@@ -34,7 +34,14 @@ public interface DedupConfig {
      * @return The new {@link Repo} or an error if the repo could not be created.
      */
     @NonNull
-    Result<Repo, DedupError> createRepo(@NonNull String name, @NonNull Path path, int indices);
+    default Result<Repo, DedupError> createRepo(@NonNull String name, @NonNull Path path, int indices, @NonNull Repo.Codec codec, boolean compressed) {
+        return Result.err(DedupError.of(paxel.dedup.domain.model.errors.ErrorType.CREATE_REPO, "Not implemented"));
+    }
+
+    @NonNull
+    default Result<Repo, DedupError> createRepo(@NonNull String name, @NonNull Path path, int indices) {
+        return createRepo(name, path, indices, Repo.Codec.MESSAGEPACK, false);
+    }
 
     @NonNull
     Result<Repo, DedupError> changePath(@NonNull String name, @NonNull Path path);

@@ -7,6 +7,8 @@ interface Repo {
   name: string;
   absolutePath: string;
   indices: number;
+  codec?: 'JSON' | 'MESSAGEPACK';
+  compressed?: boolean;
 }
 
 interface RepoFile {
@@ -23,7 +25,13 @@ interface RepoRepoFile {
 function App() {
   const [events, setEvents] = useState<any[]>([])
   const [showAddModal, setShowAddModal] = useState(false)
-  const [newRepo, setNewRepo] = useState({ name: '', absolutePath: '', indices: 10 })
+  const [newRepo, setNewRepo] = useState<Repo>({ 
+    name: '', 
+    absolutePath: './Documents', 
+    indices: 10,
+    codec: 'MESSAGEPACK',
+    compressed: false
+  })
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
@@ -47,12 +55,14 @@ function App() {
     enabled: !!selectedRepo,
   })
 
+  const resetNewRepo = () => {
+    setNewRepo({ name: '', absolutePath: './Documents', indices: 10, codec: 'MESSAGEPACK', compressed: false })
+  }
+
   const createMutation = useMutation({
     mutationFn: (repo: Repo) => axios.post('/api/repos', repo),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['repos'] })
-      setShowAddModal(false)
-      setNewRepo({ name: '', absolutePath: '', indices: 10 })
     },
   })
 
@@ -65,6 +75,21 @@ function App() {
 
   const updateMutation = useMutation({
     mutationFn: (name: string) => axios.post(`/api/repos/${name}/update`),
+  })
+
+  const browseMutation = useMutation({
+    mutationFn: async (path?: string) => {
+      const response = await axios.get('/api/utils/browse', { params: { path } })
+      return response.data?.path
+    },
+    onSuccess: (path) => {
+      if (path) {
+        setNewRepo((prev) => {
+          const name = prev.name || path.split(/[/\\]/).pop() || ''
+          return { ...prev, absolutePath: path, name }
+        })
+      }
+    }
   })
 
   useEffect(() => {
@@ -288,7 +313,32 @@ function App() {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-400">Absolute Path</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={newRepo.absolutePath}
+                    onChange={e => {
+                      const path = e.target.value
+                      setNewRepo(prev => {
+                        const name = prev.name || path.split(/[/\\]/).pop() || ''
+                        return { ...prev, absolutePath: path, name }
+                      })
+                    }}
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                    placeholder="/home/user/music"
+                  />
+                  <button 
+                    onClick={() => browseMutation.mutate(newRepo.absolutePath)}
+                    className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-lg transition-colors border border-slate-700"
+                    title="Browse Filesystem"
+                  >
+                    <Folder className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-400">Repository Name</label>
                 <input 
@@ -299,40 +349,102 @@ function App() {
                   placeholder="e.g. My Music"
                 />
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-400">Absolute Path</label>
-                <input 
-                  type="text" 
-                  value={newRepo.absolutePath}
-                  onChange={e => setNewRepo({...newRepo, absolutePath: e.target.value})}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
-                  placeholder="/home/user/music"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-400">Index Files</label>
+                  <input 
+                    type="number" 
+                    value={newRepo.indices}
+                    onChange={e => setNewRepo({...newRepo, indices: parseInt(e.target.value) || 1})}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-400">Codec</label>
+                  <select 
+                    value={newRepo.codec}
+                    onChange={e => {
+                      const codec = e.target.value as 'JSON' | 'MESSAGEPACK'
+                      setNewRepo({...newRepo, codec, compressed: codec === 'JSON' ? false : newRepo.compressed})
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all appearance-none"
+                  >
+                    <option value="MESSAGEPACK">MsgPack</option>
+                    <option value="JSON">JSON</option>
+                  </select>
+                </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-400">Index Files</label>
+              <div className="flex items-center gap-2 pt-2">
                 <input 
-                  type="number" 
-                  value={newRepo.indices}
-                  onChange={e => setNewRepo({...newRepo, indices: parseInt(e.target.value) || 1})}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                  type="checkbox" 
+                  id="compressed"
+                  checked={newRepo.compressed}
+                  disabled={newRepo.codec === 'JSON'}
+                  onChange={e => setNewRepo({...newRepo, compressed: e.target.checked})}
+                  className="w-4 h-4 bg-slate-950 border-slate-800 rounded text-blue-600 focus:ring-blue-500 disabled:opacity-30"
                 />
+                <label 
+                  htmlFor="compressed" 
+                  className={`text-sm font-medium ${newRepo.codec === 'JSON' ? 'text-slate-600' : 'text-slate-400'}`}
+                >
+                  Compressed Index (MsgPack only)
+                </label>
               </div>
             </div>
-            <div className="p-6 bg-slate-900/50 border-t border-slate-800 flex gap-3">
+            <div className="p-6 bg-slate-900/50 border-t border-slate-800 flex justify-between items-center gap-3">
               <button 
-                onClick={() => setShowAddModal(false)}
-                className="flex-1 px-4 py-2 rounded-lg border border-slate-800 hover:bg-slate-800 transition-colors font-semibold"
+                onClick={() => {
+                  setShowAddModal(false)
+                  resetNewRepo()
+                }}
+                className="px-4 py-2 rounded-lg border border-slate-800 hover:bg-slate-800 transition-colors font-semibold text-sm"
               >
                 Cancel
               </button>
-              <button 
-                onClick={() => createMutation.mutate(newRepo as Repo)}
-                disabled={!newRepo.name || !newRepo.absolutePath || createMutation.isPending}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-semibold transition-colors"
-              >
-                {createMutation.isPending ? 'Adding...' : 'Add Repository'}
-              </button>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => {
+                    createMutation.mutate(newRepo, {
+                      onSuccess: () => {
+                        resetNewRepo()
+                      }
+                    })
+                  }}
+                  disabled={!newRepo.name || !newRepo.absolutePath || createMutation.isPending}
+                  className="px-4 py-2 rounded-lg border border-slate-700 hover:bg-slate-800 text-white font-semibold transition-colors text-sm"
+                >
+                  Add Another
+                </button>
+                <button 
+                  onClick={() => {
+                    createMutation.mutate(newRepo, {
+                      onSuccess: () => {
+                        setShowAddModal(false)
+                        resetNewRepo()
+                      }
+                    })
+                  }}
+                  disabled={!newRepo.name || !newRepo.absolutePath || createMutation.isPending}
+                  className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg font-semibold transition-colors text-sm"
+                >
+                  Add
+                </button>
+                <button 
+                  onClick={() => {
+                    createMutation.mutate(newRepo, {
+                      onSuccess: (response) => {
+                        updateMutation.mutate(response.data.name)
+                        setShowAddModal(false)
+                        resetNewRepo()
+                      }
+                    })
+                  }}
+                  disabled={!newRepo.name || !newRepo.absolutePath || createMutation.isPending}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors text-sm"
+                >
+                  {createMutation.isPending ? 'Adding...' : 'Add and Scan'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

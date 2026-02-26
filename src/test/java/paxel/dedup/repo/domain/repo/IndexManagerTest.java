@@ -107,6 +107,22 @@ class IndexManagerTest {
     }
 
     @Test
+    void testLoadEmptyCompressedIndex() throws IOException {
+        // Arrange
+        indexFile = tempDir.resolve("empty_compressed.idx.gz");
+        Files.createFile(indexFile);
+        FrameIteratorFactoryFactory ffff = new FrameIteratorFactoryFactory();
+        IndexManager compressedManager = new IndexManager(indexFile, new JacksonMapperLineCodec<>(objectMapper, RepoFile.class), new NioFileSystemAdapter(), ffff.forReader(Repo.Codec.JSON, true), ffff.forWriter(Repo.Codec.JSON, true));
+
+        // Act
+        Result<Statistics, DedupError> result = compressedManager.load();
+
+        // Assert
+        assertThat(result.hasFailed()).isFalse();
+        assertThat(compressedManager.stream().count()).isEqualTo(0);
+    }
+
+    @Test
     void testLoadAndStream() throws IOException {
         // Arrange
         RepoFile file1 = RepoFile.builder().hash("h1").relativePath("p1").size(10L).build();

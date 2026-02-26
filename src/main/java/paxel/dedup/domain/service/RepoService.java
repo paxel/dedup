@@ -44,14 +44,28 @@ public class RepoService {
     /**
      * Creates a new repository.
      *
+     * @param name       the name of the repository.
+     * @param path       the local filesystem path to the repository data.
+     * @param indices    the number of index files to use.
+     * @param codec      the codec to use for index files.
+     * @param compressed whether to use compression.
+     * @return the created repository, or a DedupError if creation fails.
+     */
+    public Result<Repo, DedupError> createRepo(String name, Path path, int indices, Repo.Codec codec, boolean compressed) {
+        log.info("Creating Repo '{}' at '{}' (codec={}, compressed={})", name, path, codec, compressed);
+        return dedupConfig.createRepo(name, path, indices, codec, compressed);
+    }
+
+    /**
+     * Creates a new repository with default settings.
+     *
      * @param name    the name of the repository.
      * @param path    the local filesystem path to the repository data.
      * @param indices the number of index files to use.
      * @return the created repository, or a DedupError if creation fails.
      */
     public Result<Repo, DedupError> createRepo(String name, Path path, int indices) {
-        log.info("Creating Repo '{}' at '{}'", name, path);
-        return dedupConfig.createRepo(name, path, indices);
+        return createRepo(name, path, indices, Repo.Codec.MESSAGEPACK, false);
     }
 
     /**

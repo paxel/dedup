@@ -10,7 +10,10 @@ import paxel.dedup.domain.service.RepoService;
 import paxel.dedup.infrastructure.config.InfrastructureConfig;
 import paxel.dedup.repo.domain.repo.UpdateReposProcess;
 
+import javax.swing.*;
+import java.io.File;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 @Slf4j
@@ -47,11 +50,50 @@ public class UiServer {
 
         app.post("/api/repos", ctx -> {
             Repo repo = ctx.bodyAsClass(Repo.class);
-            var result = repoService.createRepo(repo.name(), java.nio.file.Paths.get(repo.absolutePath()), repo.indices());
+            var result = repoService.createRepo(repo.name(), java.nio.file.Paths.get(repo.absolutePath()), repo.indices(), repo.codec(), repo.compressed());
             if (result.isSuccess()) {
                 ctx.status(201).json(result.value());
             } else {
                 ctx.status(400).json(result.error());
+            }
+        });
+
+        app.get("/api/utils/browse", ctx -> {
+            CompletableFuture<String> future = new CompletableFuture<>();
+            SwingUtilities.invokeLater(() -> {
+                try {
+                    // Set system look and feel for a better native experience
+                    UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+                    JFileChooser chooser = new JFileChooser();
+                    chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+                    chooser.setDialogTitle("Select Repository Directory");
+
+                    // Try to use current path if provided
+                    String currentPath = ctx.queryParam("path");
+                    if (currentPath != null && !currentPath.isBlank()) {
+                        File currentDir = new File(currentPath);
+                        if (currentDir.exists()) {
+                            chooser.setCurrentDirectory(currentDir);
+                        }
+                    }
+
+                    int returnVal = chooser.showOpenDialog(null);
+                    if (returnVal == 0) { // JFileChooser.APPROVE_VALUE
+                        future.complete(chooser.getSelectedFile().getAbsolutePath());
+                    } else {
+                        future.complete(null);
+                    }
+                } catch (Exception e) {
+                    log.error("Error opening directory browser", e);
+                    future.completeExceptionally(e);
+                }
+            });
+
+            String path = future.get();
+            if (path != null) {
+                ctx.json(Map.of("path", path));
+            } else {
+                ctx.status(204);
             }
         });
 

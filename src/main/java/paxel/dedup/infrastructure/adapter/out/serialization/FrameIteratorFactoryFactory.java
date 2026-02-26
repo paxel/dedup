@@ -13,6 +13,17 @@ public class FrameIteratorFactoryFactory {
     public Function<InputStream, FrameIterator> forReader(Repo.Codec codec, boolean compressed) {
         return stream -> {
             try {
+                if (compressed) {
+                    if (!stream.markSupported()) {
+                        stream = new java.io.BufferedInputStream(stream);
+                    }
+                    stream.mark(1);
+                    int read = stream.read();
+                    if (read == -1) {
+                        return new EmptyFrameIterator();
+                    }
+                    stream.reset();
+                }
                 InputStream wrapped = compressed ? new GZIPInputStream(stream) : stream;
                 return switch (codec) {
                     case JSON -> new JsonFrameIterator(wrapped);
