@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.errors.DedupConfigErrorHandler;
 import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.domain.service.RepoService;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.infrastructure.config.InfrastructureConfig;
 import paxel.dedup.repo.domain.repo.*;
@@ -30,6 +31,7 @@ public class RepoCommand {
     CliParameter cliParameter;
     private final InfrastructureConfig infrastructureConfig;
     private DedupConfig dedupConfig;
+    private RepoService repoService;
 
     @Command(name = "create", description = "Creates a non existing repo", mixinStandardHelpOptions = true)
     public int create(
@@ -41,34 +43,29 @@ public class RepoCommand {
             @Option(names = {"--strict"}, description = "Fail if selected codec is unavailable") boolean strict) {
         initDefaultConfig();
 
-        Result<Integer, DedupError> result = new CreateRepoProcess(cliParameter, name, path, indices, dedupConfig).create();
+        Result<Repo, DedupError> result = repoService.createRepo(name, java.nio.file.Paths.get(path), indices);
         if (result.hasFailed()) {
             new DedupConfigErrorHandler().dump(result.error());
             return -10;
         }
-        int rc = result.value();
-        if (rc == 0) {
-            // Persist codec selection in repo YAML via config API
-            Repo.Codec target = switch (codec.toLowerCase()) {
-                case "json" -> Repo.Codec.JSON;
-                case "messagepack" -> Repo.Codec.MESSAGEPACK;
-                default -> null;
-            };
-            if (target == null) {
-                log.warn("Unknown codec '{}' . Supported: json, messagepack. Falling back to default (messagepack on write).", codec);
-            } else {
-                try {
-                    dedupConfig.setRepoConfig(name, target, compressed);
-                } catch (Exception e) {
-                    if (strict) {
-                        log.error("Failed to persist codec selection: {}", e.getMessage(), e);
-                        return -11;
-                    }
-                    log.debug("Failed to persist codec selection (non-strict mode)", e);
-                }
+
+        // Persist codec selection in repo YAML via config API
+        Repo.Codec target = switch (codec.toLowerCase()) {
+            case "json" -> Repo.Codec.JSON;
+            case "messagepack" -> Repo.Codec.MESSAGEPACK;
+            default -> null;
+        };
+        if (target == null) {
+            log.warn("Unknown codec '{}' . Supported: json, messagepack. Falling back to default (messagepack on write).", codec);
+        } else {
+            Result<Repo, DedupError> configResult = repoService.updateRepoConfig(name, target, compressed);
+            if (configResult.hasFailed() && strict) {
+                log.error("Failed to persist codec selection: {}", configResult.error());
+                return -11;
             }
         }
-        return rc;
+
+        return 0;
     }
 
     @Command(name = "rm", description = "Deletes existing repo", mixinStandardHelpOptions = true)
@@ -76,12 +73,12 @@ public class RepoCommand {
             @Parameters(description = "Name of the repo") String name) {
         initDefaultConfig();
 
-        Result<Integer, DedupError> result = new RmReposProcess(cliParameter, name, dedupConfig).delete();
+        Result<Boolean, DedupError> result = repoService.deleteRepo(name);
         if (result.hasFailed()) {
             new DedupConfigErrorHandler().dump(result.error());
             return -40;
         }
-        return result.value();
+        return 0;
     }
 
 
@@ -89,12 +86,19 @@ public class RepoCommand {
     public int list() {
         initDefaultConfig();
 
-        Result<Integer, DedupError> result = new ListReposProcess(cliParameter, dedupConfig).list();
+        Result<List<Repo>, DedupError> result = repoService.getRepos();
         if (result.hasFailed()) {
             new DedupConfigErrorHandler().dump(result.error());
             return -20;
         }
-        return result.value();
+        result.value().forEach(repo -> {
+            if (cliParameter.isVerbose()) {
+                log.info("{}: {} index files: {}", repo.name(), repo.absolutePath(), repo.indices());
+            } else {
+                log.info("{}: {}", repo.name(), repo.absolutePath());
+            }
+        });
+        return 0;
     }
 
     @Command(name = "update", description = "Reads all file changes from the path into the Repos DB", mixinStandardHelpOptions = true)
@@ -267,6 +271,7 @@ public class RepoCommand {
 
     private void initDefaultConfig() {
         dedupConfig = infrastructureConfig.getDedupConfig();
+        repoService = infrastructureConfig.getRepoService();
     }
 
     private DuplicateRepoProcess.DupePrintMode getDupePrintMode(boolean print) {

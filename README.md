@@ -9,6 +9,12 @@ Treats your files as repositories and allows finding duplicates in the repositor
 
 The `dedup` CLI allows managing repositories and finding/processing duplicates.
 
+### 0. Web UI
+
+Launch the interactive Web GUI to manage your repositories and view real-time progress.
+
+*   `dedup --ui`: Starts the web server on port 8080.
+
 ### 1. Repository Management (`repo`)
 
 Repositories are logical groupings of files at a specific path.
@@ -191,5 +197,7 @@ Pruning a repo means remove all deprecated information
 - [x] Config Dir Management (use default)
 - [x] Simple Repository Management (query Config Dir for Repository)
 - [x] List, create and delete Repo commands
-- [ ] Index Manager
+- [x] Index Manager
+- [x] Repo Service (Backend for UI)
+- [ ] Frontend (Phase 2)
 - [ ] Repo interface

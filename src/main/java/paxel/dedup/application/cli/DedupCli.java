@@ -8,6 +8,7 @@ import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.application.cli.parameter.DiffCommand;
 import paxel.dedup.application.cli.parameter.FilesCommand;
 import paxel.dedup.application.cli.parameter.RepoCommand;
+import paxel.dedup.infrastructure.adapter.in.web.UiServer;
 import paxel.dedup.infrastructure.config.InfrastructureConfig;
 import picocli.CommandLine;
 
@@ -38,7 +39,17 @@ public class DedupCli {
             root.setLevel(Level.DEBUG);
         }
 
-        int exitCode = commandLine.execute(args);
+        if (cliParameter.isUi()) {
+            new UiServer(infrastructureConfig).start(8080);
+            return;
+        }
+
+        if (parseResult.subcommand() == null) {
+            commandLine.usage(System.out);
+            System.exit(0);
+        }
+
+        int exitCode = commandLine.getExecutionStrategy().execute(parseResult);
         System.exit(exitCode);
     }
 

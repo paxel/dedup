@@ -12,6 +12,9 @@ public class CliParameter {
     @Option(names = "-v", description = "Verbose logging", scope = CommandLine.ScopeType.INHERIT)
     private boolean verbose;
 
+    @Option(names = "--ui", description = "Launch the Web UI")
+    private boolean ui;
+
 
 }
 
