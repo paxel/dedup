@@ -22,6 +22,12 @@ public class UiServer {
         this.app = Javalin.create(config -> {
             config.jsonMapper(new JavalinJackson(infrastructureConfig.getObjectMapper(), false));
             config.showJavalinBanner = false;
+            config.staticFiles.add(staticFiles -> {
+                staticFiles.hostedPath = "/";
+                staticFiles.directory = "/static";
+                staticFiles.location = io.javalin.http.staticfiles.Location.CLASSPATH;
+            });
+            config.spaRoot.addFile("/", "/static/index.html");
         });
 
         setupRoutes();
