@@ -78,7 +78,7 @@ public class IndexManager {
                 statistics.inc(LINES);
                 try {
                     RepoFile repoFile = readValid(s);
-                    if (repoFile != null && repoFile.hash() != null && !repoFile.hash().isBlank()) {
+                    if (repoFile != null) {
                         // the same hash can exist as multiple paths. so we store the paths per hash
                         hashes.computeIfAbsent(repoFile.hash(), h -> new HashSet<>()).add(repoFile.relativePath());
 
@@ -93,15 +93,10 @@ public class IndexManager {
                             }
                         }
                     } else {
-                        log.warn("{}: record missing mandatory hash field, skipping line", indexFile);
                         corrupted = true;
                     }
                 } catch (Exception e) {
-                    if (e instanceof com.fasterxml.jackson.core.JacksonException || e.getCause() instanceof com.fasterxml.jackson.core.JacksonException) {
-                        log.warn("{}: error decoding record ({}). Skipping line.", indexFile, e.getMessage());
-                    } else {
-                        log.error("{}: error decoding record, skipping line", indexFile, e);
-                    }
+                    log.error("{}: unexpected error during record processing", indexFile, e);
                     corrupted = true;
                 }
             }
@@ -156,13 +151,24 @@ public class IndexManager {
 
     private RepoFile readValid(ByteBuffer s) throws IOException {
         // Interpret the line as UTF-8 JSON bytes and delegate to codec
-        RepoFile repoFile = lineCodec.decode(s);
+        RepoFile repoFile;
+        try {
+            repoFile = lineCodec.decode(s);
+        } catch (Exception e) {
+            log.warn("{}: error decoding record ({}). Skipping line.", indexFile, e.getMessage());
+            return null;
+        }
+
+        if (repoFile == null) return null;
+        if (repoFile.hash() == null || repoFile.hash().isBlank()) {
+            log.warn("{}: record missing mandatory hash field, skipping line", indexFile);
+            return null;
+        }
+
         if (repoFile.size() == null)
             repoFile = repoFile.withSize(0L);
         if (repoFile.mimeType() == null)
             repoFile = repoFile.withMimeType("");
-        if (repoFile.hash() == null)
-            repoFile = repoFile.withHash("");
         if (repoFile.relativePath() == null)
             repoFile = repoFile.withRelativePath(".");
         return repoFile;

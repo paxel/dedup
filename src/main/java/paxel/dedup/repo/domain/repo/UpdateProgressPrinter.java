@@ -72,10 +72,12 @@ class UpdateProgressPrinter implements FileObserver {
         long processed = currentHashed + currentUnchanged;
 
         ProgressUpdate.ProgressUpdateBuilder updateBuilder = ProgressUpdate.builder()
+                .scanningActive(!scanFinished.get())
+                .filesDiscovered(currentFiles)
+                .directoriesDiscovered(allDirs.get())
                 .repo(repoManager.getRepo().name())
                 .path(repoManager.getRepo().absolutePath())
                 .currentFile(absolutePath.getFileName().toString())
-                .filesProcessed(processed)
                 .filesTotal(currentFiles)
                 .hashedProcessed(currentHashed)
                 .hashedTotal(currentFiles - currentUnchanged)
@@ -85,8 +87,10 @@ class UpdateProgressPrinter implements FileObserver {
                 .duration(DurationFormatUtils.formatDurationWords(Duration.between(start, clock.instant()).toMillis(), true, true));
 
         if (!scanFinished.get()) {
+            updateBuilder.filesProcessed(0L); // Keep at 0 during scan to avoid progress bar jumping
             updateBuilder.status("Scanning... Found " + currentFiles + " files and " + allDirs.get() + " directories");
         } else {
+            updateBuilder.filesProcessed(processed);
             updateBuilder.status(calculateStatus(currentFiles, processed));
             updateBuilder.eta(calculateEta(currentFiles, processed));
             updateBuilder.progressPercent((double) processed / currentFiles * 100);
@@ -127,13 +131,21 @@ class UpdateProgressPrinter implements FileObserver {
                 // Refresh status and progress bar
                 long total = files.get();
                 long done = hash.get() + unchanged.get();
-                progressPrinter.update(ProgressUpdate.builder()
+                ProgressUpdate.ProgressUpdateBuilder puBuilder = ProgressUpdate.builder()
+                        .scanningActive(!scanFinished.get())
+                        .filesDiscovered(total)
+                        .directoriesDiscovered(allDirs.get())
                         .filesProcessed(done)
-                        .filesTotal(total)
-                        .status(calculateStatus(total, done))
-                        .eta(calculateEta(total, done))
-                        .progressPercent((double) done / total * 100)
-                        .build());
+                        .filesTotal(total);
+
+                if (scanFinished.get()) {
+                    puBuilder.status(calculateStatus(total, done))
+                            .eta(calculateEta(total, done))
+                            .progressPercent((double) done / total * 100);
+                } else {
+                    puBuilder.status("Scanning... Found " + total + " files and " + allDirs.get() + " directories");
+                }
+                progressPrinter.update(puBuilder.build());
             } else {
                 fail(absolutePath, add.error().exception());
             }
@@ -201,11 +213,15 @@ class UpdateProgressPrinter implements FileObserver {
     public void addDir(Path f) {
         allDirs.incrementAndGet();
         progressPrinter.update(ProgressUpdate.builder()
+                .scanningActive(!scanFinished.get())
+                .filesDiscovered(files.get())
+                .directoriesDiscovered(allDirs.get())
                 .directoriesProcessed(finishedDirs.get())
                 .directoriesTotal(allDirs.get())
                 .build());
         if (!scanFinished.get()) {
             progressPrinter.update(ProgressUpdate.builder()
+                    .scanningActive(true)
                     .status("Scanning... Found " + files.get() + " files and " + allDirs.get() + " directories")
                     .build());
         }
@@ -215,6 +231,7 @@ class UpdateProgressPrinter implements FileObserver {
     public void finishedDir(Path f) {
         finishedDirs.incrementAndGet();
         progressPrinter.update(ProgressUpdate.builder()
+                .scanningActive(!scanFinished.get())
                 .directoriesProcessed(finishedDirs.get())
                 .directoriesTotal(allDirs.get())
                 .build());
@@ -223,9 +240,15 @@ class UpdateProgressPrinter implements FileObserver {
     @Override
     public void scanFinished() {
         scanFinished.set(true);
+        long total = files.get();
+        long done = hash.get() + unchanged.get();
         String durationStr = DurationFormatUtils.formatDurationWords(Duration.between(start, clock.instant()).toMillis(), true, true);
         progressPrinter.update(ProgressUpdate.builder()
+                .scanningActive(false)
+                .filesProcessed(done)
+                .filesTotal(total)
                 .status("Scan finished after " + durationStr + ". Calculating ETA...")
+                .progressPercent(total > 0 ? (double) done / total * 100 : 0)
                 .build());
     }
 
@@ -233,6 +256,7 @@ class UpdateProgressPrinter implements FileObserver {
     public void fail(Path root, Throwable e) {
         firstError.compareAndSet(null, e);
         progressPrinter.update(ProgressUpdate.builder()
+                .scanningActive(!scanFinished.get())
                 .errors(errors.incrementAndGet() + " last:" + e.getMessage())
                 .build());
     }
@@ -264,6 +288,7 @@ class UpdateProgressPrinter implements FileObserver {
         }
         long total = files.get();
         progressPrinter.update(ProgressUpdate.builder()
+                .scanningActive(false)
                 .filesProcessed(total)
                 .filesTotal(total)
                 .deletedProcessed((long) remainingPaths.size())

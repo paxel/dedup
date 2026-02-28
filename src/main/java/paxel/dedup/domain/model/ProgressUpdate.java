@@ -27,4 +27,8 @@ public class ProgressUpdate {
     String eta;
     String errors;
     Map<String, Long> mimeDistribution;
+
+    Boolean scanningActive;
+    Long filesDiscovered;
+    Long directoriesDiscovered;
 }

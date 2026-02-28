@@ -32,6 +32,7 @@ interface RepoRepoFile {
 interface ProgressUpdate {
   repo?: string;
   path?: string;
+  currentFile?: string;
   status?: string;
   progressPercent?: number;
   filesProcessed?: number;
@@ -47,6 +48,9 @@ interface ProgressUpdate {
   duration?: string;
   eta?: string;
   errors?: string;
+  scanningActive?: boolean;
+  filesDiscovered?: number;
+  directoriesDiscovered?: number;
 }
 
 interface ErrorEvent {
@@ -60,7 +64,7 @@ interface ErrorEvent {
 function App() {
   const [events, setEvents] = useState<any[]>([])
   const [connected, setConnected] = useState(false)
-  const [activeProgress, setActiveProgress] = useState<any>(null)
+  const [activeProgress, setActiveProgress] = useState<ProgressUpdate | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showErrorModal, setShowErrorModal] = useState(false)
   const [errors, setErrors] = useState<ErrorEvent[]>([])
@@ -197,9 +201,16 @@ function App() {
         const data = JSON.parse(event.data)
         if (data.type === 'progress') {
           setActiveProgress((prev: ProgressUpdate | null) => {
+            // If we switch to a different repo, reset state
             if (!prev || (data.payload.repo && data.payload.repo !== prev.repo)) {
-              return data.payload;
+              return {
+                ...data.payload,
+                scanningActive: data.payload.scanningActive ?? true,
+                filesDiscovered: data.payload.filesDiscovered ?? 0,
+                directoriesDiscovered: data.payload.directoriesDiscovered ?? 0
+              };
             }
+            // Merge updates
             return { ...prev, ...data.payload };
           });
         } else if (data.type === 'finished') {
@@ -346,20 +357,32 @@ function App() {
               )}
             </button>
             {activeProgress && (
-              <div className="bg-blue-500/10 border border-blue-500/20 px-4 py-2 rounded-xl flex items-center gap-3">
-                <div className="flex flex-col items-end">
-                  <span className="text-[10px] uppercase font-bold text-blue-400 tracking-widest leading-none mb-1">Updating {activeProgress.repo}</span>
-                  <div className="flex items-center gap-2">
-                    <div className="w-32 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-blue-500 transition-all duration-500" 
-                        style={{ width: `${activeProgress.progressPercent || 0}%` }}
-                      ></div>
-                    </div>
-                    <span className="text-xs font-black text-blue-100">{Math.round(activeProgress.progressPercent || 0)}%</span>
-                  </div>
+              <div className="bg-blue-500/10 border border-blue-500/20 px-4 py-2 rounded-xl flex flex-col items-end min-w-[200px]">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] uppercase font-bold text-blue-400 tracking-widest leading-none">
+                    Updating {activeProgress.repo}
+                  </span>
+                  <RefreshCw className="w-3 h-3 text-blue-500 animate-spin" />
                 </div>
-                <RefreshCw className="w-5 h-5 text-blue-500 animate-spin" />
+                
+                {activeProgress.scanningActive && (
+                  <div className="flex items-center gap-2 mb-1 animate-pulse">
+                    <Search className="w-3 h-3 text-emerald-400" />
+                    <span className="text-[10px] font-bold text-emerald-400 whitespace-nowrap">
+                      Scanning: {activeProgress.filesDiscovered || 0} files / {activeProgress.directoriesDiscovered || 0} dirs
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 w-full">
+                  <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-blue-500 transition-all duration-500" 
+                      style={{ width: `${activeProgress.progressPercent || 0}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-[10px] font-black text-blue-100 min-w-[3ch]">{Math.round(activeProgress.progressPercent || 0)}%</span>
+                </div>
               </div>
             )}
             <button 
@@ -387,15 +410,22 @@ function App() {
             <div className="max-w-[1600px] mx-auto">
               <div className="bg-slate-900/90 backdrop-blur-md border border-blue-500/30 rounded-2xl p-4 md:p-6 shadow-2xl shadow-blue-500/20">
                 <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between mb-4">
-                  <div className="flex items-center gap-4">
-                    <div className="bg-blue-600/20 p-2 rounded-xl">
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className="bg-blue-600/20 p-2 rounded-xl shrink-0">
                       <RefreshCw className="w-6 h-6 text-blue-500 animate-spin" />
                     </div>
-                    <div>
-                      <h3 className="text-lg font-black text-white flex items-center gap-2">
-                        Updating <span className="text-blue-500">{activeProgress.repo}</span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-lg font-black text-white flex items-center gap-2 truncate">
+                        Updating <span className="text-blue-500 truncate">{activeProgress.repo}</span>
                       </h3>
-                      <p className="text-xs text-slate-400 font-medium truncate max-w-md">{activeProgress.status}</p>
+                      <div className="flex flex-col">
+                        {activeProgress.currentFile && (
+                          <p className="text-[10px] font-black uppercase text-blue-400 tracking-tighter truncate animate-pulse mb-0.5">
+                            Processing: <span className="text-slate-100 italic">{activeProgress.currentFile}</span>
+                          </p>
+                        )}
+                        <p className="text-xs text-slate-400 font-medium truncate">{activeProgress.status}</p>
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-6">
@@ -448,12 +478,32 @@ function App() {
           <div className="flex flex-col xl:flex-row gap-10">
             {/* Repository List */}
             <section className="flex-1">
-              <div className="flex justify-between items-center mb-8">
+            <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold flex items-center gap-3 text-slate-200">
                   <Database className="w-6 h-6 text-blue-400" />
                   Your Repositories
                   {repos && <span className="text-sm font-normal bg-slate-800 text-slate-400 px-2.5 py-0.5 rounded-full">{repos.length}</span>}
                 </h2>
+                
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => {
+                      if (repos) repos.forEach(r => updateMutation.mutate(r.name))
+                    }}
+                    disabled={!repos || repos.length === 0 || !!activeProgress}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-slate-700 disabled:opacity-30"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Scan All Repos
+                  </button>
+                  <button 
+                    disabled={!repos || repos.length === 0 || !!activeProgress}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-slate-700 disabled:opacity-30"
+                  >
+                    <Search className="w-4 h-4" />
+                    Global Duplicate Check
+                  </button>
+                </div>
               </div>
               
               {isLoading ? (
@@ -531,15 +581,16 @@ function App() {
                         <div className="flex items-center gap-3">
                           <button
                             onClick={() => setSelectedRepo(repo.name)}
-                            className="text-xs font-black uppercase tracking-widest text-blue-500 hover:text-white hover:bg-blue-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2"
+                            disabled={!!activeProgress}
+                            className="text-xs font-black uppercase tracking-widest text-blue-500 hover:text-white hover:bg-blue-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             <Search className="w-4 h-4" />
                             Duplicate Explorer
                           </button>
                           <button
                             onClick={() => updateMutation.mutate(repo.name)}
-                            disabled={updateMutation.isPending}
-                            className="text-xs font-black uppercase tracking-widest text-emerald-500 hover:text-white hover:bg-emerald-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+                            disabled={updateMutation.isPending || !!activeProgress}
+                            className="text-xs font-black uppercase tracking-widest text-emerald-500 hover:text-white hover:bg-emerald-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             <RefreshCw className={`w-4 h-4 ${updateMutation.isPending ? 'animate-spin' : ''}`} />
                             Update Index
@@ -552,7 +603,8 @@ function App() {
                               deleteMutation.mutate(repo.name)
                             }
                           }}
-                          className="p-2 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all ml-auto"
+                          disabled={!!activeProgress}
+                          className="p-2 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all ml-auto disabled:opacity-30 disabled:cursor-not-allowed"
                           title="Remove Repository"
                         >
                           <Trash2 className="w-5 h-5" />
