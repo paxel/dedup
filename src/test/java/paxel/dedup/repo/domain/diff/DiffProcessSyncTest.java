@@ -146,7 +146,10 @@ class DiffProcessSyncTest {
             operations.add("openOut " + path);
             boolean append = false;
             for (StandardOpenOption opt : options) {
-                if (opt == StandardOpenOption.APPEND) append = true;
+                if (opt == StandardOpenOption.APPEND) {
+                    append = true;
+                    break;
+                }
             }
             final byte[] initial = append ? files.getOrDefault(path, new byte[0]) : new byte[0];
 

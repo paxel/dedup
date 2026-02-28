@@ -190,7 +190,7 @@ class IndexManagerTest {
         RepoFile file3 = RepoFile.builder().hash("h3").relativePath("p3").size(30L).build();
 
         String valid1 = objectMapper.writeValueAsString(file1);
-        String corrupt = "{\"hash\":\"h2\", \"relativePath\":\"p2\", \"size\":"; // Partial JSON
+        String corrupt = "{\"h\":\"h2\", \"p\":\"p2\", \"s\":"; // Partial JSON
         String valid3 = objectMapper.writeValueAsString(file3);
 
         Files.writeString(indexFile, valid1 + "\n" + corrupt + "\n" + valid3 + "\n");
@@ -212,6 +212,30 @@ class IndexManagerTest {
         // Assert: Backup file should exist
         Path backup = indexFile.resolveSibling(indexFile.getFileName().toString() + ".bak");
         assertThat(backup).exists();
-        assertThat(Files.readString(backup)).contains("h2");
+        assertThat(Files.readString(backup)).contains("p2");
+    }
+
+    @Test
+    void shouldSkipAndRepairWhenHashIsMissing() throws IOException {
+        // Arrange: 1 valid, 1 missing hash, 1 valid
+        RepoFile file1 = RepoFile.builder().hash("h1").relativePath("p1").size(10L).build();
+        RepoFile file3 = RepoFile.builder().hash("h3").relativePath("p3").size(30L).build();
+
+        String valid1 = objectMapper.writeValueAsString(file1);
+        String invalid = "{\"p\":\"p2\", \"s\":20}"; // Missing "h"
+        String valid3 = objectMapper.writeValueAsString(file3);
+
+        Files.writeString(indexFile, valid1 + "\n" + invalid + "\n" + valid3 + "\n");
+
+        // Act
+        indexManager.load();
+
+        // Assert: We should have loaded p1 and p3
+        List<RepoFile> files = indexManager.stream().toList();
+        assertThat(files).extracting(RepoFile::relativePath).containsExactlyInAnyOrder("p1", "p3");
+
+        // Assert: Index file should have been fixed
+        List<String> lines = Files.readAllLines(indexFile);
+        assertThat(lines).hasSize(2);
     }
 }

@@ -23,9 +23,9 @@ public class BetterPrediction {
 
     public void trigger() {
         lastTriggerInstant = clock.instant();
-        lastInstants.add(lastTriggerInstant);
         if (lastInstants.size() == COUNT + 1)
             lastInstants.poll();
+        lastInstants.offer(lastTriggerInstant);
     }
 
     public Duration get() {

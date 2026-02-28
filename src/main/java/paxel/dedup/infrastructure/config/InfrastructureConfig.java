@@ -23,7 +23,7 @@ public class InfrastructureConfig {
         this.fileSystem = new NioFileSystemAdapter();
         this.objectMapper = new ObjectMapper();
         this.dedupConfig = DedupConfigFactory.create(this.fileSystem).value();
-        this.repoService = new RepoService(this.dedupConfig);
+        this.repoService = new RepoService(this.dedupConfig, this.fileSystem);
         this.eventBus = new EventBus();
     }
 

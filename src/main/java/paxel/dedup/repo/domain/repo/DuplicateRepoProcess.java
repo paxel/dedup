@@ -259,9 +259,8 @@ public class DuplicateRepoProcess {
                     });
         }
 
-        return all.entrySet().stream()
-                .filter(e -> e.getValue().size() > 1)
-                .map(Map.Entry::getValue)
+        return all.values().stream()
+                .filter(repoRepoFiles -> repoRepoFiles.size() > 1)
                 .toList();
     }
 
@@ -445,11 +444,13 @@ public class DuplicateRepoProcess {
         }
         try {
             int target = Integer.parseInt(numStr.trim());
-            if ("<".equals(op)) return value < target;
-            if ("<=".equals(op)) return value <= target;
-            if (">".equals(op)) return value > target;
-            if (">=".equals(op)) return value >= target;
-            return value == target; // '=' or default
+            return switch (op) {
+                case "<" -> value < target;
+                case "<=" -> value <= target;
+                case ">" -> value > target;
+                case ">=" -> value >= target;
+                default -> value == target;
+            };
         } catch (NumberFormatException ex) {
             return false;
         }
@@ -483,17 +484,15 @@ public class DuplicateRepoProcess {
         for (RepoRepoFile rrf : group) {
             Dimension is = rrf.file.imageSize();
             String isInfo = is != null ? ", image: " + is : "";
-            log.info(String.format("  %s: %s/%s (size: %s%s, modified: %s, fingerprint: %s)",
-                    rrf.repo.name(), rrf.repo.absolutePath(), rrf.file.relativePath(),
-                    formatSize(rrf.file.size()), isInfo, formatDate(rrf.file.lastModified()), rrf.file.fingerprint()));
+            log.info("  {}: {}/{} (size: {}{}, modified: {}, fingerprint: {})", rrf.repo.name(), rrf.repo.absolutePath(), rrf.file.relativePath(), formatSize(rrf.file.size()), isInfo, formatDate(rrf.file.lastModified()), rrf.file.fingerprint());
             if (rrf.file.attributes() != null && !rrf.file.attributes().isEmpty()) {
-                log.info("    Attributes: " + rrf.file.attributes());
+                log.info("    Attributes: {}", rrf.file.attributes());
             }
         }
     }
 
     private void printDuplicateGroup(List<RepoRepoFile> repoRepoFiles) {
-        log.info(String.format("%s%n %d bytes", repoRepoFiles.getFirst().file.hash(), repoRepoFiles.getFirst().file.size()));
+        log.info("{}\n {} bytes", repoRepoFiles.getFirst().file.hash(), repoRepoFiles.getFirst().file.size());
         repoRepoFiles.stream()
                 .sorted((a, b) -> {
                     Dimension isA = a.file.imageSize();
@@ -509,11 +508,9 @@ public class DuplicateRepoProcess {
                 .forEach(repoRepoFile -> {
                     Dimension is = repoRepoFile.file.imageSize();
                     String isInfo = is != null ? ", image: " + is : "";
-                    log.info(String.format("  %s%n   %s/%s (size: %s%s, modified: %s)",
-                            repoRepoFile.repo.name(), repoRepoFile.repo.absolutePath(), repoRepoFile.file.relativePath(),
-                            formatSize(repoRepoFile.file.size()), isInfo, formatDate(repoRepoFile.file.lastModified())));
+                    log.info("  {}\n   {}/{} (size: {}{}, modified: {})", repoRepoFile.repo.name(), repoRepoFile.repo.absolutePath(), repoRepoFile.file.relativePath(), formatSize(repoRepoFile.file.size()), isInfo, formatDate(repoRepoFile.file.lastModified()));
                     if (repoRepoFile.file.attributes() != null && !repoRepoFile.file.attributes().isEmpty()) {
-                        log.info("    Attributes: " + repoRepoFile.file.attributes());
+                        log.info("    Attributes: {}", repoRepoFile.file.attributes());
                     }
                 });
     }

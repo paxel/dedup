@@ -18,6 +18,10 @@ public class EventBus {
         listeners.add(listener);
     }
 
+    public void unsubscribe(Consumer<DedupEvent> listener) {
+        listeners.remove(listener);
+    }
+
     public void publish(String type, Object payload) {
         DedupEvent event = new DedupEvent(type, payload);
         listeners.forEach(listener -> {

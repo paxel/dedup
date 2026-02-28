@@ -19,7 +19,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 class UpdateProgressPrinter implements FileObserver {
-    private final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss (dd.MM.yyyy)");
+    private final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private final DateTimeFormatter fullDateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm:ss (dd.MM.yyyy)");
 
     private final BetterPrediction betterPrediction;
     private final Map<Path, RepoFile> remainingPaths;
@@ -63,102 +64,177 @@ class UpdateProgressPrinter implements FileObserver {
 
     @Override
     public void file(Path absolutePath) {
-        RepoFile existing = remainingPaths.remove(absolutePath);
+        remainingPaths.remove(absolutePath);
         long currentFiles = files.incrementAndGet();
-        progressPrinter.setFiles(currentFiles + " last: " + absolutePath);
-        progressPrinter.setDeleted("" + remainingPaths.size());
+
+        long currentHashed = hash.get();
+        long currentUnchanged = unchanged.get();
+        long processed = currentHashed + currentUnchanged;
+
+        ProgressUpdate.ProgressUpdateBuilder updateBuilder = ProgressUpdate.builder()
+                .repo(repoManager.getRepo().name())
+                .path(repoManager.getRepo().absolutePath())
+                .currentFile(absolutePath.getFileName().toString())
+                .filesProcessed(processed)
+                .filesTotal(currentFiles)
+                .hashedProcessed(currentHashed)
+                .hashedTotal(currentFiles - currentUnchanged)
+                .unchangedProcessed(currentUnchanged)
+                .unchangedTotal(currentFiles - currentHashed)
+                .deletedProcessed((long) remainingPaths.size())
+                .duration(DurationFormatUtils.formatDurationWords(Duration.between(start, clock.instant()).toMillis(), true, true));
 
         if (!scanFinished.get()) {
-            progressPrinter.setProgress("Scanning... Found " + currentFiles + " files and " + allDirs.get() + " directories");
+            updateBuilder.status("Scanning... Found " + currentFiles + " files and " + allDirs.get() + " directories");
         } else {
-            // Already finished scanning, we can show progress for hashing/processing
-            calcUpdate(start, progressPrinter, betterPrediction, files.get(), hash.get() + unchanged.get());
+            updateBuilder.status(calculateStatus(currentFiles, processed));
+            updateBuilder.eta(calculateEta(currentFiles, processed));
+            updateBuilder.progressPercent((double) processed / currentFiles * 100);
         }
 
+        progressPrinter.update(updateBuilder.build());
+
         boolean forceUpdate = false;
-        if (refreshFingerprints && existing != null) {
-            if (existing.mimeType() != null && existing.mimeType().startsWith("image/")) {
+        if (refreshFingerprints) {
+            RepoFile existing = repoManager.getByPath(repoManager.getRepoDir().relativize(absolutePath).toString());
+            if (existing != null && existing.mimeType() != null && existing.mimeType().startsWith("image/")) {
                 if (existing.fingerprint() == null) {
                     forceUpdate = true;
                 }
             }
         }
 
-        if (forceUpdate) {
-            // Effectively ignore that we had it, to force re-indexing
-            existing = null;
-        }
+        CompletableFuture<Result<RepoFile, DedupError>> future = repoManager.addPath(absolutePath, fileHasher, new MimetypeProvider());
+        futures.add(future);
+        future.thenAccept(add -> {
+            betterPrediction.trigger();
+            if (add.isSuccess()) {
+                if (add.value() != null) {
+                    statistics.inc("added");
+                    long v = statistics.inc(add.value().mimeType());
+                    hash.incrementAndGet();
 
-        if (existing == null) {
-            CompletableFuture<Result<RepoFile, DedupError>> future = repoManager.addPath(absolutePath, fileHasher, new MimetypeProvider());
-            futures.add(future);
-            future.thenAccept(add -> {
-                betterPrediction.trigger();
-                if (add.isSuccess()) {
-                    if (add.value() != null) {
-                        statistics.inc("added");
-                        long v = statistics.inc(add.value().mimeType());
-                        progressPrinter.addMimeType(add.value().mimeType(), v);
-                        hash.incrementAndGet();
-                        logHash(progressPrinter, hash, files, unchanged);
-                        calcUpdate(start, progressPrinter, betterPrediction, files.get(), hash.get() + unchanged.get());
-                    } else {
-                        unchanged.incrementAndGet();
-                        statistics.inc("unchanged");
-                        logHash(progressPrinter, hash, files, unchanged);
-                        calcUpdate(start, progressPrinter, betterPrediction, files.get(), hash.get() + unchanged.get());
-                    }
+                    ProgressUpdate pu = ProgressUpdate.builder()
+                            .hashedProcessed(hash.get())
+                            .mimeDistribution(Map.of(add.value().mimeType(), v))
+                            .build();
+                    progressPrinter.update(pu);
                 } else {
-                    fail(absolutePath, add.error().exception());
+                    unchanged.incrementAndGet();
+                    statistics.inc("unchanged");
+                    progressPrinter.update(ProgressUpdate.builder().unchangedProcessed(unchanged.get()).build());
                 }
-            }).whenComplete((r, e) -> {
-                if (e != null) {
-                    fail(absolutePath, e);
-                }
-                futures.remove(future);
-            });
-            news.incrementAndGet();
-        } else {
-            // Already handled via remainingPaths.remove(absolutePath) but we should count it as unchanged/processed
-            unchanged.incrementAndGet();
-            statistics.inc("unchanged");
-            logHash(progressPrinter, hash, files, unchanged);
-            calcUpdate(start, progressPrinter, betterPrediction, files.get(), hash.get() + unchanged.get());
-        }
+                // Refresh status and progress bar
+                long total = files.get();
+                long done = hash.get() + unchanged.get();
+                progressPrinter.update(ProgressUpdate.builder()
+                        .filesProcessed(done)
+                        .filesTotal(total)
+                        .status(calculateStatus(total, done))
+                        .eta(calculateEta(total, done))
+                        .progressPercent((double) done / total * 100)
+                        .build());
+            } else {
+                fail(absolutePath, add.error().exception());
+            }
+        }).whenComplete((r, e) -> {
+            if (e != null) {
+                fail(absolutePath, e);
+            }
+            futures.remove(future);
+        });
+        news.incrementAndGet();
     }
 
-    private void logHash(StatisticPrinter progressPrinter, AtomicLong hash, AtomicLong files, AtomicLong unchanged) {
-        progressPrinter.setHashed(hash + " / " + (files.get() - unchanged.get()));
-        progressPrinter.setUnchanged(unchanged + " / " + (files.get() - hash.get()));
-        progressPrinter.setDuration(DurationFormatUtils.formatDurationWords(Duration.between(start, clock.instant()).toMillis(), true, true));
+    private String calculateEta(long total, long processed) {
+        if (total == 0 || !scanFinished.get() || processed == 0) return null;
+
+        Duration globalEstimation = Duration.between(start, clock.instant());
+        if (globalEstimation.toMillis() < 5000) return "Calculating...";
+
+        long remaining = total - processed;
+        Duration estimation = globalEstimation.multipliedBy(remaining).dividedBy(processed);
+
+        Duration recentEstimation = getBetterDuration(betterPrediction, remaining);
+        if (recentEstimation != null) {
+            int recentCount = betterPrediction.getCount();
+            double recentWeight = (double) recentCount / BetterPrediction.COUNT;
+            long blendedMillis = (long) (recentEstimation.toMillis() * recentWeight + estimation.toMillis() * (1.0 - recentWeight));
+            estimation = Duration.ofMillis(blendedMillis);
+            if (recentEstimation.compareTo(estimation) > 0) {
+                estimation = recentEstimation;
+            }
+        }
+
+        ZonedDateTime eta = ZonedDateTime.now(clock).plus(estimation);
+        LocalDate today = LocalDate.now(clock);
+        if (eta.toLocalDate().equals(today)) {
+            return timeFormatter.withZone(ZoneId.systemDefault()).format(eta);
+        }
+        return fullDateTimeFormatter.withZone(ZoneId.systemDefault()).format(eta);
+    }
+
+    private String calculateStatus(long total, long processed) {
+        if (total == 0 || !scanFinished.get()) return "...standing by...";
+
+        Duration globalEstimation = Duration.between(start, clock.instant());
+        if (globalEstimation.toMillis() < 5000) return "Calculating ETA...";
+
+        long remaining = total - processed;
+        Duration estimation = globalEstimation.multipliedBy(remaining).dividedBy(Math.max(1, processed));
+
+        Duration recentEstimation = getBetterDuration(betterPrediction, remaining);
+        if (recentEstimation != null) {
+            int recentCount = betterPrediction.getCount();
+            double recentWeight = (double) recentCount / BetterPrediction.COUNT;
+            long blendedMillis = (long) (recentEstimation.toMillis() * recentWeight + estimation.toMillis() * (1.0 - recentWeight));
+            estimation = Duration.ofMillis(blendedMillis);
+            if (recentEstimation.compareTo(estimation) > 0) {
+                estimation = recentEstimation;
+            }
+        }
+
+        return "remaining: %s".formatted(DurationFormatUtils.formatDurationWords(estimation.toMillis(), true, true));
     }
 
     @Override
     public void addDir(Path f) {
         allDirs.incrementAndGet();
-        progressPrinter.setDirectories(finishedDirs + " / " + allDirs);
+        progressPrinter.update(ProgressUpdate.builder()
+                .directoriesProcessed(finishedDirs.get())
+                .directoriesTotal(allDirs.get())
+                .build());
         if (!scanFinished.get()) {
-            progressPrinter.setProgress("Scanning... Found " + files.get() + " files and " + allDirs.get() + " directories");
+            progressPrinter.update(ProgressUpdate.builder()
+                    .status("Scanning... Found " + files.get() + " files and " + allDirs.get() + " directories")
+                    .build());
         }
     }
 
     @Override
     public void finishedDir(Path f) {
         finishedDirs.incrementAndGet();
-        progressPrinter.setDirectories(finishedDirs + " / " + allDirs);
+        progressPrinter.update(ProgressUpdate.builder()
+                .directoriesProcessed(finishedDirs.get())
+                .directoriesTotal(allDirs.get())
+                .build());
     }
 
     @Override
     public void scanFinished() {
         scanFinished.set(true);
-        progressPrinter.setDirectories(finishedDirs + ". scan finished after " + DurationFormatUtils.formatDurationWords(Duration.between(start, clock.instant()).toMillis(), true, true));
-        progressPrinter.setProgress("Scan finished. Calculating ETA...");
+        String durationStr = DurationFormatUtils.formatDurationWords(Duration.between(start, clock.instant()).toMillis(), true, true);
+        progressPrinter.update(ProgressUpdate.builder()
+                .status("Scan finished after " + durationStr + ". Calculating ETA...")
+                .build());
     }
 
     @Override
     public void fail(Path root, Throwable e) {
         firstError.compareAndSet(null, e);
-        progressPrinter.setErrors(errors.incrementAndGet() + " last:" + e.getMessage());
+        progressPrinter.update(ProgressUpdate.builder()
+                .errors(errors.incrementAndGet() + " last:" + e.getMessage())
+                .build());
     }
 
     public long getErrors() {
@@ -186,53 +262,15 @@ class UpdateProgressPrinter implements FileObserver {
                 fail(null, e);
             }
         }
-        progressPrinter.setFiles(files.get() + " finished");
-        progressPrinter.setDeleted(remainingPaths.size() + " finished");
+        long total = files.get();
+        progressPrinter.update(ProgressUpdate.builder()
+                .filesProcessed(total)
+                .filesTotal(total)
+                .deletedProcessed((long) remainingPaths.size())
+                .deletedTotal((long) remainingPaths.size())
+                .build());
         statistics.set("deleted", remainingPaths.size());
-    }
-
-    private void calcUpdate(Instant start, StatisticPrinter progressPrinter, BetterPrediction betterPrediction, long total, long processed) {
-        try {
-            if (total != 0 && scanFinished.get()) {
-                long remaining = total - processed;
-                double progressPercent = (double) processed / total;
-                Duration globalEstimation = Duration.between(start, clock.instant());
-
-                if (globalEstimation.minusMillis(5000).isPositive()) {
-                    // Global average estimation
-                    Duration estimation = globalEstimation.multipliedBy(remaining).dividedBy(Math.max(1, processed));
-
-                    // Recent average estimation
-                    Duration recentEstimation = getBetterDuration(betterPrediction, remaining);
-                    if (recentEstimation != null) {
-                        // Blend global and recent estimation. 
-                        // If we have COUNT samples, we trust recent more.
-                        // If we just started, global might be more stable.
-                        int recentCount = betterPrediction.getCount();
-                        double recentWeight = (double) recentCount / BetterPrediction.COUNT;
-                        // But actually, the user wants it to be reactive.
-                        // Let's use the more pessimistic one if we want to be safe, 
-                        // or just use recent if we have enough samples.
-
-                        // Weighted average:
-                        long blendedMillis = (long) (recentEstimation.toMillis() * recentWeight + estimation.toMillis() * (1.0 - recentWeight));
-                        estimation = Duration.ofMillis(blendedMillis);
-
-                        // If recent is much slower than global, favor recent even more to catch the "slow hash" case.
-                        if (recentEstimation.compareTo(estimation) > 0) {
-                            estimation = recentEstimation;
-                        }
-                    }
-
-                    ZonedDateTime eta = ZonedDateTime.now(clock).plus(estimation);
-                    progressPrinter.setProgress("%.2f %% estimated remaining: %s ETA: %s".formatted(progressPercent * 100,
-                            DurationFormatUtils.formatDurationWords(estimation.toMillis(), true, true),
-                            dateTimeFormatter.withZone(ZoneId.systemDefault()).format(eta)));
-                }
-            }
-        } catch (RuntimeException e) {
-            fail(null, e);
-        }
+        progressPrinter.finish();
     }
 
     private Duration getBetterDuration(BetterPrediction betterPrediction, long remaining) {

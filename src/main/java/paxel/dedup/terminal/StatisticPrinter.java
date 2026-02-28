@@ -1,6 +1,7 @@
 package paxel.dedup.terminal;
 
 import lombok.Setter;
+import paxel.dedup.domain.model.ProgressUpdate;
 import paxel.dedup.domain.service.EventBus;
 
 import java.util.ArrayList;
@@ -45,19 +46,46 @@ public class StatisticPrinter implements ProgressPrinter {
         if (action != null) {
             action.run();
         }
+    }
+
+    @Override
+    public void update(ProgressUpdate update) {
+        if (update.getRepo() != null) this.repo = update.getRepo();
+        if (update.getPath() != null) this.path = update.getPath();
+        if (update.getStatus() != null) this.progress = update.getStatus();
+        if (update.getEta() != null) {
+            this.progress += " ETA: " + update.getEta();
+        }
+        if (update.getDuration() != null) this.duration = update.getDuration();
+        if (update.getErrors() != null) this.errors = update.getErrors();
+        if (update.getProgressPercent() != null) {
+            this.progress = "%.2f %% %s".formatted(update.getProgressPercent(), this.progress);
+        }
+
+        if (update.getDirectoriesProcessed() != null && update.getDirectoriesTotal() != null) {
+            this.directories = update.getDirectoriesProcessed() + " / " + update.getDirectoriesTotal();
+        }
+        if (update.getFilesProcessed() != null && update.getFilesTotal() != null) {
+            this.files = update.getFilesProcessed() + " / " + update.getFilesTotal();
+        }
+        if (update.getHashedProcessed() != null && update.getHashedTotal() != null) {
+            this.hashed = update.getHashedProcessed() + " / " + update.getHashedTotal();
+        }
+        if (update.getUnchangedProcessed() != null && update.getUnchangedTotal() != null) {
+            this.unchanged = update.getUnchangedProcessed() + " / " + update.getUnchangedTotal();
+        }
+        if (update.getDeletedProcessed() != null && update.getDeletedTotal() != null) {
+            this.deleted = update.getDeletedProcessed() + " / " + update.getDeletedTotal();
+        }
+        if (update.getMimeDistribution() != null) {
+            this.mimetypes.putAll(update.getMimeDistribution());
+        }
+
+        if (action != null) {
+            action.run();
+        }
         if (eventBus != null) {
-            Map<String, Object> stats = new HashMap<>();
-            stats.put("repo", repo);
-            stats.put("path", path);
-            stats.put("progress", progress);
-            stats.put("duration", duration);
-            stats.put("directories", directories);
-            stats.put("files", files);
-            stats.put("deleted", deleted);
-            stats.put("hashed", hashed);
-            stats.put("unchanged", unchanged);
-            stats.put("errors", errors);
-            eventBus.publish("progress", stats);
+            eventBus.publish("progress", update);
         }
     }
 
@@ -70,8 +98,10 @@ public class StatisticPrinter implements ProgressPrinter {
         this.repo = repo;
         this.path = path;
         notifyListeners();
+        if (eventBus != null) {
+            eventBus.publish("progress", ProgressUpdate.builder().repo(repo).path(path).build());
+        }
     }
-
 
     @Override
     public String getLineAt(int row) {
@@ -128,5 +158,14 @@ public class StatisticPrinter implements ProgressPrinter {
     public void setErrors(String errors) {
         this.errors = errors;
         notifyListeners();
+    }
+
+    @Override
+    public void finish() {
+        this.progress = "100.00 % Finished";
+        notifyListeners();
+        if (eventBus != null) {
+            eventBus.publish("finished", Map.of("repo", repo));
+        }
     }
 }

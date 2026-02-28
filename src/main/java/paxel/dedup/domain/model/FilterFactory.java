@@ -59,7 +59,7 @@ public class FilterFactory {
         } else if (expression.startsWith("=")) {
             return new SizeFilter(expression.substring(1).trim(), (s, v) -> s == v);
         } else {
-            return new SizeFilter(expression, (s, v) -> Objects.equals(s, v));
+            return new SizeFilter(expression, Objects::equals);
         }
     }
 

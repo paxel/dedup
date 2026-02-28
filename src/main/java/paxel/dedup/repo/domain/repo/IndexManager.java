@@ -78,7 +78,7 @@ public class IndexManager {
                 statistics.inc(LINES);
                 try {
                     RepoFile repoFile = readValid(s);
-                    if (repoFile != null) {
+                    if (repoFile != null && repoFile.hash() != null && !repoFile.hash().isBlank()) {
                         // the same hash can exist as multiple paths. so we store the paths per hash
                         hashes.computeIfAbsent(repoFile.hash(), h -> new HashSet<>()).add(repoFile.relativePath());
 
@@ -92,9 +92,16 @@ public class IndexManager {
                                 hashes.get(put.hash()).remove(put.relativePath());
                             }
                         }
+                    } else {
+                        log.warn("{}: record missing mandatory hash field, skipping line", indexFile);
+                        corrupted = true;
                     }
                 } catch (Exception e) {
-                    log.error("{}: error decoding record, skipping line", indexFile, e);
+                    if (e instanceof com.fasterxml.jackson.core.JacksonException || e.getCause() instanceof com.fasterxml.jackson.core.JacksonException) {
+                        log.warn("{}: error decoding record ({}). Skipping line.", indexFile, e.getMessage());
+                    } else {
+                        log.error("{}: error decoding record, skipping line", indexFile, e);
+                    }
                     corrupted = true;
                 }
             }

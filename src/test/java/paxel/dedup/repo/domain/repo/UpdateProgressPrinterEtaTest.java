@@ -2,6 +2,7 @@ package paxel.dedup.repo.domain.repo;
 
 import org.junit.jupiter.api.Test;
 import paxel.dedup.domain.model.FileHasher;
+import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
 import paxel.dedup.domain.model.errors.DedupError;
@@ -67,6 +68,8 @@ class UpdateProgressPrinterEtaTest {
 
         // Mock RepoManager so that addPath completes immediately with a non-null RepoFile
         RepoManager repoManager = mock(RepoManager.class);
+        Repo repo = new Repo("testRepo", "/tmp", 10);
+        when(repoManager.getRepo()).thenReturn(repo);
         RepoFile returned = RepoFile.builder()
                 .hash("h")
                 .relativePath("a.txt")
@@ -112,8 +115,9 @@ class UpdateProgressPrinterEtaTest {
         assertThat(progressLine).startsWith("   Progress: ");
         assertThat(progressLine).contains("100.00 %");
         // Apache DurationFormatUtils#formatDurationWords(0, ...) yields "0 seconds"
-        assertThat(progressLine).contains("estimated remaining: 0 seconds");
-        // ETA should be exactly formatted with the injected clock time
-        assertThat(progressLine).contains("ETA: 01:00:31 (01.01.1970)");
+        assertThat(progressLine).contains("remaining: 0 seconds");
+        // ETA should be exactly formatted with the injected clock time (00:00:31 at epoch UTC)
+        // Note: StatisticPrinter adds " ETA: " before the value
+        assertThat(progressLine).contains("ETA: 01:00:31");
     }
 }

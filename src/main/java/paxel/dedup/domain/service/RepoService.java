@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
@@ -19,6 +20,11 @@ import java.util.stream.Collectors;
 public class RepoService {
 
     private final DedupConfig dedupConfig;
+    private final FileSystem fileSystem;
+
+    public RepoService(DedupConfig dedupConfig) {
+        this(dedupConfig, new paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter());
+    }
 
     /**
      * Retrieves all repositories sorted by name.
@@ -34,7 +40,7 @@ public class RepoService {
     }
 
     private Repo enrichWithStats(Repo repo) {
-        var repoManager = paxel.dedup.repo.domain.repo.RepoManager.forRepo(repo, dedupConfig, new paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter());
+        var repoManager = paxel.dedup.repo.domain.repo.RepoManager.forRepo(repo, dedupConfig, fileSystem);
         var loadResult = repoManager.load();
         if (loadResult.isSuccess()) {
             Map<String, Long> mimeDistribution = new java.util.HashMap<>();

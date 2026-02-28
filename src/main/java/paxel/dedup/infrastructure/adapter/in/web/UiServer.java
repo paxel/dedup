@@ -44,9 +44,7 @@ public class UiServer {
     }
 
     private void setupRoutes() {
-        app.get("/api/repos", ctx -> {
-            ctx.json(repoService.getRepos().value());
-        });
+        app.get("/api/repos", ctx -> ctx.json(repoService.getRepos().value()));
 
         app.post("/api/repos", ctx -> {
             Repo repo = ctx.bodyAsClass(Repo.class);
@@ -109,17 +107,31 @@ public class UiServer {
 
         app.post("/api/repos/{name}/update", ctx -> {
             String name = ctx.pathParam("name");
+            log.info("Update requested for repository: {}", name);
             CompletableFuture.runAsync(() -> {
-                UpdateReposProcess process = new UpdateReposProcess(
-                        new CliParameter(),
-                        List.of(name),
-                        false,
-                        2,
-                        infrastructureConfig.getDedupConfig(),
-                        false, // progress (Terminal/Lanterna)
-                        false  // refreshFingerprints
-                ).withEventBus(eventBus);
-                process.update();
+                try {
+                    log.info("Starting background update process for: {}", name);
+                    UpdateReposProcess process = new UpdateReposProcess(
+                            new CliParameter(),
+                            List.of(name),
+                            false,
+                            2,
+                            infrastructureConfig.getDedupConfig(),
+                            false, // progress (Terminal/Lanterna)
+                            false,  // refreshFingerprints
+                            infrastructureConfig.getFileSystem() // Explicitly pass fileSystem
+                    ).withEventBus(eventBus);
+                    var result = process.update();
+                    if (result.hasFailed()) {
+                        log.error("Update failed for {}: {}", name, result.error().describe());
+                        eventBus.publish("error", Map.of("repo", name, "message", result.error().describe()));
+                    } else {
+                        log.info("Update completed successfully for: {}", name);
+                    }
+                } catch (Exception e) {
+                    log.error("Critical error during update for {}", name, e);
+                    eventBus.publish("error", Map.of("repo", name, "message", e.getMessage()));
+                }
             });
             ctx.status(202).json(java.util.Map.of("message", "Update started for " + name));
         });
@@ -156,13 +168,25 @@ public class UiServer {
         app.ws("/events", ws -> {
             ws.onConnect(ctx -> {
                 log.info("WebSocket connected");
-                eventBus.subscribe(event -> {
-                    try {
-                        ctx.send(infrastructureConfig.getObjectMapper().writeValueAsString(event));
-                    } catch (Exception e) {
-                        log.error("Error sending event via WebSocket", e);
+                ctx.session.setIdleTimeout(java.time.Duration.ofMinutes(15));
+                java.util.function.Consumer<EventBus.DedupEvent> listener = event -> {
+                    if (ctx.session.isOpen()) {
+                        try {
+                            ctx.send(infrastructureConfig.getObjectMapper().writeValueAsString(event));
+                        } catch (Exception e) {
+                            log.error("Error sending event via WebSocket", e);
+                        }
                     }
-                });
+                };
+                ctx.attribute("listener", listener);
+                eventBus.subscribe(listener);
+            });
+            ws.onClose(ctx -> {
+                log.info("WebSocket disconnected");
+                java.util.function.Consumer<EventBus.DedupEvent> listener = ctx.attribute("listener");
+                if (listener != null) {
+                    eventBus.unsubscribe(listener);
+                }
             });
         });
     }

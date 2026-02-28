@@ -44,12 +44,13 @@ public class FilesProcess {
                 .filter(repoFilter)
                 .sorted(Comparator.comparing(RepoFile::relativePath))
                 .forEach(r -> {
-                    String path = Paths.get(r.relativePath()).getParent().toString();
+                    Path path1 = Paths.get(r.relativePath());
+                    String path = path1.getParent().toString();
                     if (last.get() == null || !last.get().equals(path)) {
                         log.info("{}", path);
                         last.set(path);
                     }
-                    log.info(String.format("  %-50s %-12s %s", Paths.get(r.relativePath()).getFileName().toString(), r.size(), new Date(r.lastModified())));
+                    log.info(String.format("  %-50s %-12s %s", path1.getFileName().toString(), r.size(), new Date(r.lastModified())));
                 });
         return 0;
     }

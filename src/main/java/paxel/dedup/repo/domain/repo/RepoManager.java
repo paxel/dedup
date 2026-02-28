@@ -170,14 +170,15 @@ public class RepoManager {
                     if (!oldRepoFile.missing()) {
                         return CompletableFuture.completedFuture(Result.ok(null));
                     } else {
-                        // repapeared
+                        // reappeared
                         return CompletableFuture.completedFuture(addRepoFile(oldRepoFile.withMissing(false)));
                     }
                 }
             }
         }
 
-        return calcHash(absolutePath, size, fileHasher).thenApply(hashResult -> {
+        // Move all heavy processing into a separate thread pool if possible, but for now we use the one from FileHasher
+        return calcHash(absolutePath, size, fileHasher).thenApplyAsync(hashResult -> {
             if (hashResult.hasFailed())
                 return hashResult.mapError(l -> DedupError.of(ErrorType.WRITE, absolutePath + ": hashing failed", l.exception()));
 
@@ -189,19 +190,23 @@ public class RepoManager {
             Dimension imageSize = null;
             Map<String, String> attributes = Map.of();
             if (mimeType != null) {
-                if (mimeType.startsWith("image/")) {
-                    ImageFingerprinter.FingerprintResult fr = new ImageFingerprinter().calculate(absolutePath);
-                    fingerprint = fr.fingerprint();
-                    imageSize = fr.imageSize();
-                } else if (mimeType.startsWith("video/")) {
-                    attributes = new MetadataExtractor(fileSystem).extract(absolutePath);
-                    videoHash = new VideoFingerprinter().calculateTemporalHash(absolutePath);
-                } else if (mimeType.equals("application/pdf")) {
-                    attributes = new MetadataExtractor(fileSystem).extract(absolutePath);
-                    pdfHash = new PdfFingerprinter(fileSystem).calculatePdfHash(absolutePath);
-                } else if (mimeType.startsWith("audio/")) {
-                    attributes = new MetadataExtractor(fileSystem).extract(absolutePath);
-                    audioHash = new AudioFingerprinter(fileSystem).calculateAudioHash(absolutePath);
+                try {
+                    if (mimeType.startsWith("image/")) {
+                        ImageFingerprinter.FingerprintResult fr = new ImageFingerprinter().calculate(absolutePath);
+                        fingerprint = fr.fingerprint();
+                        imageSize = fr.imageSize();
+                    } else if (mimeType.startsWith("video/")) {
+                        attributes = new MetadataExtractor(fileSystem).extract(absolutePath);
+                        videoHash = new VideoFingerprinter().calculateTemporalHash(absolutePath);
+                    } else if (mimeType.equals("application/pdf")) {
+                        attributes = new MetadataExtractor(fileSystem).extract(absolutePath);
+                        pdfHash = new PdfFingerprinter(fileSystem).calculatePdfHash(absolutePath);
+                    } else if (mimeType.startsWith("audio/")) {
+                        attributes = new MetadataExtractor(fileSystem).extract(absolutePath);
+                        audioHash = new AudioFingerprinter(fileSystem).calculateAudioHash(absolutePath);
+                    }
+                } catch (Exception e) {
+                    log.warn("Error during metadata/fingerprint extraction for {}: {}", absolutePath, e.getMessage());
                 }
             }
 

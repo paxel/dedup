@@ -134,7 +134,11 @@ class UpdateProgressPrinterTest {
         upp.addDir(dataDir);
         upp.file(file);         // processes and removes it from remaining
         // Wait for asynchronous processing to complete
-        await().atMost(Duration.ofSeconds(5)).until(() -> sp.getLineAt(5).contains("1"));
+        await().atMost(Duration.ofSeconds(5)).until(() -> {
+            // Line index for "Files:" is 4, it should contain "1 / 1"
+            String line = sp.getLineAt(4);
+            return line.contains("1 / 1");
+        });
 
         upp.finishedDir(dataDir);
         upp.scanFinished();
@@ -151,9 +155,9 @@ class UpdateProgressPrinterTest {
         String deletedLine = sp.getLineAt(5); // "    Deleted: ..."
         assertThat(deletedLine).contains("1");
 
-        // Files line contains "finished" after close
+        // Files line contains "1 / 1" after close
         String filesLine = sp.getLineAt(4); // "      Files: ..."
-        assertThat(filesLine).contains("finished");
+        assertThat(filesLine).contains("1 / 1");
 
         // Statistics updated with deleted count
         final long[] deletedStat = {-1};

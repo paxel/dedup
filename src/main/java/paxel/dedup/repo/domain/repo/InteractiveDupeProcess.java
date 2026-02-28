@@ -158,12 +158,13 @@ public class InteractiveDupeProcess {
                     String mime = rrf.file().mimeType();
                     boolean isVideo = mime != null && mime.startsWith("video/");
                     boolean isAudio = mime != null && mime.startsWith("audio/");
-                    boolean isPdf = mime != null && "application/pdf".equals(mime);
+                    boolean isPdf = "application/pdf".equals(mime);
+                    Path path1 = Paths.get(path);
                     if (isVideo) {
                         // Generate a small filmstrip preview
                         try {
                             java.util.List<String> frames = new VideoFilmstripGenerator(fileSystem)
-                                    .generateBase64Filmstrip(java.nio.file.Paths.get(path));
+                                    .generateBase64Filmstrip(path1);
                             if (!frames.isEmpty()) {
                                 html.append("<div class='filmstrip'>");
                                 for (String b64 : frames) {
@@ -179,7 +180,7 @@ public class InteractiveDupeProcess {
                     } else if (isPdf) {
                         try {
                             String b64 = new PdfThumbnailGenerator(fileSystem)
-                                    .generateBase64Thumbnail(java.nio.file.Paths.get(path));
+                                    .generateBase64Thumbnail(path1);
                             if (b64 != null) {
                                 html.append("<img src='data:image/jpeg;base64,").append(b64).append("' alt='pdf thumbnail'>");
                             } else {
@@ -344,14 +345,9 @@ public class InteractiveDupeProcess {
                 }
             }
 
-            StringBuilder response = new StringBuilder();
-            response.append("<!DOCTYPE html><html><body>");
-            response.append("<h1>Deletion Complete</h1>");
-            response.append("<p>Successfully deleted ").append(deletedCount).append(" files.</p>");
-            response.append("<p>You can close this window now. The CLI will finish shortly.</p>");
-            response.append("</body></html>");
+            String response = "<!DOCTYPE html><html><body><h1>Deletion Complete</h1><p>Successfully deleted %d files.</p><p>You can close this window now. The CLI will finish shortly.</p></body></html>".formatted(deletedCount);
 
-            byte[] responseBytes = response.toString().getBytes(StandardCharsets.UTF_8);
+            byte[] responseBytes = response.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
             exchange.sendResponseHeaders(200, responseBytes.length);
             try (OutputStream os = exchange.getResponseBody()) {
