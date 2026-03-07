@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { Database, Activity, RefreshCw, Trash2, Plus, Folder, X, Search, FileText, ChevronRight, AlertTriangle, Bell, Trash } from 'lucide-react'
+import { Database, Activity, RefreshCw, Trash2, Plus, Folder, X, Search, FileText, ChevronRight, AlertTriangle, Bell, Trash, Copy, Move, Zap } from 'lucide-react'
 
 interface RepoStats {
   fileCount: number;
@@ -65,11 +65,19 @@ function App() {
   const [events, setEvents] = useState<any[]>([])
   const [connected, setConnected] = useState(false)
   const [activeProgress, setActiveProgress] = useState<ProgressUpdate | null>(null)
+  const [smoothProgress, setSmoothProgress] = useState(0)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showErrorModal, setShowErrorModal] = useState(false)
   const [errors, setErrors] = useState<ErrorEvent[]>([])
   const [toast, setToast] = useState<{ id: string; message: string; repo?: string } | null>(null)
   const toastTimeoutRef = useRef<any>(null)
+  const [showPruneModal, setShowPruneModal] = useState<string | null>(null)
+  const [showRelocateModal, setShowRelocateModal] = useState<Repo | null>(null)
+  const [showCloneModal, setShowCloneModal] = useState<Repo | null>(null)
+  const [showMoveModal, setShowMoveModal] = useState<Repo | null>(null)
+  const [relocatePath, setRelocatePath] = useState('')
+  const [cloneData, setCloneData] = useState({ destinationName: '', path: '' })
+  const [moveData, setMoveData] = useState({ destinationName: '' })
   const [newRepo, setNewRepo] = useState<Repo>({ 
     name: '', 
     absolutePath: './Documents', 
@@ -156,20 +164,206 @@ function App() {
     }
   })
 
+  const pruneMutation = useMutation({
+    mutationFn: (name: string) => axios.post(`/api/repos/${name}/prune`),
+    onSuccess: () => {
+      setShowPruneModal(null)
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.description || error.message || 'Failed to start prune'
+      const newError: ErrorEvent = {
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp: Date.now(),
+        message,
+        read: false
+      }
+      setErrors(prev => [newError, ...prev])
+      setToast({ id: newError.id, message: newError.message })
+    }
+  })
+
+  const relocateMutation = useMutation({
+    mutationFn: ({ name, path }: { name: string, path: string }) => axios.post(`/api/repos/${name}/relocate`, { path }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['repos'] })
+      setShowRelocateModal(null)
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.description || error.message || 'Failed to relocate repository'
+      const newError: ErrorEvent = {
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp: Date.now(),
+        message,
+        read: false
+      }
+      setErrors(prev => [newError, ...prev])
+      setToast({ id: newError.id, message: newError.message })
+    }
+  })
+
+  const cloneMutation = useMutation({
+    mutationFn: ({ name, data }: { name: string, data: { destinationName: string, path: string } }) => axios.post(`/api/repos/${name}/cp`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['repos'] })
+      setShowCloneModal(null)
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.description || error.message || 'Failed to clone repository'
+      const newError: ErrorEvent = {
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp: Date.now(),
+        message,
+        read: false
+      }
+      setErrors(prev => [newError, ...prev])
+      setToast({ id: newError.id, message: newError.message })
+    }
+  })
+
+  const moveRepoMutation = useMutation({
+    mutationFn: ({ name, destinationName }: { name: string, destinationName: string }) => axios.post(`/api/repos/${name}/mv`, { destinationName }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['repos'] })
+      setShowMoveModal(null)
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.description || error.message || 'Failed to move repository'
+      const newError: ErrorEvent = {
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp: Date.now(),
+        message,
+        read: false
+      }
+      setErrors(prev => [newError, ...prev])
+      setToast({ id: newError.id, message: newError.message })
+    }
+  })
+
+  interface BrowserItem {
+    name: string;
+    path: string;
+    isDirectory: boolean;
+  }
+
+  interface BrowserResponse {
+    currentPath: string;
+    parentPath: string | null;
+    items: BrowserItem[];
+  }
+
+  const [showBrowser, setShowBrowser] = useState(false);
+  const [browserData, setBrowserData] = useState<BrowserResponse | null>(null);
+  const [browserOnSelect, setBrowserOnSelect] = useState<(path: string) => void>(() => () => {});
+
   const browseMutation = useMutation({
     mutationFn: async (path?: string) => {
       const response = await axios.get('/api/utils/browse', { params: { path } })
-      return response.data?.path
+      return response.data as BrowserResponse
     },
-    onSuccess: (path) => {
-      if (path) {
-        setNewRepo((prev) => {
-          const name = prev.name || path.split(/[/\\]/).pop() || ''
-          return { ...prev, absolutePath: path, name }
-        })
-      }
+    onSuccess: (data) => {
+      setBrowserData(data);
+      setShowBrowser(true);
     }
   })
+
+  const openBrowser = (initialPath: string, onSelect: (path: string) => void) => {
+    setBrowserOnSelect(() => onSelect);
+    browseMutation.mutate(initialPath);
+  };
+
+  const BrowserModal = () => {
+    if (!showBrowser || !browserData) return null;
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="bg-slate-900 border border-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[80vh]">
+          <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+            <h2 className="text-xl font-black text-white flex items-center gap-2">
+              <Folder className="w-6 h-6 text-blue-500" />
+              Browse Directory
+            </h2>
+            <button 
+              onClick={() => setShowBrowser(false)}
+              className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+          
+          <div className="p-4 bg-slate-950/50 border-b border-slate-800 flex items-center gap-2 overflow-x-auto">
+            <button 
+              onClick={() => browserData.parentPath && browseMutation.mutate(browserData.parentPath)}
+              disabled={!browserData.parentPath}
+              className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white disabled:opacity-30 shrink-0"
+            >
+              <ChevronRight className="w-5 h-5 rotate-180" />
+            </button>
+            <div className="text-xs font-mono text-slate-400 truncate py-1">
+              {browserData.currentPath}
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-2">
+            {browserData.items.length === 0 && (
+              <div className="p-12 text-center text-slate-500 font-medium">
+                No directories found.
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-1">
+              {browserData.items.map((item) => (
+                <button
+                  key={item.path}
+                  onClick={() => browseMutation.mutate(item.path)}
+                  className="flex items-center gap-3 p-3 hover:bg-blue-600/10 rounded-xl text-left group transition-all"
+                >
+                  <Folder className="w-5 h-5 text-blue-500 group-hover:scale-110 transition-transform" />
+                  <span className="text-sm font-bold text-slate-200 group-hover:text-white truncate">{item.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-6 border-t border-slate-800 flex justify-end gap-3">
+            <button
+              onClick={() => setShowBrowser(false)}
+              className="px-6 py-2.5 rounded-xl font-bold text-sm text-slate-400 hover:text-white transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                browserOnSelect(browserData.currentPath);
+                setShowBrowser(false);
+              }}
+              className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-2.5 rounded-xl font-black text-sm transition-all shadow-lg shadow-blue-600/20"
+            >
+              Select Directory
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  useEffect(() => {
+    if (activeProgress) {
+      const target = activeProgress.progressPercent || 0
+      if (target > smoothProgress) {
+        const timer = setTimeout(() => {
+          setSmoothProgress(prev => {
+            const diff = target - prev
+            if (diff <= 0) return prev
+            // Move 10% of the way to target, or at least 0.1%
+            return prev + Math.max(diff * 0.1, 0.1)
+          })
+        }, 50)
+        return () => clearTimeout(timer)
+      } else if (target < smoothProgress) {
+        setSmoothProgress(target)
+      }
+    } else {
+      setSmoothProgress(0)
+    }
+  }, [activeProgress, smoothProgress])
 
   useEffect(() => {
     let ws: WebSocket | null = null;
@@ -357,31 +551,33 @@ function App() {
               )}
             </button>
             {activeProgress && (
-              <div className="bg-blue-500/10 border border-blue-500/20 px-4 py-2 rounded-xl flex flex-col items-end min-w-[200px]">
+              <div className="bg-blue-500/10 border border-blue-500/20 px-4 py-2 rounded-xl flex flex-col items-end min-w-[220px]">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[10px] uppercase font-bold text-blue-400 tracking-widest leading-none">
+                  <span className="text-[10px] uppercase font-bold text-blue-400 tracking-widest leading-none truncate max-w-[120px]">
                     Updating {activeProgress.repo}
                   </span>
-                  <RefreshCw className="w-3 h-3 text-blue-500 animate-spin" />
+                  <RefreshCw className="w-3 h-3 text-blue-500 animate-spin shrink-0" />
                 </div>
                 
-                {activeProgress.scanningActive && (
-                  <div className="flex items-center gap-2 mb-1 animate-pulse">
-                    <Search className="w-3 h-3 text-emerald-400" />
-                    <span className="text-[10px] font-bold text-emerald-400 whitespace-nowrap">
-                      Scanning: {activeProgress.filesDiscovered || 0} files / {activeProgress.directoriesDiscovered || 0} dirs
-                    </span>
-                  </div>
-                )}
+                <div className="h-4 flex items-center">
+                  {activeProgress.scanningActive && (
+                    <div className="flex items-center gap-2 animate-pulse">
+                      <Search className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <span className="text-[10px] font-bold text-emerald-400 whitespace-nowrap">
+                        Scanning: {activeProgress.filesDiscovered || 0}
+                      </span>
+                    </div>
+                  )}
+                </div>
 
-                <div className="flex items-center gap-2 w-full">
+                <div className="flex items-center gap-2 w-full mt-1">
                   <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                     <div 
-                      className="h-full bg-blue-500 transition-all duration-500" 
-                      style={{ width: `${activeProgress.progressPercent || 0}%` }}
+                      className="h-full bg-blue-500 transition-all duration-300 ease-linear" 
+                      style={{ width: `${smoothProgress || 0}%` }}
                     ></div>
                   </div>
-                  <span className="text-[10px] font-black text-blue-100 min-w-[3ch]">{Math.round(activeProgress.progressPercent || 0)}%</span>
+                  <span className="text-[10px] font-black text-blue-100 min-w-[35px] text-right">{Math.round(smoothProgress || 0)}%</span>
                 </div>
               </div>
             )}
@@ -414,38 +610,47 @@ function App() {
                     <div className="bg-blue-600/20 p-2 rounded-xl shrink-0">
                       <RefreshCw className="w-6 h-6 text-blue-500 animate-spin" />
                     </div>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 flex flex-col gap-1">
                       <h3 className="text-lg font-black text-white flex items-center gap-2 truncate">
                         Updating <span className="text-blue-500 truncate">{activeProgress.repo}</span>
                       </h3>
-                      <div className="flex flex-col">
-                        {activeProgress.currentFile && (
-                          <p className="text-[10px] font-black uppercase text-blue-400 tracking-tighter truncate animate-pulse mb-0.5">
-                            Processing: <span className="text-slate-100 italic">{activeProgress.currentFile}</span>
-                          </p>
-                        )}
-                        <p className="text-xs text-slate-400 font-medium truncate">{activeProgress.status}</p>
+                      <div className="flex flex-col h-10 justify-center">
+                        <div className="h-4">
+                          {activeProgress.scanningActive ? (
+                            <div className="flex items-center gap-2 text-emerald-400 animate-pulse">
+                              <Search className="w-3 h-3" />
+                              <span className="text-[10px] font-black uppercase tracking-tighter">
+                                Scanning... Found {activeProgress.filesDiscovered || 0} files
+                              </span>
+                            </div>
+                          ) : activeProgress.currentFile ? (
+                            <p className="text-[10px] font-black uppercase text-blue-400 tracking-tighter truncate mb-0.5">
+                              Processing: <span className="text-slate-100 italic">{activeProgress.currentFile}</span>
+                            </p>
+                          ) : null}
+                        </div>
+                        <p className="text-xs text-slate-400 font-medium truncate h-4">{activeProgress.status}</p>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
+                  <div className="flex items-center gap-6 shrink-0">
+                    <div className="text-right min-w-[80px]">
                       <span className="text-[10px] uppercase font-bold text-slate-500 block mb-0.5">Progress</span>
-                      <span className="text-xl font-black text-white tracking-tighter">{Math.round(activeProgress.progressPercent || 0)}%</span>
+                      <span className="text-xl font-black text-white tracking-tighter">{Math.round(smoothProgress || 0)}%</span>
                     </div>
-                    {activeProgress.eta && (
-                      <div className="text-right border-l border-slate-800 pl-6">
-                        <span className="text-[10px] uppercase font-bold text-slate-500 block mb-0.5">ETA</span>
-                        <span className="text-xl font-black text-blue-400 tracking-tighter">{activeProgress.eta}</span>
-                      </div>
-                    )}
+                    <div className="text-right border-l border-slate-800 pl-6 min-w-[120px]">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 block mb-0.5">ETA</span>
+                      <span className="text-xl font-black text-blue-400 tracking-tighter">
+                        {activeProgress.scanningActive ? 'Scanning...' : (activeProgress.eta || '--:--:--')}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
                 <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-4">
                   <div 
-                    className="h-full bg-blue-500 transition-all duration-700 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
-                    style={{ width: `${activeProgress.progressPercent || 0}%` }}
+                    className="h-full bg-blue-500 transition-all duration-300 ease-linear shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
+                    style={{ width: `${smoothProgress || 0}%` }}
                   ></div>
                 </div>
 
@@ -533,14 +738,32 @@ function App() {
                     <div key={repo.name} className="group bg-slate-900/80 border border-slate-800 rounded-2xl hover:border-blue-500/40 transition-all hover:shadow-2xl hover:shadow-blue-500/5 overflow-hidden flex flex-col">
                       {/* Top Content */}
                       <div className="p-6 md:p-8 flex flex-col md:flex-row gap-8 items-start md:items-center">
-                        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setSelectedRepo(repo.name)}>
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-3 mb-1">
-                            <h3 className="text-2xl font-black text-white group-hover:text-blue-400 transition-colors truncate">{repo.name}</h3>
+                            <h3 
+                              className="text-2xl font-black text-white group-hover:text-blue-400 transition-colors truncate cursor-pointer"
+                              onClick={() => {
+                                setMoveData({ destinationName: `${repo.name}` })
+                                setShowMoveModal(repo)
+                              }}
+                              title="Click to rename"
+                            >
+                              {repo.name}
+                            </h3>
                             <span className="text-[10px] uppercase tracking-widest font-black text-slate-500 bg-slate-800 px-2 py-0.5 rounded">
                               {repo.codec || 'MSG'}
                             </span>
                           </div>
-                          <p className="text-slate-500 font-mono text-xs truncate max-w-md" title={repo.absolutePath}>{repo.absolutePath}</p>
+                          <p 
+                            className="text-slate-500 font-mono text-xs truncate max-w-md cursor-pointer hover:text-indigo-400 transition-colors" 
+                            title="Click to move to another folder"
+                            onClick={() => {
+                              setRelocatePath(repo.absolutePath)
+                              setShowRelocateModal(repo)
+                            }}
+                          >
+                            {repo.absolutePath}
+                          </p>
                         </div>
 
                         {/* Stats Section - Broad Layout */}
@@ -585,7 +808,7 @@ function App() {
                             className="text-xs font-black uppercase tracking-widest text-blue-500 hover:text-white hover:bg-blue-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             <Search className="w-4 h-4" />
-                            Duplicate Explorer
+                            Explorer
                           </button>
                           <button
                             onClick={() => updateMutation.mutate(repo.name)}
@@ -593,7 +816,28 @@ function App() {
                             className="text-xs font-black uppercase tracking-widest text-emerald-500 hover:text-white hover:bg-emerald-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             <RefreshCw className={`w-4 h-4 ${updateMutation.isPending ? 'animate-spin' : ''}`} />
-                            Update Index
+                            Update
+                          </button>
+                          <button
+                            onClick={() => setShowPruneModal(repo.name)}
+                            disabled={!!activeProgress}
+                            className="text-xs font-black uppercase tracking-widest text-amber-500 hover:text-white hover:bg-amber-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Remove missing files from index"
+                          >
+                            <Zap className="w-4 h-4" />
+                            Cleanup
+                          </button>
+                          <button
+                            onClick={() => {
+                              setCloneData({ destinationName: `${repo.name}_copy`, path: repo.absolutePath })
+                              setShowCloneModal(repo)
+                            }}
+                            disabled={!!activeProgress}
+                            className="text-xs font-black uppercase tracking-widest text-cyan-500 hover:text-white hover:bg-cyan-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Create a copy of this repository"
+                          >
+                            <Copy className="w-4 h-4" />
+                            Clone
                           </button>
                         </div>
 
@@ -751,6 +995,252 @@ function App() {
         )}
 
         {/* Add Repository Modal */}
+        {/* Modals Section */}
+        {/* Prune Modal */}
+        {showPruneModal && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="p-8">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-2xl font-black text-white flex items-center gap-3">
+                    <Zap className="w-6 h-6 text-amber-500" />
+                    Cleanup Repository
+                  </h3>
+                  <button onClick={() => setShowPruneModal(null)} className="p-2 hover:bg-slate-800 rounded-xl transition-colors">
+                    <X className="w-5 h-5 text-slate-400" />
+                  </button>
+                </div>
+              
+                <div className="space-y-6 text-slate-300">
+                  <p>Cleaning up will remove all missing files from the index for <span className="font-bold text-white">"{showPruneModal}"</span>.</p>
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex gap-4">
+                    <AlertTriangle className="w-6 h-6 text-amber-500 shrink-0" />
+                    <p className="text-xs leading-relaxed text-amber-200/70">
+                      This process cleans the index and keeps only existing files. 
+                      It is safe for your files on disk, but may take some time depending on index size.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 mt-8">
+                  <button 
+                    onClick={() => setShowPruneModal(null)}
+                    className="px-6 py-3 rounded-2xl font-bold text-slate-400 hover:bg-slate-800 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => pruneMutation.mutate(showPruneModal)}
+                    disabled={pruneMutation.isPending}
+                    className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold py-3 rounded-2xl shadow-lg shadow-amber-900/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    {pruneMutation.isPending ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Zap className="w-5 h-5" />}
+                    Clean up missing files
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Relocate Modal */}
+        {showRelocateModal && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="p-8">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-2xl font-black text-white flex items-center gap-3">
+                    <Folder className="w-6 h-6 text-indigo-500" />
+                    Move Repository Folder
+                  </h3>
+                  <button onClick={() => setShowRelocateModal(null)} className="p-2 hover:bg-slate-800 rounded-xl transition-colors">
+                    <X className="w-5 h-5 text-slate-400" />
+                  </button>
+                </div>
+              
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-[10px] uppercase font-black text-slate-500 tracking-widest mb-2 px-1">Repository</label>
+                    <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 text-white font-mono text-sm">
+                      {showRelocateModal.name}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase font-black text-slate-500 tracking-widest mb-2 px-1">New Folder Path</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={relocatePath}
+                        onChange={(e) => setRelocatePath(e.target.value)}
+                        className="flex-1 bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all font-mono text-sm"
+                        placeholder="/absolute/path/to/data"
+                      />
+                      <button 
+                        onClick={() => openBrowser(relocatePath, (path) => setRelocatePath(path))}
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-200 p-3 rounded-2xl transition-all"
+                        title="Browse Directory"
+                      >
+                        <Folder className="w-5 h-5" />
+                      </button>
+                    </div>
+                    <p className="mt-2 text-[10px] text-slate-500 italic px-1">Update the folder where this repository is stored. Files stay where they are.</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 mt-8">
+                  <button 
+                    onClick={() => setShowRelocateModal(null)}
+                    className="px-6 py-3 rounded-2xl font-bold text-slate-400 hover:bg-slate-800 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => relocateMutation.mutate({ name: showRelocateModal.name, path: relocatePath })}
+                    disabled={relocateMutation.isPending || !relocatePath}
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold py-3 rounded-2xl shadow-lg shadow-indigo-900/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    {relocateMutation.isPending ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Folder className="w-5 h-5" />}
+                    Move Folder
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Clone Modal */}
+        {showCloneModal && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="p-8">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-2xl font-black text-white flex items-center gap-3">
+                    <Copy className="w-6 h-6 text-cyan-500" />
+                    Clone Repository
+                  </h3>
+                  <button onClick={() => setShowCloneModal(null)} className="p-2 hover:bg-slate-800 rounded-xl transition-colors">
+                    <X className="w-5 h-5 text-slate-400" />
+                  </button>
+                </div>
+              
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] uppercase font-black text-slate-500 tracking-widest mb-2 px-1">Source</label>
+                      <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 text-white font-mono text-sm truncate">
+                        {showCloneModal.name}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase font-black text-slate-500 tracking-widest mb-2 px-1">New Name</label>
+                      <input 
+                        type="text" 
+                        value={cloneData.destinationName}
+                        onChange={(e) => setCloneData(prev => ({ ...prev, destinationName: e.target.value }))}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-4 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-bold"
+                        placeholder="New Repository Name"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase font-black text-slate-500 tracking-widest mb-2 px-1">New Folder Path</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={cloneData.path}
+                        onChange={(e) => setCloneData(prev => ({ ...prev, path: e.target.value }))}
+                        className="flex-1 bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-mono text-sm"
+                      />
+                      <button 
+                        onClick={() => openBrowser(cloneData.path, (path) => setCloneData(prev => ({ ...prev, path })))}
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-200 p-3 rounded-2xl transition-all"
+                      >
+                        <Folder className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 mt-8">
+                  <button 
+                    onClick={() => setShowCloneModal(null)}
+                    className="px-6 py-3 rounded-2xl font-bold text-slate-400 hover:bg-slate-800 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => cloneMutation.mutate({ name: showCloneModal.name, data: cloneData })}
+                    disabled={cloneMutation.isPending || !cloneData.destinationName || !cloneData.path}
+                    className="flex-1 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-bold py-3 rounded-2xl shadow-lg shadow-cyan-900/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    {cloneMutation.isPending ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Copy className="w-5 h-5" />}
+                    Clone
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Move Modal */}
+        {showMoveModal && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="p-8">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-2xl font-black text-white flex items-center gap-3">
+                    <Move className="w-6 h-6 text-violet-500" />
+                    Rename Repository
+                  </h3>
+                  <button onClick={() => setShowMoveModal(null)} className="p-2 hover:bg-slate-800 rounded-xl transition-colors">
+                    <X className="w-5 h-5 text-slate-400" />
+                  </button>
+                </div>
+              
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-[10px] uppercase font-black text-slate-500 tracking-widest mb-2 px-1">Current Name</label>
+                    <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 text-white font-mono text-sm">
+                      {showMoveModal.name}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase font-black text-slate-500 tracking-widest mb-2 px-1">New Repository Name</label>
+                    <input 
+                      type="text" 
+                      value={moveData.destinationName}
+                      onChange={(e) => setMoveData({ destinationName: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-4 text-white focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 transition-all font-bold"
+                      placeholder="e.g. My Photos"
+                    />
+                    <p className="mt-2 text-[10px] text-slate-500 italic px-1">This will change how the repository is identified in Dedup. Your files are not moved.</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 mt-8">
+                  <button 
+                    onClick={() => setShowMoveModal(null)}
+                    className="px-6 py-3 rounded-2xl font-bold text-slate-400 hover:bg-slate-800 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => moveRepoMutation.mutate({ name: showMoveModal.name, destinationName: moveData.destinationName })}
+                    disabled={moveRepoMutation.isPending || !moveData.destinationName}
+                    className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-bold py-3 rounded-2xl shadow-lg shadow-violet-900/20 transition-all flex items-center justify-center gap-2"
+                  >
+                    {moveRepoMutation.isPending ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Move className="w-5 h-5" />}
+                    Rename
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showAddModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
@@ -778,7 +1268,12 @@ function App() {
                       placeholder="/home/user/music"
                     />
                     <button 
-                      onClick={() => browseMutation.mutate(newRepo.absolutePath)}
+                      onClick={() => openBrowser(newRepo.absolutePath, (path) => {
+                        setNewRepo((prev) => {
+                          const name = prev.name || path.split(/[/\\]/).pop() || ''
+                          return { ...prev, absolutePath: path, name }
+                        })
+                      })}
                       className="bg-slate-800 hover:bg-slate-700 text-white px-3 py-2 rounded-lg transition-colors border border-slate-700"
                       title="Browse Filesystem"
                     >
@@ -898,6 +1393,8 @@ function App() {
         )}
 
         {/* Error History Modal */}
+        <BrowserModal />
+
         {showErrorModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
             <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">

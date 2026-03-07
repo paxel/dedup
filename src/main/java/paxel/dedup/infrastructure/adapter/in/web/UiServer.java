@@ -10,8 +10,8 @@ import paxel.dedup.domain.service.RepoService;
 import paxel.dedup.infrastructure.config.InfrastructureConfig;
 import paxel.dedup.repo.domain.repo.UpdateReposProcess;
 
-import javax.swing.*;
-import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -22,12 +22,14 @@ public class UiServer {
     private final Javalin app;
     private final RepoService repoService;
     private final EventBus eventBus;
+    private final paxel.dedup.domain.port.out.FileSystem fileSystem;
     private final InfrastructureConfig infrastructureConfig;
 
     public UiServer(InfrastructureConfig infrastructureConfig) {
         this.infrastructureConfig = infrastructureConfig;
         this.repoService = infrastructureConfig.getRepoService();
         this.eventBus = infrastructureConfig.getEventBus();
+        this.fileSystem = infrastructureConfig.getFileSystem();
         this.app = Javalin.create(config -> {
             config.jsonMapper(new JavalinJackson(infrastructureConfig.getObjectMapper(), false));
             config.showJavalinBanner = false;
@@ -57,41 +59,40 @@ public class UiServer {
         });
 
         app.get("/api/utils/browse", ctx -> {
-            CompletableFuture<String> future = new CompletableFuture<>();
-            SwingUtilities.invokeLater(() -> {
-                try {
-                    // Set system look and feel for a better native experience
-                    UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-                    JFileChooser chooser = new JFileChooser();
-                    chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-                    chooser.setDialogTitle("Select Repository Directory");
+            String currentPath = ctx.queryParam("path");
+            Path root = currentPath != null && !currentPath.isBlank() ? Paths.get(currentPath) : Paths.get(System.getProperty("user.home"));
 
-                    // Try to use current path if provided
-                    String currentPath = ctx.queryParam("path");
-                    if (currentPath != null && !currentPath.isBlank()) {
-                        File currentDir = new File(currentPath);
-                        if (currentDir.exists()) {
-                            chooser.setCurrentDirectory(currentDir);
-                        }
-                    }
+            if (!fileSystem.exists(root) || !fileSystem.isDirectory(root)) {
+                root = Paths.get(System.getProperty("user.home"));
+            }
 
-                    int returnVal = chooser.showOpenDialog(null);
-                    if (returnVal == 0) { // JFileChooser.APPROVE_VALUE
-                        future.complete(chooser.getSelectedFile().getAbsolutePath());
-                    } else {
-                        future.complete(null);
-                    }
-                } catch (Exception e) {
-                    log.error("Error opening directory browser", e);
-                    future.completeExceptionally(e);
-                }
-            });
+            final Path finalRoot = root.toAbsolutePath().normalize();
+            try (var stream = fileSystem.list(finalRoot)) {
+                List<Map<String, Object>> items = stream
+                        .filter(fileSystem::isDirectory)
+                        .map(p -> {
+                            try {
+                                Map<String, Object> item = new java.util.HashMap<>();
+                                item.put("name", p.getFileName().toString());
+                                item.put("path", p.toAbsolutePath().normalize().toString());
+                                item.put("isDirectory", true);
+                                return item;
+                            } catch (Exception e) {
+                                return null;
+                            }
+                        })
+                        .filter(java.util.Objects::nonNull)
+                        .sorted(java.util.Comparator.comparing(m -> (String) m.get("name")))
+                        .collect(java.util.stream.Collectors.toList());
 
-            String path = future.get();
-            if (path != null) {
-                ctx.json(Map.of("path", path));
-            } else {
-                ctx.status(204);
+                Map<String, Object> response = new java.util.HashMap<>();
+                response.put("currentPath", finalRoot.toString());
+                response.put("parentPath", finalRoot.getParent() != null ? finalRoot.getParent().toString() : null);
+                response.put("items", items);
+                ctx.json(response);
+            } catch (Exception e) {
+                log.error("Error browsing directory: {}", finalRoot, e);
+                ctx.status(500).json(Map.of("message", "Error browsing directory: " + e.getMessage()));
             }
         });
 
@@ -103,6 +104,96 @@ public class UiServer {
             } else {
                 ctx.status(400).json(result.error());
             }
+        });
+
+        app.post("/api/repos/{name}/prune", ctx -> {
+            String name = ctx.pathParam("name");
+            CompletableFuture.runAsync(() -> {
+                var result = repoService.pruneRepo(name);
+                if (result.hasFailed()) {
+                    log.error("Prune failed for {}: {}", name, result.error().describe());
+                    eventBus.publish("error", Map.of("repo", name, "message", result.error().describe()));
+                } else {
+                    log.info("Prune completed successfully for: {}", name);
+                    eventBus.publish("finished", Map.of("repo", name, "message", "Prune completed"));
+                }
+            });
+            ctx.status(202).json(Map.of("message", "Prune started for " + name));
+        });
+
+        app.post("/api/repos/{name}/relocate", ctx -> {
+            String name = ctx.pathParam("name");
+            Map<String, String> body = ctx.bodyAsClass(Map.class);
+            String newPath = body.get("path");
+            if (newPath == null || newPath.isBlank()) {
+                ctx.status(400).json(Map.of("message", "New path is required"));
+                return;
+            }
+            var result = repoService.relocateRepo(name, newPath);
+            if (result.isSuccess()) {
+                ctx.json(result.value());
+            } else {
+                ctx.status(400).json(result.error());
+            }
+        });
+
+        app.post("/api/repos/{name}/cp", ctx -> {
+            String name = ctx.pathParam("name");
+            Map<String, String> body = ctx.bodyAsClass(Map.class);
+            String destinationName = body.get("destinationName");
+            String path = body.get("path");
+            if (destinationName == null || destinationName.isBlank() || path == null || path.isBlank()) {
+                ctx.status(400).json(Map.of("message", "Destination name and path are required"));
+                return;
+            }
+            var result = repoService.cloneRepo(name, destinationName, path);
+            if (result.isSuccess()) {
+                ctx.status(201).json(Map.of("message", "Repo cloned successfully"));
+            } else {
+                ctx.status(400).json(result.error());
+            }
+        });
+
+        app.post("/api/repos/{name}/mv", ctx -> {
+            String name = ctx.pathParam("name");
+            Map<String, String> body = ctx.bodyAsClass(Map.class);
+            String destinationName = body.get("destinationName");
+            if (destinationName == null || destinationName.isBlank()) {
+                ctx.status(400).json(Map.of("message", "Destination name is required"));
+                return;
+            }
+            var result = repoService.moveRepo(name, destinationName);
+            if (result.isSuccess()) {
+                ctx.status(200).json(Map.of("message", "Repo moved successfully"));
+            } else {
+                ctx.status(400).json(result.error());
+            }
+        });
+
+        app.post("/api/repos/{name}/copy", ctx -> {
+            String name = ctx.pathParam("name");
+            Map<String, String> body = ctx.bodyAsClass(Map.class);
+            String target = body.get("target");
+            Boolean move = Boolean.valueOf(String.valueOf(body.getOrDefault("move", "false")));
+            String filter = body.get("filter");
+            String appendix = body.get("appendix");
+
+            if (target == null || target.isBlank()) {
+                ctx.status(400).json(Map.of("message", "Target directory is required"));
+                return;
+            }
+
+            CompletableFuture.runAsync(() -> {
+                var result = repoService.copyFiles(name, target, move, filter, appendix);
+                if (result.hasFailed()) {
+                    log.error("{} failed for {}: {}", move ? "Move" : "Copy", name, result.error().describe());
+                    eventBus.publish("error", Map.of("repo", name, "message", result.error().describe()));
+                } else {
+                    log.info("{} completed successfully for: {}", move ? "Move" : "Copy", name);
+                    eventBus.publish("finished", Map.of("repo", name, "message", (move ? "Move" : "Copy") + " completed"));
+                }
+            });
+            ctx.status(202).json(Map.of("message", (move ? "Move" : "Copy") + " started for " + name));
         });
 
         app.post("/api/repos/{name}/update", ctx -> {
