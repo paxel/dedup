@@ -39,7 +39,6 @@ public class RepoCommand {
             @Parameters(description = "Path of the repo") String path,
             @Option(defaultValue = "10", names = {"--indices", "-i"}, description = "Number of index files") int indices,
             @Option(names = {"--codec"}, description = "Line codec to use: json|messagepack", defaultValue = "messagepack") String codec,
-            @Option(names = {"--compressed"}, description = "Use GZIP compression for index files") boolean compressed,
             @Option(names = {"--strict"}, description = "Fail if selected codec is unavailable") boolean strict) {
         initDefaultConfig();
 
@@ -58,7 +57,7 @@ public class RepoCommand {
         if (target == null) {
             log.warn("Unknown codec '{}' . Supported: json, messagepack. Falling back to default (messagepack on write).", codec);
         } else {
-            Result<Repo, DedupError> configResult = repoService.updateRepoConfig(name, target, compressed);
+            Result<Repo, DedupError> configResult = repoService.updateRepoConfig(name, target);
             if (configResult.hasFailed() && strict) {
                 log.error("Failed to persist codec selection: {}", configResult.error());
                 return -11;
@@ -127,8 +126,7 @@ public class RepoCommand {
     @Command(name = "config", description = "Configures a repo", mixinStandardHelpOptions = true)
     public int config(
             @Parameters(description = "Name of the repo") String name,
-            @Option(names = {"--codec"}, description = "Line codec to use: json|messagepack") String codec,
-            @Option(names = {"--compressed"}, description = "Use GZIP compression for index files") Boolean compressed) {
+            @Option(names = {"--codec"}, description = "Line codec to use: json|messagepack") String codec) {
         initDefaultConfig();
 
         Result<Repo, DedupError> repoResult = dedupConfig.getRepo(name);
@@ -150,9 +148,7 @@ public class RepoCommand {
             };
         }
 
-        boolean targetCompressed = compressed != null ? compressed : repo.compressed();
-
-        Result<Repo, DedupError> result = dedupConfig.setRepoConfig(name, targetCodec, targetCompressed);
+        Result<Repo, DedupError> result = dedupConfig.setRepoConfig(name, targetCodec);
         if (result.isSuccess()) {
             log.info("Updated config for repo '{}'", name);
             return 0;

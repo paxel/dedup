@@ -50,7 +50,7 @@ public class UiServer {
 
         app.post("/api/repos", ctx -> {
             Repo repo = ctx.bodyAsClass(Repo.class);
-            var result = repoService.createRepo(repo.name(), java.nio.file.Paths.get(repo.absolutePath()), repo.indices(), repo.codec(), repo.compressed());
+            var result = repoService.createRepo(repo.name(), java.nio.file.Paths.get(repo.absolutePath()), repo.indices(), repo.codec());
             if (result.isSuccess()) {
                 ctx.status(201).json(result.value());
             } else {
@@ -60,6 +60,7 @@ public class UiServer {
 
         app.get("/api/utils/browse", ctx -> {
             String currentPath = ctx.queryParam("path");
+            boolean showHidden = Boolean.parseBoolean(ctx.queryParam("showHidden"));
             Path root = currentPath != null && !currentPath.isBlank() ? Paths.get(currentPath) : Paths.get(System.getProperty("user.home"));
 
             if (!fileSystem.exists(root) || !fileSystem.isDirectory(root)) {
@@ -70,6 +71,7 @@ public class UiServer {
             try (var stream = fileSystem.list(finalRoot)) {
                 List<Map<String, Object>> items = stream
                         .filter(fileSystem::isDirectory)
+                        .filter(p -> showHidden || !p.getFileName().toString().startsWith("."))
                         .map(p -> {
                             try {
                                 Map<String, Object> item = new java.util.HashMap<>();

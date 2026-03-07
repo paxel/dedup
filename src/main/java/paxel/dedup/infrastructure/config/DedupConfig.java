@@ -34,13 +34,13 @@ public interface DedupConfig {
      * @return The new {@link Repo} or an error if the repo could not be created.
      */
     @NonNull
-    default Result<Repo, DedupError> createRepo(@NonNull String name, @NonNull Path path, int indices, @NonNull Repo.Codec codec, boolean compressed) {
+    default Result<Repo, DedupError> createRepo(@NonNull String name, @NonNull Path path, int indices, @NonNull Repo.Codec codec) {
         return Result.err(DedupError.of(paxel.dedup.domain.model.errors.ErrorType.CREATE_REPO, "Not implemented"));
     }
 
     @NonNull
     default Result<Repo, DedupError> createRepo(@NonNull String name, @NonNull Path path, int indices) {
-        return createRepo(name, path, indices, Repo.Codec.MESSAGEPACK, false);
+        return createRepo(name, path, indices, Repo.Codec.MESSAGEPACK);
     }
 
     @NonNull
@@ -76,30 +76,16 @@ public interface DedupConfig {
      * Updates the config of the repo YAML while keeping name, path, and indices the same.
      */
     @NonNull
-    default Result<Repo, DedupError> setRepoConfig(@NonNull String name, @NonNull Repo.Codec codec, boolean compressed) {
+    default Result<Repo, DedupError> setRepoConfig(@NonNull String name, @NonNull Repo.Codec codec) {
         return Result.err(DedupError.of(paxel.dedup.domain.model.errors.ErrorType.MODIFY_REPO,
                 getRepoDir().resolve(name).resolve("dedup_repo.yml") + ": failed persisting repo config"));
     }
 
     /**
-     * Updates the codec setting of the repo YAML while keeping name, path, and indices the same.
-     *
-     * @deprecated Use {@link #setRepoConfig(String, Repo.Codec, boolean)} instead.
-     */
-    @Deprecated
-    @NonNull
-    default Result<Repo, DedupError> setRepoConfig(@NonNull String name, @NonNull Repo.Codec codec) {
-        return setRepoConfig(name, codec, false);
-    }
-
-    /**
      * Updates the codec of the repo YAML while keeping name, path, and indices the same.
-     *
-     * @deprecated Use {@link #setRepoConfig(String, Repo.Codec, boolean)} instead.
      */
-    @Deprecated
     @NonNull
     default Result<Repo, DedupError> setCodec(@NonNull String name, @NonNull Repo.Codec codec) {
-        return setRepoConfig(name, codec, false);
+        return setRepoConfig(name, codec);
     }
 }

@@ -33,7 +33,23 @@ The update process was flickering because scanning and processing shared the sam
 - Separated scanning and processing feedback into dedicated, stable UI slots.
 - Fixed layout shifts by using minimum widths and fixed heights for status elements.
 - Improved backend progress updates to avoid "progress jumping" by removing redundant 0-value resets during the scan phase.
-- Added smooth progress bar transitions in the frontend to eliminate jitter during rapid updates.
+- Removed "smooth movement" interpolation that caused progress bar to lag or "masturbate".
+- Added guard in React `setActiveProgress` to ignore out-of-order/stale progress updates (where percentage regresses).
+
+## Directory Browser limitations
+The previous directory browser was too simple and lacked power-user features.
+- Replaced Java Swing with integrated Web Directory Browser.
+- Added "Show Hidden" toggle to see dot-directories.
+- Added Grid/List view toggle (default grid/tiles).
+- Implemented clickable Breadcrumbs for fast navigation to any parent directory.
+
+## Index corruption with compression
+Compressed index files could become corrupt if the GZIP stream was not closed properly (e.g., process crash).
+- Removed compression support for index files entirely to ensure data integrity and simplify architecture.
+- Replaced GZIP-based streams with plain text (JSON/MessagePack) streams.
+- Updated `Repo` model, `IndexManager`, `FrameIteratorFactoryFactory`, `RepoService`, and `DedupConfig` to remove all compression logic and variables.
+- Removed `--compressed` option from CLI and corresponding UI elements in the web frontend.
+- Synchronized `IndexManager.add()` to prevent concurrent write corruption.
 
 ## Java Swing directory picker in Web UI
 The directory picker was a blocking Java Swing dialog, which is not suitable for a web application and might not work on headless servers.

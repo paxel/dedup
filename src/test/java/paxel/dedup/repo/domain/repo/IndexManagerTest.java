@@ -8,8 +8,10 @@ import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
 import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.dedup.infrastructure.adapter.out.serialization.*;
+import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
 import java.io.IOException;
@@ -18,6 +20,8 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class IndexManagerTest {
 
@@ -27,45 +31,42 @@ class IndexManagerTest {
     private Path indexFile;
     private ObjectMapper objectMapper;
     private IndexManager indexManager;
+    private DedupConfig dedupConfig;
+    private FileSystem fileSystem;
 
     @BeforeEach
     void setUp() {
         indexFile = tempDir.resolve("test.idx");
         objectMapper = new ObjectMapper();
+        dedupConfig = mock(DedupConfig.class);
+        fileSystem = new NioFileSystemAdapter();
+        when(dedupConfig.getRepoDir()).thenReturn(tempDir);
         // Default to real FS for most tests, or we can use the mock
-        indexManager = new IndexManager(indexFile, new JacksonMapperLineCodec<>(objectMapper, RepoFile.class), new NioFileSystemAdapter(), JsonFrameIterator::new, JsonFrameWriter::new);
+        indexManager = new IndexManager(indexFile, new JacksonMapperLineCodec<>(objectMapper, RepoFile.class), fileSystem, JsonFrameIterator::new, JsonFrameWriter::new);
     }
 
     @Test
-    void testCompressedIndex() throws IOException {
+    void testManyIndices() throws IOException {
         // Arrange
-        indexFile = tempDir.resolve("test.idx.gz");
-        Files.createFile(indexFile);
-        FrameIteratorFactoryFactory ffff = new FrameIteratorFactoryFactory();
-        IndexManager compressedManager = new IndexManager(indexFile, new JacksonMapperLineCodec<>(objectMapper, RepoFile.class), new NioFileSystemAdapter(), ffff.forReader(Repo.Codec.JSON, true), ffff.forWriter(Repo.Codec.JSON, true));
+        int indices = 5;
+        for (int i = 0; i < indices; i++) {
+            Files.createFile(tempDir.resolve(i + ".idx"));
+        }
+        Repo repo = new Repo("test", tempDir.toString(), indices);
+        RepoManager manager = RepoManager.forRepo(repo, dedupConfig, fileSystem);
 
-        RepoFile file1 = RepoFile.builder().hash("h1").relativePath("p1").size(10L).build();
-        RepoFile file2 = RepoFile.builder().hash("h2").relativePath("p2").size(20L).build();
+        RepoFile file1 = RepoFile.builder().hash("h1").relativePath("p1").size(10L).build(); // index 10 % 5 = 0
+        RepoFile file2 = RepoFile.builder().hash("h2").relativePath("p2").size(11L).build(); // index 11 % 5 = 1
 
         // Act
-        compressedManager.add(file1);
-        compressedManager.close();
-
-        compressedManager.add(file2);
-        compressedManager.close();
+        manager.load();
+        manager.addRepoFile(file1);
+        manager.addRepoFile(file2);
 
         // Assert
-        assertThat(indexFile).exists();
-        byte[] bytes = Files.readAllBytes(indexFile);
-        assertThat(bytes[0]).isEqualTo((byte) 0x1f);
-        assertThat(bytes[1]).isEqualTo((byte) 0x8b);
-
-        // Load it back
-        IndexManager reader = new IndexManager(indexFile, new JacksonMapperLineCodec<>(objectMapper, RepoFile.class), new NioFileSystemAdapter(), ffff.forReader(Repo.Codec.JSON, true), ffff.forWriter(Repo.Codec.JSON, true));
-        reader.load();
-        List<RepoFile> files = reader.stream().toList();
-        assertThat(files).hasSize(2);
-        assertThat(files).extracting(RepoFile::relativePath).containsExactlyInAnyOrder("p1", "p2");
+        assertThat(tempDir.resolve("0.idx")).exists();
+        assertThat(tempDir.resolve("1.idx")).exists();
+        assertThat(manager.stream().toList()).hasSize(2);
     }
 
     @Test
@@ -106,21 +107,6 @@ class IndexManagerTest {
         assertThat(indexManager.stream().count()).isEqualTo(0);
     }
 
-    @Test
-    void testLoadEmptyCompressedIndex() throws IOException {
-        // Arrange
-        indexFile = tempDir.resolve("empty_compressed.idx.gz");
-        Files.createFile(indexFile);
-        FrameIteratorFactoryFactory ffff = new FrameIteratorFactoryFactory();
-        IndexManager compressedManager = new IndexManager(indexFile, new JacksonMapperLineCodec<>(objectMapper, RepoFile.class), new NioFileSystemAdapter(), ffff.forReader(Repo.Codec.JSON, true), ffff.forWriter(Repo.Codec.JSON, true));
-
-        // Act
-        Result<Statistics, DedupError> result = compressedManager.load();
-
-        // Assert
-        assertThat(result.hasFailed()).isFalse();
-        assertThat(compressedManager.stream().count()).isEqualTo(0);
-    }
 
     @Test
     void testLoadAndStream() throws IOException {

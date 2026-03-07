@@ -190,16 +190,12 @@ public class IndexManager {
 
     public synchronized Result<Void, DedupError> add(RepoFile repoFile) {
         try {
-
             FrameWriter frameWriter = out.updateAndGet(o -> {
                 if (o != null)
                     return o;
                 else {
                     try {
                         StandardOpenOption option = StandardOpenOption.APPEND;
-                        // GZIPOutputStream does not support appending to a file in a way that continues the same stream.
-                        // However, multiple GZIP members can be concatenated, and GZIPInputStream will read them as a single stream.
-                        // To achieve this, we just need to open the file in APPEND mode and GZIPOutputStream will write a new member.
                         return frameWriterFactory.apply(fileSystem.newOutputStream(indexFile, option));
                     } catch (IOException e) {
                         throw new TunneledIoException(e);
@@ -223,6 +219,8 @@ public class IndexManager {
         } catch (TunneledIoException e) {
             return Result.err(DedupError.of(ErrorType.WRITE, indexFile + ": write failed", toExceptionLocal(e.getCause())));
         } catch (IOException e) {
+            // If write fails, we might want to reset the writer to try to reopen it next time
+            close();
             return Result.err(DedupError.of(ErrorType.WRITE, indexFile + ": write failed", e));
         }
     }

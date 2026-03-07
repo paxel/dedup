@@ -14,7 +14,6 @@ interface Repo {
   absolutePath: string;
   indices: number;
   codec?: 'JSON' | 'MESSAGEPACK';
-  compressed?: boolean;
   stats?: RepoStats;
 }
 
@@ -65,7 +64,6 @@ function App() {
   const [events, setEvents] = useState<any[]>([])
   const [connected, setConnected] = useState(false)
   const [activeProgress, setActiveProgress] = useState<ProgressUpdate | null>(null)
-  const [smoothProgress, setSmoothProgress] = useState(0)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showErrorModal, setShowErrorModal] = useState(false)
   const [errors, setErrors] = useState<ErrorEvent[]>([])
@@ -82,8 +80,7 @@ function App() {
     name: '', 
     absolutePath: './Documents', 
     indices: 10,
-    codec: 'MESSAGEPACK',
-    compressed: false
+    codec: 'MESSAGEPACK'
   })
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null)
   const queryClient = useQueryClient()
@@ -109,7 +106,7 @@ function App() {
   })
 
   const resetNewRepo = () => {
-    setNewRepo({ name: '', absolutePath: './Documents', indices: 10, codec: 'MESSAGEPACK', compressed: false })
+    setNewRepo({ name: '', absolutePath: './Documents', indices: 10, codec: 'MESSAGEPACK' })
   }
 
   const createMutation = useMutation({
@@ -254,10 +251,17 @@ function App() {
   const [showBrowser, setShowBrowser] = useState(false);
   const [browserData, setBrowserData] = useState<BrowserResponse | null>(null);
   const [browserOnSelect, setBrowserOnSelect] = useState<(path: string) => void>(() => () => {});
+  const [browserShowHidden, setBrowserShowHidden] = useState(false);
+  const [browserViewMode, setBrowserViewMode] = useState<'list' | 'grid'>('grid');
 
   const browseMutation = useMutation({
     mutationFn: async (path?: string) => {
-      const response = await axios.get('/api/utils/browse', { params: { path } })
+      const response = await axios.get('/api/utils/browse', { 
+        params: { 
+          path,
+          showHidden: browserShowHidden
+        } 
+      })
       return response.data as BrowserResponse
     },
     onSuccess: (data) => {
@@ -266,6 +270,12 @@ function App() {
     }
   })
 
+  useEffect(() => {
+    if (showBrowser && browserData) {
+      browseMutation.mutate(browserData.currentPath);
+    }
+  }, [browserShowHidden]);
+
   const openBrowser = (initialPath: string, onSelect: (path: string) => void) => {
     setBrowserOnSelect(() => onSelect);
     browseMutation.mutate(initialPath);
@@ -273,6 +283,11 @@ function App() {
 
   const BrowserModal = () => {
     if (!showBrowser || !browserData) return null;
+
+    const isWindows = browserData.currentPath.includes('\\');
+    const separator = isWindows ? '\\' : '/';
+    const breadcrumbs = browserData.currentPath.split(separator).filter(Boolean);
+
     return (
       <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
         <div className="bg-slate-900 border border-slate-800 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[80vh]">
@@ -281,12 +296,35 @@ function App() {
               <Folder className="w-6 h-6 text-blue-500" />
               Browse Directory
             </h2>
-            <button 
-              onClick={() => setShowBrowser(false)}
-              className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
-            >
-              <X className="w-6 h-6" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setBrowserViewMode(prev => prev === 'list' ? 'grid' : 'list')}
+                className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors flex items-center gap-2"
+                title={browserViewMode === 'list' ? 'Switch to Grid View' : 'Switch to List View'}
+              >
+                {browserViewMode === 'list' ? (
+                  <Database className="w-5 h-5" />
+                ) : (
+                  <Activity className="w-5 h-5" />
+                )}
+              </button>
+              <button
+                onClick={() => setBrowserShowHidden(!browserShowHidden)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                  browserShowHidden 
+                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' 
+                    : 'bg-slate-800 text-slate-500 border border-transparent'
+                }`}
+              >
+                Hidden
+              </button>
+              <button 
+                onClick={() => setShowBrowser(false)}
+                className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
           </div>
           
           <div className="p-4 bg-slate-950/50 border-b border-slate-800 flex items-center gap-2 overflow-x-auto">
@@ -297,26 +335,54 @@ function App() {
             >
               <ChevronRight className="w-5 h-5 rotate-180" />
             </button>
-            <div className="text-xs font-mono text-slate-400 truncate py-1">
-              {browserData.currentPath}
+            <div className="flex items-center text-xs font-mono text-slate-400 overflow-x-auto no-scrollbar py-1">
+              <button 
+                onClick={() => browseMutation.mutate(isWindows ? breadcrumbs[0] + '\\' : '/')}
+                className="hover:text-white hover:underline transition-colors shrink-0"
+              >
+                {isWindows ? breadcrumbs[0] : 'root'}
+              </button>
+              {(isWindows ? breadcrumbs.slice(1) : breadcrumbs).map((part, idx) => {
+                const currentBreadcrumbPath = (isWindows ? breadcrumbs.slice(0, idx + 2) : breadcrumbs.slice(0, idx + 1)).join(separator);
+                return (
+                  <div key={idx} className="flex items-center shrink-0">
+                    <span className="mx-1 opacity-40">{separator}</span>
+                    <button 
+                      onClick={() => browseMutation.mutate(isWindows ? currentBreadcrumbPath : '/' + currentBreadcrumbPath)}
+                      className="hover:text-white hover:underline transition-colors"
+                    >
+                      {part}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-2">
+          <div className="flex-1 overflow-y-auto p-4">
             {browserData.items.length === 0 && (
               <div className="p-12 text-center text-slate-500 font-medium">
                 No directories found.
               </div>
             )}
-            <div className="grid grid-cols-1 gap-1">
+            <div className={browserViewMode === 'grid' 
+              ? "grid grid-cols-2 sm:grid-cols-3 gap-3" 
+              : "flex flex-col gap-1"
+            }>
               {browserData.items.map((item) => (
                 <button
                   key={item.path}
                   onClick={() => browseMutation.mutate(item.path)}
-                  className="flex items-center gap-3 p-3 hover:bg-blue-600/10 rounded-xl text-left group transition-all"
+                  className={`flex items-center gap-3 p-3 hover:bg-blue-600/10 rounded-xl text-left group transition-all border border-transparent hover:border-blue-500/20 ${
+                    browserViewMode === 'grid' ? 'flex-col items-center text-center p-4' : ''
+                  }`}
                 >
-                  <Folder className="w-5 h-5 text-blue-500 group-hover:scale-110 transition-transform" />
-                  <span className="text-sm font-bold text-slate-200 group-hover:text-white truncate">{item.name}</span>
+                  <Folder className={`text-blue-500 group-hover:scale-110 transition-transform ${
+                    browserViewMode === 'grid' ? 'w-10 h-10 mb-1' : 'w-5 h-5'
+                  }`} />
+                  <span className={`text-sm font-bold text-slate-200 group-hover:text-white truncate w-full ${
+                    browserViewMode === 'grid' ? 'text-center' : ''
+                  }`}>{item.name}</span>
                 </button>
               ))}
             </div>
@@ -343,27 +409,6 @@ function App() {
       </div>
     );
   };
-
-  useEffect(() => {
-    if (activeProgress) {
-      const target = activeProgress.progressPercent || 0
-      if (target > smoothProgress) {
-        const timer = setTimeout(() => {
-          setSmoothProgress(prev => {
-            const diff = target - prev
-            if (diff <= 0) return prev
-            // Move 10% of the way to target, or at least 0.1%
-            return prev + Math.max(diff * 0.1, 0.1)
-          })
-        }, 50)
-        return () => clearTimeout(timer)
-      } else if (target < smoothProgress) {
-        setSmoothProgress(target)
-      }
-    } else {
-      setSmoothProgress(0)
-    }
-  }, [activeProgress, smoothProgress])
 
   useEffect(() => {
     let ws: WebSocket | null = null;
@@ -404,8 +449,22 @@ function App() {
                 directoriesDiscovered: data.payload.directoriesDiscovered ?? 0
               };
             }
+            
+            // If current update has filesProcessed/filesTotal, and they are less than previous values, ignore them
+            // unless we are in scanning phase or it's a completely new event
+            const newPayload = { ...data.payload };
+            if (prev.filesTotal && newPayload.filesTotal && newPayload.filesTotal < prev.filesTotal && !newPayload.scanningActive) {
+                delete newPayload.filesTotal;
+            }
+            if (prev.filesProcessed && newPayload.filesProcessed && newPayload.filesProcessed < prev.filesProcessed && !newPayload.scanningActive) {
+                delete newPayload.filesProcessed;
+            }
+            if (prev.progressPercent && newPayload.progressPercent && newPayload.progressPercent < prev.progressPercent && !newPayload.scanningActive) {
+                delete newPayload.progressPercent;
+            }
+
             // Merge updates
-            return { ...prev, ...data.payload };
+            return { ...prev, ...newPayload };
           });
         } else if (data.type === 'finished') {
           setActiveProgress(null)
@@ -574,10 +633,10 @@ function App() {
                   <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-blue-500 transition-all duration-300 ease-linear" 
-                      style={{ width: `${smoothProgress || 0}%` }}
+                      style={{ width: `${activeProgress.progressPercent || 0}%` }}
                     ></div>
                   </div>
-                  <span className="text-[10px] font-black text-blue-100 min-w-[35px] text-right">{Math.round(smoothProgress || 0)}%</span>
+                  <span className="text-[10px] font-black text-blue-100 min-w-[35px] text-right">{Math.round(activeProgress.progressPercent || 0)}%</span>
                 </div>
               </div>
             )}
@@ -636,7 +695,7 @@ function App() {
                   <div className="flex items-center gap-6 shrink-0">
                     <div className="text-right min-w-[80px]">
                       <span className="text-[10px] uppercase font-bold text-slate-500 block mb-0.5">Progress</span>
-                      <span className="text-xl font-black text-white tracking-tighter">{Math.round(smoothProgress || 0)}%</span>
+                      <span className="text-xl font-black text-white tracking-tighter">{Math.round(activeProgress.progressPercent || 0)}%</span>
                     </div>
                     <div className="text-right border-l border-slate-800 pl-6 min-w-[120px]">
                       <span className="text-[10px] uppercase font-bold text-slate-500 block mb-0.5">ETA</span>
@@ -650,7 +709,7 @@ function App() {
                 <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-4">
                   <div 
                     className="h-full bg-blue-500 transition-all duration-300 ease-linear shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
-                    style={{ width: `${smoothProgress || 0}%` }}
+                    style={{ width: `${activeProgress.progressPercent || 0}%` }}
                   ></div>
                 </div>
 
@@ -1307,7 +1366,7 @@ function App() {
                       value={newRepo.codec}
                       onChange={e => {
                         const codec = e.target.value as 'JSON' | 'MESSAGEPACK'
-                        setNewRepo({...newRepo, codec, compressed: codec === 'JSON' ? false : newRepo.compressed})
+                        setNewRepo({...newRepo, codec})
                       }}
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all appearance-none"
                     >
@@ -1315,22 +1374,6 @@ function App() {
                       <option value="JSON">JSON</option>
                     </select>
                   </div>
-                </div>
-                <div className="flex items-center gap-2 pt-2">
-                  <input 
-                    type="checkbox" 
-                    id="compressed"
-                    checked={newRepo.compressed}
-                    disabled={newRepo.codec === 'JSON'}
-                    onChange={e => setNewRepo({...newRepo, compressed: e.target.checked})}
-                    className="w-4 h-4 bg-slate-950 border-slate-800 rounded text-blue-600 focus:ring-blue-500 disabled:opacity-30"
-                  />
-                  <label 
-                    htmlFor="compressed" 
-                    className={`text-sm font-medium ${newRepo.codec === 'JSON' ? 'text-slate-600' : 'text-slate-400'}`}
-                  >
-                    Compressed Index (MsgPack only)
-                  </label>
                 </div>
               </div>
               <div className="p-6 bg-slate-900/50 border-t border-slate-800 flex justify-between items-center gap-3">

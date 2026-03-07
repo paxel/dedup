@@ -71,7 +71,7 @@ public final class DefaultDedupConfig implements DedupConfig {
     }
 
     @Override
-    public @NonNull Result<Repo, DedupError> createRepo(@NonNull String name, @NonNull Path path, int indices, @NonNull Repo.Codec codec, boolean compressed) {
+    public @NonNull Result<Repo, DedupError> createRepo(@NonNull String name, @NonNull Path path, int indices, @NonNull Repo.Codec codec) {
         if (!isValidRepoName(name)) {
             return Result.err(DedupError.of(ErrorType.CREATE_REPO, "Invalid repo name: " + name + " (only alphanumeric characters allowed)"));
         }
@@ -89,12 +89,12 @@ public final class DefaultDedupConfig implements DedupConfig {
             return Result.err(DedupError.of(ErrorType.CREATE_REPO, ymlFile + " already exists"));
         }
 
-        return writeRepoFiles(name, path, indices, ymlFile, codec, compressed);
+        return writeRepoFiles(name, path, indices, ymlFile, codec);
     }
 
     @Override
     public @NonNull Result<Repo, DedupError> createRepo(@NonNull String name, @NonNull Path path, int indices) {
-        return createRepo(name, path, indices, Repo.Codec.MESSAGEPACK, false);
+        return createRepo(name, path, indices, Repo.Codec.MESSAGEPACK);
     }
 
     @Override
@@ -105,7 +105,7 @@ public final class DefaultDedupConfig implements DedupConfig {
             return repo.mapError(e -> DedupError.of(ErrorType.MODIFY_REPO, e.describe(), e.exception()));
         }
         Path ymlFile = repoRootPath.resolve(name).resolve(DEDUP_REPO_YML);
-        return writeRepoFile(name, path, repo.value().indices(), ymlFile, repo.value().codec(), repo.value().compressed())
+        return writeRepoFile(name, path, repo.value().indices(), ymlFile, repo.value().codec())
                 .map(Function.identity(), e -> DedupError.of(ErrorType.MODIFY_REPO, path + " modify failed", e));
     }
 
@@ -116,9 +116,9 @@ public final class DefaultDedupConfig implements DedupConfig {
         return name.chars().allMatch(c -> Character.isLetterOrDigit(c) || c == '_');
     }
 
-    private Result<Repo, DedupError> writeRepoFiles(String name, Path path, int indices, Path ymlFile, Repo.Codec codec, boolean compressed) {
+    private Result<Repo, DedupError> writeRepoFiles(String name, Path path, int indices, Path ymlFile, Repo.Codec codec) {
         try {
-            Result<Repo, IOException> repo = writeRepoFile(name, path, indices, ymlFile, codec, compressed);
+            Result<Repo, IOException> repo = writeRepoFile(name, path, indices, ymlFile, codec);
             if (repo.hasFailed())
                 return repo.mapError(e -> DedupError.of(ErrorType.CREATE_REPO, path + " write failed", repo.error()));
 
@@ -132,8 +132,8 @@ public final class DefaultDedupConfig implements DedupConfig {
     }
 
 
-    private Result<Repo, IOException> writeRepoFile(String name, Path path, int indices, Path ymlFile, Repo.Codec codec, boolean compressed) {
-        Repo repo = new Repo(name, path.toAbsolutePath().toString(), indices, codec, compressed, null);
+    private Result<Repo, IOException> writeRepoFile(String name, Path path, int indices, Path ymlFile, Repo.Codec codec) {
+        Repo repo = new Repo(name, path.toAbsolutePath().toString(), indices, codec, null);
         try {
             fileSystem.write(ymlFile, objectMapper.writeValueAsBytes(repo));
         } catch (IOException e) {
@@ -223,21 +223,21 @@ public final class DefaultDedupConfig implements DedupConfig {
             return Result.err(DedupError.of(ErrorType.RENAME_REPO, repoRootPath.resolve(newName) + " rename failed", e));
         }
         Path ymlFile = repoRootPath.resolve(newName).resolve(DEDUP_REPO_YML);
-        Result<Repo, IOException> repoIOExceptionResult = writeRepoFile(newName, Paths.get(repo.value().absolutePath()), repo.value().indices(), ymlFile, repo.value().codec(), repo.value().compressed());
+        Result<Repo, IOException> repoIOExceptionResult = writeRepoFile(newName, Paths.get(repo.value().absolutePath()), repo.value().indices(), ymlFile, repo.value().codec());
 
         return repoIOExceptionResult
                 .map(a -> true, e -> DedupError.of(ErrorType.RENAME_REPO, ymlFile + " write failed", e));
     }
 
     @Override
-    public @NonNull Result<Repo, DedupError> setRepoConfig(@NonNull String name, @NonNull Repo.Codec codec, boolean compressed) {
+    public @NonNull Result<Repo, DedupError> setRepoConfig(@NonNull String name, @NonNull Repo.Codec codec) {
         Result<Repo, DedupError> repo = this.getRepo(name);
         if (repo.hasFailed()) {
             return repo.mapError(e -> DedupError.of(ErrorType.MODIFY_REPO, e.describe(), e.exception()));
         }
         Path ymlFile = repoRootPath.resolve(name).resolve(DEDUP_REPO_YML);
         try {
-            Repo updated = new Repo(name, repo.value().absolutePath(), repo.value().indices(), codec, compressed, null);
+            Repo updated = new Repo(name, repo.value().absolutePath(), repo.value().indices(), codec, null);
             fileSystem.write(ymlFile, objectMapper.writeValueAsBytes(updated));
             return Result.ok(updated);
         } catch (IOException e) {

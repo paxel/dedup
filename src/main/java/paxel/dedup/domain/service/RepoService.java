@@ -81,16 +81,15 @@ public class RepoService {
     /**
      * Creates a new repository.
      *
-     * @param name       the name of the repository.
-     * @param path       the local filesystem path to the repository data.
-     * @param indices    the number of index files to use.
-     * @param codec      the codec to use for index files.
-     * @param compressed whether to use compression.
+     * @param name    the name of the repository.
+     * @param path    the local filesystem path to the repository data.
+     * @param indices the number of index files to use.
+     * @param codec   the codec to use for index files.
      * @return the created repository, or a DedupError if creation fails.
      */
-    public Result<Repo, DedupError> createRepo(String name, Path path, int indices, Repo.Codec codec, boolean compressed) {
-        log.info("Creating Repo '{}' at '{}' (codec={}, compressed={})", name, path, codec, compressed);
-        return dedupConfig.createRepo(name, path, indices, codec, compressed);
+    public Result<Repo, DedupError> createRepo(String name, Path path, int indices, Repo.Codec codec) {
+        log.info("Creating Repo '{}' at '{}' (codec={})", name, path, codec);
+        return dedupConfig.createRepo(name, path, indices, codec);
     }
 
     /**
@@ -102,7 +101,7 @@ public class RepoService {
      * @return the created repository, or a DedupError if creation fails.
      */
     public Result<Repo, DedupError> createRepo(String name, Path path, int indices) {
-        return createRepo(name, path, indices, Repo.Codec.MESSAGEPACK, false);
+        return createRepo(name, path, indices, Repo.Codec.MESSAGEPACK);
     }
 
     /**
@@ -119,14 +118,13 @@ public class RepoService {
     /**
      * Updates the configuration for an existing repository.
      *
-     * @param name       the name of the repository.
-     * @param codec      the codec to use for index files.
-     * @param compressed whether to use compression.
+     * @param name  the name of the repository.
+     * @param codec the codec to use for index files.
      * @return the updated repository, or a DedupError if update fails.
      */
-    public Result<Repo, DedupError> updateRepoConfig(String name, Repo.Codec codec, boolean compressed) {
-        log.info("Updating config for Repo '{}': codec={}, compressed={}", name, codec, compressed);
-        return dedupConfig.setRepoConfig(name, codec, compressed);
+    public Result<Repo, DedupError> updateRepoConfig(String name, Repo.Codec codec) {
+        log.info("Updating config for Repo '{}': codec={}", name, codec);
+        return dedupConfig.setRepoConfig(name, codec);
     }
 
     /**
