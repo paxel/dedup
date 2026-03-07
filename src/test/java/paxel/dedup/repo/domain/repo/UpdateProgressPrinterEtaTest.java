@@ -109,10 +109,9 @@ class UpdateProgressPrinterEtaTest {
         // Act: process a single file (total=1, processed=1 -> remaining=0)
         upp.file(Path.of("/tmp/a.txt"));
 
-        // Assert: progress contains 100% and Hashing status
+        // Assert: progress contains 100%
         String progressLine = lastProgress.get();
         assertThat(progressLine).startsWith("   Progress: ");
         assertThat(progressLine).contains("100.00 %");
-        assertThat(progressLine).contains("Hashing");
     }
 }

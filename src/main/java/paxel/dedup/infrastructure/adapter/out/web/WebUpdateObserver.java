@@ -45,9 +45,9 @@ public class WebUpdateObserver implements UpdateObserver {
                 .repo(repoName)
                 .path(absolutePath)
                 .scanningActive(true)
+                .hashingActive(false)
                 .filesDiscovered(totalFiles)
                 .directoriesDiscovered(totalDirs)
-                .status("Scanning...")
                 .duration(formatDuration(Duration.between(startTime, Instant.now())))
                 .build());
     }
@@ -61,23 +61,23 @@ public class WebUpdateObserver implements UpdateObserver {
                 .repo(repoName)
                 .path(absolutePath)
                 .scanningActive(false)
+                .hashingActive(true) // Scanning is done, processing starts
                 .filesDiscovered(filesDiscovered.get())
                 .directoriesDiscovered(directoriesDiscovered.get())
                 .filesTotal(totalFiles)
                 .directoriesTotal(totalDirs)
-                .status("Scan finished. Starting processing...")
                 .duration(formatDuration(Duration.between(startTime, Instant.now())))
                 .build());
     }
 
     @Override
-    public void onHashing(Path path, long processed, long total) {
-        updateProgress(path, processed, total, "Hashing");
+    public void onHashing(Path path, long processed, long total, boolean scanningActive) {
+        updateProgress(path, processed, total, scanningActive);
     }
 
     @Override
-    public void onUnchanged(Path path, long processed, long total) {
-        updateProgress(path, processed, total, "Unchanged");
+    public void onUnchanged(Path path, long processed, long total, boolean scanningActive) {
+        updateProgress(path, processed, total, scanningActive);
     }
 
     @Override
@@ -95,13 +95,19 @@ public class WebUpdateObserver implements UpdateObserver {
                 .filesProcessed(filesProcessed.get())
                 .deletedProcessed(processed)
                 .deletedTotal(total)
-                .status("Deleting")
+                .scanningActive(false)
+                .hashingActive(false)
                 .duration(formatDuration(Duration.between(startTime, Instant.now())))
                 .build());
     }
 
     @Override
     public void onFinished(Statistics stats) {
+        publish(ProgressUpdate.builder()
+                .repo(repoName)
+                .scanningActive(false)
+                .hashingActive(false)
+                .build());
         eventBus.publish("finished", Map.of("repo", repoName));
     }
 
@@ -114,9 +120,12 @@ public class WebUpdateObserver implements UpdateObserver {
                 .build());
     }
 
-    private void updateProgress(Path path, long processed, long total, String status) {
+    private void updateProgress(Path path, long processed, long total, boolean scanningActive) {
         this.filesProcessed.set(processed);
-        this.filesTotal.set(total);
+        if (scanningActive || total > this.filesTotal.get()) {
+            this.filesTotal.set(total);
+        }
+        long currentTotal = this.filesTotal.get();
         Instant now = Instant.now();
         Duration elapsed = Duration.between(startTime, now);
 
@@ -127,12 +136,16 @@ public class WebUpdateObserver implements UpdateObserver {
                 .filesDiscovered(filesDiscovered.get())
                 .directoriesDiscovered(directoriesDiscovered.get())
                 .filesProcessed(processed)
-                .filesTotal(total)
-                .status(status)
+                .filesTotal(currentTotal)
+                .scanningActive(scanningActive)
+                .hashingActive(processed < currentTotal)
                 .duration(formatDuration(elapsed));
 
-        if (total > 0 && scanFinished.get()) {
-            double percent = (double) processed / total * 100;
+        if (currentTotal > 0) {
+            double percent = (double) processed / currentTotal * 100;
+            if (scanningActive && percent >= 100.0) {
+                percent = 99.0;
+            }
 
             // Limit percent update to once per second
             long nowSec = now.getEpochSecond();
@@ -144,12 +157,11 @@ public class WebUpdateObserver implements UpdateObserver {
             }
 
             if (processed > 0) {
-                Duration remaining = elapsed.multipliedBy(total - processed).dividedBy(processed);
+                Duration remaining = elapsed.multipliedBy(currentTotal - processed).dividedBy(processed);
                 builder.eta(formatDuration(remaining));
 
                 ZonedDateTime end = now.plus(remaining).atZone(ZoneId.systemDefault());
                 builder.endTime(TIME_FORMATTER.format(end));
-                builder.status(status);
             }
         }
 

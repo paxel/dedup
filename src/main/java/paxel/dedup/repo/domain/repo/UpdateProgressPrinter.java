@@ -72,16 +72,17 @@ class UpdateProgressPrinter implements FileObserver {
         future.thenAccept(add -> {
             betterPrediction.trigger();
             long currentTotal = files.get();
+            boolean stillScanning = !scanFinished.get();
             if (add.isSuccess()) {
                 if (add.value() != null) {
                     statistics.inc("added");
                     statistics.inc(add.value().mimeType());
                     long currentHashed = hash.incrementAndGet();
-                    observer.onHashing(absolutePath, currentHashed, currentTotal);
+                    observer.onHashing(absolutePath, currentHashed, currentTotal, stillScanning);
                 } else {
                     statistics.inc("unchanged");
                     long currentUnchanged = unchanged.incrementAndGet();
-                    observer.onUnchanged(absolutePath, currentUnchanged, currentTotal);
+                    observer.onUnchanged(absolutePath, currentUnchanged, currentTotal, stillScanning);
                 }
             } else {
                 fail(absolutePath, add.error().exception());

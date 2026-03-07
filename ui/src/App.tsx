@@ -49,6 +49,7 @@ interface ProgressUpdate {
   endTime?: string;
   errors?: string;
   scanningActive?: boolean;
+  hashingActive?: boolean;
   filesDiscovered?: number;
   directoriesDiscovered?: number;
 }
@@ -466,23 +467,22 @@ function App() {
                 }
             });
 
-            // Guard gegen Rücksprünge (außer in der Scan-Phase)
-            if (!newPayload.scanningActive) {
-                if (current.filesTotal && newPayload.filesTotal && newPayload.filesTotal < current.filesTotal) {
-                    newPayload.filesTotal = current.filesTotal;
-                }
-                if (current.filesProcessed && newPayload.filesProcessed && newPayload.filesProcessed < current.filesProcessed) {
-                    newPayload.filesProcessed = current.filesProcessed;
-                }
-                if (current.progressPercent && newPayload.progressPercent && newPayload.progressPercent < current.progressPercent) {
-                    newPayload.progressPercent = current.progressPercent;
-                }
-                if (current.filesDiscovered && newPayload.filesDiscovered && newPayload.filesDiscovered < current.filesDiscovered) {
-                    newPayload.filesDiscovered = current.filesDiscovered;
-                }
-                if (current.directoriesDiscovered && newPayload.directoriesDiscovered && newPayload.directoriesDiscovered < current.directoriesDiscovered) {
-                    newPayload.directoriesDiscovered = current.directoriesDiscovered;
-                }
+            // Guard gegen Rücksprünge
+            if (current.filesTotal && newPayload.filesTotal && newPayload.filesTotal < current.filesTotal) {
+                newPayload.filesTotal = current.filesTotal;
+            }
+            if (current.filesProcessed && newPayload.filesProcessed && newPayload.filesProcessed < current.filesProcessed) {
+                newPayload.filesProcessed = current.filesProcessed;
+            }
+            // progressPercent darf während des Scans schwanken, da sich die Gesamtzahl ändert
+            if (!newPayload.scanningActive && current.progressPercent && newPayload.progressPercent && newPayload.progressPercent < current.progressPercent) {
+                newPayload.progressPercent = current.progressPercent;
+            }
+            if (current.filesDiscovered && newPayload.filesDiscovered && newPayload.filesDiscovered < current.filesDiscovered) {
+                newPayload.filesDiscovered = current.filesDiscovered;
+            }
+            if (current.directoriesDiscovered && newPayload.directoriesDiscovered && newPayload.directoriesDiscovered < current.directoriesDiscovered) {
+                newPayload.directoriesDiscovered = current.directoriesDiscovered;
             }
 
             return {
@@ -721,8 +721,16 @@ function App() {
                             <span className="text-sm font-black text-blue-300">{proc.endTime || '--:--:--'}</span>
                           </div>
                           <div className="flex flex-col">
-                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Status</span>
-                            <span className="text-[10px] font-medium text-slate-400 truncate w-full" title={proc.status}>{proc.status || 'Initializing...'}</span>
+                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Scanning</span>
+                            <span className={`text-sm font-black ${proc.scanningActive ? 'text-blue-400 animate-pulse' : 'text-emerald-400'}`}>
+                              {proc.scanningActive ? 'Active' : 'Done'}
+                            </span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Hashing</span>
+                            <span className={`text-sm font-black ${proc.hashingActive ? 'text-blue-400 animate-pulse' : 'text-emerald-400'}`}>
+                              {proc.hashingActive ? 'Active' : 'Done'}
+                            </span>
                           </div>
                         </div>
 

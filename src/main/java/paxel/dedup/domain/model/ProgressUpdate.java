@@ -30,6 +30,7 @@ public class ProgressUpdate {
     Map<String, Long> mimeDistribution;
 
     Boolean scanningActive;
+    Boolean hashingActive;
     Long filesDiscovered;
     Long directoriesDiscovered;
 }

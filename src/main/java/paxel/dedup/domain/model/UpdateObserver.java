@@ -7,9 +7,9 @@ public interface UpdateObserver {
 
     void onScanFinished(long totalFiles, long totalDirs);
 
-    void onHashing(Path path, long processed, long total);
+    void onHashing(Path path, long processed, long total, boolean scanningActive);
 
-    void onUnchanged(Path path, long processed, long total);
+    void onUnchanged(Path path, long processed, long total, boolean scanningActive);
 
     void onDeleted(Path path, long processed, long total);
 
