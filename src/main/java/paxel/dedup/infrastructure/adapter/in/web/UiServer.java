@@ -15,6 +15,7 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public class UiServer {
@@ -25,6 +26,7 @@ public class UiServer {
     private final paxel.dedup.domain.port.out.FileSystem fileSystem;
     private final InfrastructureConfig infrastructureConfig;
     private final java.util.concurrent.ExecutorService updateExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private final ConcurrentHashMap<String, UpdateReposProcess> activeUpdates = new ConcurrentHashMap<>();
 
     public UiServer(InfrastructureConfig infrastructureConfig) {
         this.infrastructureConfig = infrastructureConfig;
@@ -199,22 +201,73 @@ public class UiServer {
             ctx.status(202).json(Map.of("message", (move ? "Move" : "Copy") + " started for " + name));
         });
 
-        app.post("/api/repos/{name}/update", ctx -> {
-            String name = ctx.pathParam("name");
-            log.info("Update requested for repository: {}", name);
+        app.post("/api/repos/update-batch", ctx -> {
+            List<String> names = ctx.bodyAsClass(List.class);
+            if (names == null || names.isEmpty()) {
+                ctx.status(400).json(Map.of("message", "No repositories specified"));
+                return;
+            }
+            log.info("Batch update requested for repositories: {}", names);
             updateExecutor.execute(() -> {
-                try {
-                    log.info("Starting background update process for: {}", name);
+                for (String name : names) {
+                    if (activeUpdates.containsKey(name)) {
+                        log.warn("Update already running for {}, skipping", name);
+                        continue;
+                    }
                     UpdateReposProcess process = new UpdateReposProcess(
                             new CliParameter(),
                             java.util.List.of(name),
                             false,
                             2,
                             infrastructureConfig.getDedupConfig(),
-                            false, // progress (Terminal/Lanterna)
-                            false,  // refreshFingerprints
-                            infrastructureConfig.getFileSystem() // Explicitly pass fileSystem
+                            false,
+                            false,
+                            infrastructureConfig.getFileSystem()
                     ).withEventBus(eventBus);
+                    activeUpdates.put(name, process);
+                    eventBus.publish("progress", Map.of("repo", name, "reset", true));
+                    try {
+                        log.info("Starting sequential update for: {}", name);
+                        var result = process.update();
+                        if (result.hasFailed()) {
+                            log.error("Update failed for {}: {}", name, result.error().describe());
+                            eventBus.publish("error", Map.of("repo", name, "message", result.error().describe()));
+                        } else {
+                            log.info("Update completed successfully for: {}", name);
+                        }
+                    } catch (Exception e) {
+                        log.error("Critical error during update for {}", name, e);
+                        eventBus.publish("error", Map.of("repo", name, "message", e.getMessage()));
+                    } finally {
+                        activeUpdates.remove(name);
+                    }
+                }
+            });
+            ctx.status(202).json(Map.of("message", "Batch update started for " + names.size() + " repositories"));
+        });
+
+        app.post("/api/repos/{name}/update", ctx -> {
+            String name = ctx.pathParam("name");
+            log.info("Update requested for repository: {}", name);
+            if (activeUpdates.containsKey(name)) {
+                ctx.status(409).json(java.util.Map.of("message", "Update already running for " + name));
+                return;
+            }
+            UpdateReposProcess process = new UpdateReposProcess(
+                    new CliParameter(),
+                    java.util.List.of(name),
+                    false,
+                    2,
+                    infrastructureConfig.getDedupConfig(),
+                    false, // progress (Terminal/Lanterna)
+                    false,  // refreshFingerprints
+                    infrastructureConfig.getFileSystem() // Explicitly pass fileSystem
+            ).withEventBus(eventBus);
+            activeUpdates.put(name, process);
+            eventBus.publish("progress", Map.of("repo", name, "reset", true));
+            updateExecutor.execute(() -> {
+                try {
+                    log.info("Starting background update process for: {}", name);
                     var result = process.update();
                     if (result.hasFailed()) {
                         log.error("Update failed for {}: {}", name, result.error().describe());
@@ -225,9 +278,23 @@ public class UiServer {
                 } catch (Exception e) {
                     log.error("Critical error during update for {}", name, e);
                     eventBus.publish("error", Map.of("repo", name, "message", e.getMessage()));
+                } finally {
+                    activeUpdates.remove(name);
                 }
             });
             ctx.status(202).json(java.util.Map.of("message", "Update started for " + name));
+        });
+
+        app.post("/api/repos/{name}/cancel", ctx -> {
+            String name = ctx.pathParam("name");
+            UpdateReposProcess process = activeUpdates.get(name);
+            if (process != null) {
+                process.cancel();
+                log.info("Cancel requested for repository: {}", name);
+                ctx.status(202).json(Map.of("message", "Cancel requested for " + name));
+            } else {
+                ctx.status(404).json(Map.of("message", "No active update for " + name));
+            }
         });
 
         app.get("/api/repos/{name}/dupes", ctx -> {

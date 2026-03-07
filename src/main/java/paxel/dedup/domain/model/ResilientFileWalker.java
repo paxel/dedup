@@ -1,6 +1,5 @@
 package paxel.dedup.domain.model;
 
-import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import paxel.dedup.domain.port.out.FileSystem;
 
@@ -12,13 +11,25 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
-@RequiredArgsConstructor
 public class ResilientFileWalker {
 
     private final FileObserver fileObserver;
     private final FileSystem fileSystem;
+    private final AtomicBoolean cancelled;
     private final LinkedBlockingDeque<Path> directories = new LinkedBlockingDeque<>();
     private final AtomicBoolean finished = new AtomicBoolean();
+
+    public ResilientFileWalker(FileObserver fileObserver, FileSystem fileSystem) {
+        this.fileObserver = fileObserver;
+        this.fileSystem = fileSystem;
+        this.cancelled = new AtomicBoolean(false);
+    }
+
+    public ResilientFileWalker(FileObserver fileObserver, FileSystem fileSystem, AtomicBoolean cancelled) {
+        this.fileObserver = fileObserver;
+        this.fileSystem = fileSystem;
+        this.cancelled = cancelled;
+    }
 
     @SneakyThrows(InterruptedException.class)
     public void walk(Path root) {
@@ -32,6 +43,10 @@ public class ResilientFileWalker {
                 });
 
         for (; ; ) {
+            if (cancelled.get()) {
+                fileObserver.close();
+                return;
+            }
             Path pop = directories.poll(1, TimeUnit.SECONDS);
             if (pop != null)
                 processDir(pop);
@@ -62,6 +77,9 @@ public class ResilientFileWalker {
     }
 
     private void populateDirectories(Path parent) {
+        if (cancelled.get()) {
+            return;
+        }
         // count parent when entered. so the numbers are equal to the "when left"
         directories.add(parent);
         fileObserver.addDir(parent);

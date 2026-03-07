@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -36,6 +37,16 @@ public class UpdateReposProcess {
     private final boolean refreshFingerprints;
     private final FileSystem fileSystem;
     private paxel.dedup.domain.service.EventBus eventBus;
+    private final AtomicBoolean cancelled = new AtomicBoolean(false);
+    private volatile UpdateProgressPrinter currentPrinter;
+
+    public void cancel() {
+        cancelled.set(true);
+        UpdateProgressPrinter printer = currentPrinter;
+        if (printer != null) {
+            printer.cancelNow();
+        }
+    }
 
     public UpdateReposProcess(CliParameter cliParameter, List<String> names, boolean all, int threads, DedupConfig dedupConfig, boolean progress, boolean refreshFingerprints) {
         this(cliParameter, names, all, threads, dedupConfig, progress, refreshFingerprints, new NioFileSystemAdapter());
@@ -124,7 +135,10 @@ public class UpdateReposProcess {
             Statistics statistics = new Statistics(repoManager.getRepo().absolutePath());
 
             UpdateProgressPrinter progressPrinterObserver = new UpdateProgressPrinter(remainingPaths, observer, repoManager, statistics, sha1Hasher, refreshFingerprints);
-            new ResilientFileWalker(progressPrinterObserver, fileSystem).walk(root);
+            progressPrinterObserver.setCancelled(cancelled);
+            currentPrinter = progressPrinterObserver;
+            new ResilientFileWalker(progressPrinterObserver, fileSystem, cancelled).walk(root);
+            currentPrinter = null;
 
             if (progressPrinterObserver.getErrors() > 0 && progressPrinterObserver.getAllDirs() <= 1 && progressPrinterObserver.getFiles() == 0) {
                 Throwable first = progressPrinterObserver.getFirstError();

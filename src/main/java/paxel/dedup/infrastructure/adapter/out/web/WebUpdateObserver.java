@@ -24,8 +24,6 @@ public class WebUpdateObserver implements UpdateObserver {
     private final String absolutePath;
     private final EventBus eventBus;
     private final Instant startTime = Instant.now();
-    private final AtomicLong lastPercentUpdate = new AtomicLong(0);
-
     private final AtomicLong filesDiscovered = new AtomicLong(0);
     private final AtomicLong directoriesDiscovered = new AtomicLong(0);
     private final AtomicLong filesTotal = new AtomicLong(0);
@@ -45,7 +43,6 @@ public class WebUpdateObserver implements UpdateObserver {
                 .repo(repoName)
                 .path(absolutePath)
                 .scanningActive(true)
-                .hashingActive(false)
                 .filesDiscovered(totalFiles)
                 .directoriesDiscovered(totalDirs)
                 .duration(formatDuration(Duration.between(startTime, Instant.now())))
@@ -138,7 +135,7 @@ public class WebUpdateObserver implements UpdateObserver {
                 .filesProcessed(processed)
                 .filesTotal(currentTotal)
                 .scanningActive(scanningActive)
-                .hashingActive(processed < currentTotal)
+                .hashingActive(true)
                 .duration(formatDuration(elapsed));
 
         if (currentTotal > 0) {
@@ -146,15 +143,7 @@ public class WebUpdateObserver implements UpdateObserver {
             if (scanningActive && percent >= 100.0) {
                 percent = 99.0;
             }
-
-            // Limit percent update to once per second
-            long nowSec = now.getEpochSecond();
-            long lastSec = lastPercentUpdate.get();
-            if (nowSec > lastSec) {
-                if (lastPercentUpdate.compareAndSet(lastSec, nowSec)) {
-                    builder.progressPercent(percent);
-                }
-            }
+            builder.progressPercent(percent);
 
             if (processed > 0) {
                 Duration remaining = elapsed.multipliedBy(currentTotal - processed).dividedBy(processed);

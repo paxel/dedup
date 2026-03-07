@@ -29,6 +29,7 @@ class UpdateProgressPrinter implements FileObserver {
     private final AtomicLong allDirs = new AtomicLong();
     private final AtomicLong hash = new AtomicLong();
     private final AtomicLong unchanged = new AtomicLong();
+    private final AtomicLong processed = new AtomicLong();
     private final AtomicLong errors = new AtomicLong();
     private final AtomicReference<Throwable> firstError = new AtomicReference<>();
     private final Instant start;
@@ -36,6 +37,7 @@ class UpdateProgressPrinter implements FileObserver {
     private final Clock clock;
     private final boolean refreshFingerprints;
     private final List<CompletableFuture<?>> futures = Collections.synchronizedList(new ArrayList<>());
+    private java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
 
     public UpdateProgressPrinter(Map<Path, RepoFile> remainingPaths, UpdateObserver observer,
                                  RepoManager repoManager, Statistics statistics, FileHasher fileHasher,
@@ -77,12 +79,14 @@ class UpdateProgressPrinter implements FileObserver {
                 if (add.value() != null) {
                     statistics.inc("added");
                     statistics.inc(add.value().mimeType());
-                    long currentHashed = hash.incrementAndGet();
-                    observer.onHashing(absolutePath, currentHashed, currentTotal, stillScanning);
+                    hash.incrementAndGet();
+                    long currentProcessed = processed.incrementAndGet();
+                    observer.onHashing(absolutePath, currentProcessed, currentTotal, stillScanning);
                 } else {
                     statistics.inc("unchanged");
-                    long currentUnchanged = unchanged.incrementAndGet();
-                    observer.onUnchanged(absolutePath, currentUnchanged, currentTotal, stillScanning);
+                    unchanged.incrementAndGet();
+                    long currentProcessed = processed.incrementAndGet();
+                    observer.onUnchanged(absolutePath, currentProcessed, currentTotal, stillScanning);
                 }
             } else {
                 fail(absolutePath, add.error().exception());
@@ -137,13 +141,28 @@ class UpdateProgressPrinter implements FileObserver {
         return allDirs.get();
     }
 
+    public void setCancelled(java.util.concurrent.atomic.AtomicBoolean cancelled) {
+        this.cancelled = cancelled;
+    }
+
+    public void cancelNow() {
+        cancelled.set(true);
+        futures.forEach(f -> f.cancel(true));
+        futures.clear();
+    }
+
     @Override
     public void close() {
-        while (!futures.isEmpty()) {
-            try {
-                CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get();
-            } catch (Exception e) {
-                fail(null, e);
+        if (cancelled.get()) {
+            futures.forEach(f -> f.cancel(true));
+            futures.clear();
+        } else {
+            while (!futures.isEmpty()) {
+                try {
+                    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get();
+                } catch (Exception e) {
+                    fail(null, e);
+                }
             }
         }
 

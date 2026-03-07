@@ -72,6 +72,11 @@ function App() {
   const [errors, setErrors] = useState<ErrorEvent[]>([])
   const [toast, setToast] = useState<{ id: string; message: string; repo?: string } | null>(null)
   const toastTimeoutRef = useRef<any>(null)
+  const pendingProgressRef = useRef<Record<string, ProgressUpdate>>({})
+  const throttleTimerRef = useRef<any>(null)
+  const [showScanDropdown, setShowScanDropdown] = useState(false)
+  const [selectedReposForScan, setSelectedReposForScan] = useState<Set<string>>(new Set())
+  const scanDropdownRef = useRef<HTMLDivElement>(null)
   const [showPruneModal, setShowPruneModal] = useState<string | null>(null)
   const [showRelocateModal, setShowRelocateModal] = useState<Repo | null>(null)
   const [showCloneModal, setShowCloneModal] = useState<Repo | null>(null)
@@ -149,8 +154,8 @@ function App() {
     }
   })
 
-  const updateMutation = useMutation({
-    mutationFn: (name: string) => axios.post(`/api/repos/${name}/update`),
+  const batchUpdateMutation = useMutation({
+    mutationFn: (names: string[]) => axios.post('/api/repos/update-batch', names),
     onError: (error: any) => {
       const message = error.response?.data?.description || error.message || 'Failed to start update'
       const newError: ErrorEvent = {
@@ -162,6 +167,31 @@ function App() {
       setErrors(prev => [newError, ...prev])
       setToast({ id: newError.id, message: newError.message })
     }
+  })
+  const updateMutation = useMutation({
+    mutationFn: (name: string) => axios.post(`/api/repos/${name}/update`),
+    onMutate: (name: string) => {
+      setActiveProcesses(prev => {
+        const next = { ...prev }
+        delete next[name]
+        return next
+      })
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.description || error.message || 'Failed to start update'
+      const newError: ErrorEvent = {
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp: Date.now(),
+        message,
+        read: false
+      }
+      setErrors(prev => [newError, ...prev])
+      setToast({ id: newError.id, message: newError.message })
+    }
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: (name: string) => axios.post(`/api/repos/${name}/cancel`),
   })
 
   const pruneMutation = useMutation({
@@ -414,6 +444,16 @@ function App() {
   };
 
   useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (scanDropdownRef.current && !scanDropdownRef.current.contains(e.target as Node)) {
+        setShowScanDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  useEffect(() => {
     let ws: WebSocket | null = null;
     let reconnectTimeout: any = null;
     let shouldReconnect = true;
@@ -441,68 +481,68 @@ function App() {
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data)
+        if (data.type === 'progress' && data.payload?.reset) {
+          const repoName = data.payload.repo || 'default';
+          // Reset: initialize a fresh scanning state instead of deleting
+          const fresh = { repo: repoName, scanningActive: true, hashingActive: false, filesDiscovered: 0, directoriesDiscovered: 0, filesProcessed: 0, filesTotal: 0, progressPercent: 0 };
+          pendingProgressRef.current[repoName] = fresh;
+          setActiveProcesses((prev) => ({ ...prev, [repoName]: fresh }));
+          return
+        }
         if (data.type === 'progress') {
           const repoName = data.payload.repo || 'default';
-          setActiveProcesses((prev) => {
-            const current = prev[repoName];
-            
-            if (!current) {
-              return {
-                ...prev,
-                [repoName]: {
-                  ...data.payload,
-                  scanningActive: data.payload.scanningActive ?? true,
-                  filesDiscovered: data.payload.filesDiscovered ?? 0,
-                  directoriesDiscovered: data.payload.directoriesDiscovered ?? 0
-                }
-              };
+          const pending = pendingProgressRef.current[repoName];
+          const merged = pending ? { ...pending } : { repo: repoName, scanningActive: true, hashingActive: false, filesDiscovered: 0, directoriesDiscovered: 0, filesProcessed: 0, filesTotal: 0, progressPercent: 0 };
+          const incoming = data.payload;
+          // Merge: incoming wins, but don't allow null/undefined to overwrite existing values
+          Object.keys(incoming).forEach((key: string) => {
+            if (incoming[key] !== undefined && incoming[key] !== null) {
+              (merged as any)[key] = incoming[key];
             }
-            
-            const newPayload = { ...data.payload };
-            
-            // Verhindere, dass Werte auf undefined oder null zurückgesetzt werden, wenn sie im Payload fehlen
-            Object.keys(current).forEach(key => {
-                if (newPayload[key] === undefined || newPayload[key] === null) {
-                    newPayload[key] = (current as any)[key];
-                }
-            });
-
-            // Guard gegen Rücksprünge
-            if (current.filesTotal && newPayload.filesTotal && newPayload.filesTotal < current.filesTotal) {
-                newPayload.filesTotal = current.filesTotal;
-            }
-            if (current.filesProcessed && newPayload.filesProcessed && newPayload.filesProcessed < current.filesProcessed) {
-                newPayload.filesProcessed = current.filesProcessed;
-            }
-            // progressPercent darf während des Scans schwanken, da sich die Gesamtzahl ändert
-            if (!newPayload.scanningActive && current.progressPercent && newPayload.progressPercent && newPayload.progressPercent < current.progressPercent) {
-                newPayload.progressPercent = current.progressPercent;
-            }
-            if (current.filesDiscovered && newPayload.filesDiscovered && newPayload.filesDiscovered < current.filesDiscovered) {
-                newPayload.filesDiscovered = current.filesDiscovered;
-            }
-            if (current.directoriesDiscovered && newPayload.directoriesDiscovered && newPayload.directoriesDiscovered < current.directoriesDiscovered) {
-                newPayload.directoriesDiscovered = current.directoriesDiscovered;
-            }
-
-            return {
-              ...prev,
-              [repoName]: newPayload
-            };
           });
-        } else if (data.type === 'finished') {
-          const repoName = data.payload?.repo || 'default';
-          // Wir lassen den Prozess noch kurz stehen, damit der Benutzer das "Finished" sieht
-          setTimeout(() => {
+          // Never regress hashingActive from true to false unless scan is also finished (explicit finish event)
+          if (pending?.hashingActive && merged.hashingActive === false && merged.scanningActive !== false) {
+            merged.hashingActive = true;
+          }
+          // Guard against regressions
+          if (pending?.filesTotal && merged.filesTotal && merged.filesTotal < pending.filesTotal) merged.filesTotal = pending.filesTotal;
+          if (pending?.filesProcessed && merged.filesProcessed && merged.filesProcessed < pending.filesProcessed) merged.filesProcessed = pending.filesProcessed;
+          if (pending?.filesDiscovered && merged.filesDiscovered && merged.filesDiscovered < pending.filesDiscovered) merged.filesDiscovered = pending.filesDiscovered;
+          if (pending?.directoriesDiscovered && merged.directoriesDiscovered && merged.directoriesDiscovered < pending.directoriesDiscovered) merged.directoriesDiscovered = pending.directoriesDiscovered;
+          // Compute progressPercent
+          const processed = merged.filesProcessed || 0;
+          const total = merged.filesTotal || 0;
+          if (total > 0) {
+            merged.progressPercent = Math.min((processed / total) * 100, 100);
+          }
+          pendingProgressRef.current[repoName] = merged;
+          // Throttle UI updates to 1Hz
+          if (!throttleTimerRef.current) {
+            throttleTimerRef.current = setTimeout(() => {
+              throttleTimerRef.current = null;
+              const snapshot = { ...pendingProgressRef.current };
               setActiveProcesses((prev) => {
                 const next = { ...prev };
-                delete next[repoName];
+                Object.entries(snapshot).forEach(([repo, update]) => {
+                  next[repo] = update;
+                });
                 return next;
               });
-          }, 2000);
+            }, 1000);
+          }
+        } else if (data.type === 'finished') {
+          const repoName = data.payload?.repo || 'default';
+          delete pendingProgressRef.current[repoName];
+          // Clean up immediately — no delay needed
+          setActiveProcesses((prev) => {
+            const next = { ...prev };
+            delete next[repoName];
+            return next;
+          });
           queryClient.invalidateQueries({ queryKey: ['repos'] })
         } else if (data.type === 'error') {
           const repoName = data.payload?.repo || 'default';
+          delete pendingProgressRef.current[repoName];
           setActiveProcesses((prev) => {
             const next = { ...prev };
             delete next[repoName];
@@ -572,7 +612,7 @@ function App() {
   const unreadErrorCount = errors.filter(e => !e.read).length
 
   return (
-    <div className="min-h-screen w-full bg-slate-950 text-slate-50 p-6 md:p-10 pb-32">
+    <div className="min-h-screen w-full bg-slate-950 text-slate-50 px-4 py-6 pb-32">
       {/* Disconnection Overlay */}
       {!connected && (
         <div className="fixed inset-0 z-[200] bg-slate-950/80 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-500">
@@ -624,7 +664,7 @@ function App() {
         </div>
       )}
 
-      <div className="max-w-[1600px] mx-auto">
+      <div className="w-full">
         <header className="mb-10 flex justify-between items-center">
           <h1 className="text-4xl font-extrabold flex items-center gap-3 text-white tracking-tight">
             <Database className="w-10 h-10 text-blue-500" />
@@ -676,79 +716,71 @@ function App() {
           </div>
         </header>
 
+        {/* Floating progress overlays */}
         {Object.values(activeProcesses).length > 0 && (
-          <div className="fixed bottom-0 left-0 right-0 z-40 p-4 md:p-6 space-y-4 max-h-[40vh] overflow-y-auto bg-gradient-to-t from-slate-950/80 to-transparent pointer-events-none">
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-3 w-full max-w-3xl px-4">
             {Object.values(activeProcesses).map((proc) => (
-              <div key={proc.repo} className="max-w-[1600px] mx-auto pointer-events-auto animate-in slide-in-from-bottom-4 duration-300">
-                <div className="bg-slate-900/90 backdrop-blur-md border border-blue-500/30 rounded-2xl p-4 md:p-6 shadow-2xl shadow-blue-500/20">
-                  <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between mb-4">
-                    <div className="flex items-center gap-4 flex-1 min-w-0">
-                      <div className="bg-blue-600/20 p-2 rounded-xl shrink-0">
-                        <RefreshCw className="w-6 h-6 text-blue-500 animate-spin" />
+              <div key={proc.repo} className="flex flex-col gap-3">
+                {/* Scan Overlay – floating card, visible while scanning */}
+                {proc.scanningActive && (
+                  <div className="bg-slate-900/95 border border-blue-500/30 backdrop-blur-xl rounded-2xl shadow-2xl shadow-blue-500/10 px-6 py-4">
+                    <div className="flex items-center gap-4">
+                      <div className="bg-blue-600/20 p-2.5 rounded-xl shrink-0">
+                        <RefreshCw className="w-5 h-5 text-blue-400 animate-spin" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h3 className="text-lg font-black text-white flex items-center gap-2 truncate mb-1">
-                          Updating <span className="text-blue-500 truncate">{proc.repo}</span>
-                        </h3>
-                        
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mt-4">
-                          <div className="flex flex-col">
-                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Dirs Found</span>
-                            <span className="text-sm font-black text-white">{proc.directoriesDiscovered || 0}</span>
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Files Found</span>
-                            <span className="text-sm font-black text-white">{proc.filesDiscovered || 0}</span>
-                          </div>
-                          <div className="flex flex-col border-l border-slate-800 pl-4">
-                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Processed</span>
-                            <span className="text-sm font-black text-blue-400">{proc.filesProcessed || 0}</span>
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Progress</span>
-                            <span className="text-sm font-black text-emerald-400">{Math.round(proc.progressPercent || 0)}%</span>
-                          </div>
-                          <div className="flex flex-col border-l border-slate-800 pl-4">
-                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Elapsed</span>
-                            <span className="text-sm font-black text-slate-300">{proc.duration || '00:00:00'}</span>
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Remaining</span>
-                            <span className="text-sm font-black text-blue-400">{proc.eta || '--:--:--'}</span>
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">End Time</span>
-                            <span className="text-sm font-black text-blue-300">{proc.endTime || '--:--:--'}</span>
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Scanning</span>
-                            <span className={`text-sm font-black ${proc.scanningActive ? 'text-blue-400 animate-pulse' : 'text-emerald-400'}`}>
-                              {proc.scanningActive ? 'Active' : 'Done'}
-                            </span>
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Hashing</span>
-                            <span className={`text-sm font-black ${proc.hashingActive ? 'text-blue-400 animate-pulse' : 'text-emerald-400'}`}>
-                              {proc.hashingActive ? 'Active' : 'Done'}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mt-4 shadow-inner">
-                          <div 
-                            className="h-full bg-blue-500 transition-all duration-300 ease-linear" 
-                            style={{ width: `${proc.progressPercent || 0}%` }}
-                          ></div>
-                        </div>
+                        <p className="text-[10px] uppercase font-bold text-blue-400 tracking-widest">Scanning — {proc.repo}</p>
                       </div>
+                      <div className="flex items-center gap-4 text-sm">
+                        <span className="text-slate-400"><span className="font-bold text-white">{proc.directoriesDiscovered || 0}</span> dirs</span>
+                        <span className="text-slate-400"><span className="font-bold text-white">{proc.filesDiscovered || 0}</span> files</span>
+                      </div>
+                      <button
+                        onClick={() => proc.repo && cancelMutation.mutate(proc.repo)}
+                        className="bg-red-600/20 hover:bg-red-600/40 border border-red-500/30 text-red-400 hover:text-red-300 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-1.5"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Cancel
+                      </button>
                     </div>
                   </div>
-                </div>
+                )}
+                {/* Hash Overlay – floating card, visible while hashing */}
+                {proc.hashingActive && (
+                  <div className="bg-slate-900/95 border border-emerald-500/30 backdrop-blur-xl rounded-2xl shadow-2xl shadow-emerald-500/10 px-6 py-4">
+                    <div className="flex items-center gap-4">
+                      <div className="bg-emerald-600/20 p-2.5 rounded-xl shrink-0">
+                        <RefreshCw className="w-5 h-5 text-emerald-400 animate-spin" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[10px] uppercase font-bold text-emerald-400 tracking-widest mb-1.5">Hashing — {proc.repo}</p>
+                        <div className="w-full h-2 bg-slate-700/80 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-500 ease-linear rounded-full"
+                            style={{ width: `${proc.progressPercent || 0}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm whitespace-nowrap">
+                        <span className="font-bold text-white">{proc.filesProcessed || 0}</span>
+                        <span className="text-slate-500">/</span>
+                        <span className="text-slate-400">{proc.filesTotal || 0}</span>
+                        <span className="text-emerald-400 font-bold ml-1">{Math.round(proc.progressPercent || 0)}%</span>
+                      </div>
+                      <button
+                        onClick={() => proc.repo && cancelMutation.mutate(proc.repo)}
+                        className="bg-red-600/20 hover:bg-red-600/40 border border-red-500/30 text-red-400 hover:text-red-300 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-1.5"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         )}
-
         {!selectedRepo ? (
           <div className="flex flex-col xl:flex-row gap-10">
             {/* Repository List */}
@@ -761,16 +793,75 @@ function App() {
                 </h2>
                 
                 <div className="flex items-center gap-3">
-                  <button 
-                    onClick={() => {
-                      if (repos) repos.forEach(r => updateMutation.mutate(r.name))
-                    }}
-                    disabled={!repos || repos.length === 0 || isAnyProcessRunning}
-                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-slate-700 disabled:opacity-30"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                    Scan All Repos
-                  </button>
+                  <div className="relative" ref={scanDropdownRef}>
+                    <button 
+                      onClick={() => {
+                        if (repos && repos.length > 0) {
+                          setShowScanDropdown(prev => !prev)
+                          if (selectedReposForScan.size === 0) {
+                            setSelectedReposForScan(new Set(repos.map(r => r.name)))
+                          }
+                        }
+                      }}
+                      disabled={!repos || repos.length === 0 || isAnyProcessRunning}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-slate-700 disabled:opacity-30"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      Scan Repos
+                      <ChevronRight className={`w-3 h-3 transition-transform ${showScanDropdown ? 'rotate-90' : ''}`} />
+                    </button>
+                    {showScanDropdown && repos && repos.length > 0 && (
+                      <div className="absolute right-0 top-full mt-2 z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl min-w-[220px] overflow-hidden">
+                        <div className="p-2 border-b border-slate-800">
+                          <button
+                            onClick={() => {
+                              if (selectedReposForScan.size === repos.length) {
+                                setSelectedReposForScan(new Set())
+                              } else {
+                                setSelectedReposForScan(new Set(repos.map(r => r.name)))
+                              }
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
+                          >
+                            {selectedReposForScan.size === repos.length ? 'Deselect All' : 'Select All'}
+                          </button>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto">
+                          {repos.map(r => (
+                            <label key={r.name} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-800 cursor-pointer transition-all">
+                              <input
+                                type="checkbox"
+                                checked={selectedReposForScan.has(r.name)}
+                                onChange={() => {
+                                  setSelectedReposForScan(prev => {
+                                    const next = new Set(prev)
+                                    if (next.has(r.name)) next.delete(r.name)
+                                    else next.add(r.name)
+                                    return next
+                                  })
+                                }}
+                                className="accent-blue-500"
+                              />
+                              <span className="text-sm text-slate-200 truncate">{r.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <div className="p-2 border-t border-slate-800">
+                          <button
+                            onClick={() => {
+                              batchUpdateMutation.mutate(Array.from(selectedReposForScan))
+                              setShowScanDropdown(false)
+                            }}
+                            disabled={selectedReposForScan.size === 0}
+                            className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white px-3 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            Scan {selectedReposForScan.size} Repo{selectedReposForScan.size !== 1 ? 's' : ''}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <button 
                     disabled={!repos || repos.length === 0 || isAnyProcessRunning}
                     className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-slate-700 disabled:opacity-30"
