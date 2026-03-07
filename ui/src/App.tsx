@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { Database, Activity, RefreshCw, Trash2, Plus, Folder, X, Search, FileText, ChevronRight, AlertTriangle, Bell, Trash, Copy, Move, Zap, Check } from 'lucide-react'
+import { Database, Activity, RefreshCw, Trash2, Plus, Folder, X, Search, FileText, ChevronRight, AlertTriangle, Bell, Trash, Copy, Move, Zap } from 'lucide-react'
 
 interface RepoStats {
   fileCount: number;
@@ -46,6 +46,7 @@ interface ProgressUpdate {
   deletedTotal?: number;
   duration?: string;
   eta?: string;
+  endTime?: string;
   errors?: string;
   scanningActive?: boolean;
   filesDiscovered?: number;
@@ -639,31 +640,6 @@ function App() {
                   </span>
                   <RefreshCw className="w-3 h-3 text-blue-500 animate-spin shrink-0" />
                 </div>
-                
-                <div className="h-4 flex items-center w-full justify-end">
-                  {proc.scanningActive ? (
-                    <div className="flex items-center gap-2 animate-pulse">
-                      <Search className="w-3 h-3 text-emerald-400 shrink-0" />
-                      <span className="text-[10px] font-bold text-emerald-400 whitespace-nowrap">
-                        Scanning: {proc.filesDiscovered || 0}
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">
-                      Processing...
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 w-full mt-1">
-                  <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-blue-500 transition-all duration-300 ease-linear" 
-                      style={{ width: `${proc.progressPercent || 0}%` }}
-                    ></div>
-                  </div>
-                  <span className="text-[10px] font-black text-blue-100 min-w-[35px] text-right">{Math.round(proc.progressPercent || 0)}%</span>
-                </div>
               </div>
             ))}
             <button 
@@ -701,87 +677,47 @@ function App() {
                           Updating <span className="text-blue-500 truncate">{proc.repo}</span>
                         </h3>
                         
-                        {/* Stabilized Info Areas */}
-                        <div className="grid grid-cols-2 gap-4 h-12">
-                          {/* Left: Scan Info */}
-                          <div className="border-r border-slate-800/50 pr-4 flex flex-col justify-center">
-                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest mb-1 block">Scan Phase</span>
-                            {proc.scanningActive ? (
-                              <div className="flex items-center gap-2 text-emerald-400 animate-pulse">
-                                <Search className="w-3 h-3" />
-                                <span className="text-[10px] font-black uppercase tracking-tighter">
-                                  Found {proc.filesDiscovered || 0} files / {proc.directoriesDiscovered || 0} dirs
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2 text-slate-400">
-                                <Check className="w-3 h-3 text-blue-500" />
-                                <span className="text-[10px] font-bold uppercase tracking-tighter">
-                                  Scan Complete
-                                </span>
-                              </div>
-                            )}
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mt-4">
+                          <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Dirs Found</span>
+                            <span className="text-sm font-black text-white">{proc.directoriesDiscovered || 0}</span>
                           </div>
-
-                          {/* Right: Process Info */}
-                          <div className="flex flex-col justify-center min-w-0">
-                             <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest mb-1 block">Processing Phase</span>
-                             <div className="h-4 flex items-center min-w-0">
-                               {!proc.scanningActive && proc.currentFile ? (
-                                 <p className="text-[10px] font-black uppercase text-blue-400 tracking-tighter truncate">
-                                   File: <span className="text-slate-100 italic">{proc.currentFile}</span>
-                                 </p>
-                               ) : !proc.scanningActive ? (
-                                 <p className="text-[10px] font-bold text-slate-500 uppercase italic">Initializing...</p>
-                               ) : (
-                                 <p className="text-[10px] font-bold text-slate-600 uppercase italic">Waiting for scan...</p>
-                               )}
-                             </div>
-                             <p className="text-[10px] text-slate-400 font-medium truncate mt-0.5">{proc.status}</p>
+                          <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Files Found</span>
+                            <span className="text-sm font-black text-white">{proc.filesDiscovered || 0}</span>
+                          </div>
+                          <div className="flex flex-col border-l border-slate-800 pl-4">
+                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Processed</span>
+                            <span className="text-sm font-black text-blue-400">{proc.filesProcessed || 0}</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Progress</span>
+                            <span className="text-sm font-black text-emerald-400">{Math.round(proc.progressPercent || 0)}%</span>
+                          </div>
+                          <div className="flex flex-col border-l border-slate-800 pl-4">
+                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Elapsed</span>
+                            <span className="text-sm font-black text-slate-300">{proc.duration || '00:00:00'}</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Remaining</span>
+                            <span className="text-sm font-black text-blue-400">{proc.eta || '--:--:--'}</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">End Time</span>
+                            <span className="text-sm font-black text-blue-300">{proc.endTime || '--:--:--'}</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest">Status</span>
+                            <span className="text-[10px] font-medium text-slate-400 truncate w-full" title={proc.status}>{proc.status || 'Initializing...'}</span>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-6 shrink-0 border-l border-slate-800 pl-6">
-                      <div className="text-right min-w-[80px]">
-                        <span className="text-[10px] uppercase font-bold text-slate-500 block mb-0.5">Progress</span>
-                        <span className="text-xl font-black text-white tracking-tighter">{Math.round(proc.progressPercent || 0)}%</span>
-                      </div>
-                      <div className="text-right border-l border-slate-800 pl-6 min-w-[120px]">
-                        <span className="text-[10px] uppercase font-bold text-slate-500 block mb-0.5">ETA</span>
-                        <span className="text-xl font-black text-blue-400 tracking-tighter">
-                          {proc.scanningActive ? 'Scanning...' : (proc.eta || '--:--:--')}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
 
-                  <div className="space-y-3">
-                    <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-4 shadow-inner">
-                      <div 
-                        className="h-full bg-blue-500 transition-all duration-300 ease-linear shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
-                        style={{ width: `${proc.progressPercent || 0}%` }}
-                      ></div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-x-8 gap-y-2 px-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] uppercase font-bold text-slate-500">Duration</span>
-                        <span className="text-xs font-bold text-slate-200">{proc.duration || '0s'}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] uppercase font-bold text-slate-500">Files</span>
-                        <span className="text-xs font-bold text-slate-200">{proc.filesProcessed || 0} / {proc.filesTotal || 0}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] uppercase font-bold text-slate-500">Dirs</span>
-                        <span className="text-xs font-bold text-slate-200">{proc.directoriesProcessed || 0} / {proc.directoriesTotal || 0}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] uppercase font-bold text-slate-500">Errors</span>
-                        <span className={`text-xs font-bold ${proc.errors && proc.errors !== 'none' && proc.errors !== '0' ? 'text-red-400' : 'text-emerald-400'}`}>
-                          {proc.errors || '0'}
-                        </span>
+                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mt-4 shadow-inner">
+                          <div 
+                            className="h-full bg-blue-500 transition-all duration-300 ease-linear" 
+                            style={{ width: `${proc.progressPercent || 0}%` }}
+                          ></div>
+                        </div>
                       </div>
                     </div>
                   </div>

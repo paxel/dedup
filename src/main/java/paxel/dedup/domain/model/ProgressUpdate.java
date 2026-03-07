@@ -25,6 +25,7 @@ public class ProgressUpdate {
     Long deletedTotal;
     String duration;
     String eta;
+    String endTime;
     String errors;
     Map<String, Long> mimeDistribution;
 

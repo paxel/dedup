@@ -6,6 +6,8 @@ import paxel.dedup.domain.model.*;
 import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
+import paxel.dedup.infrastructure.adapter.out.terminal.TerminalUpdateObserver;
+import paxel.dedup.infrastructure.adapter.out.web.WebUpdateObserver;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.terminal.StatisticPrinter;
 import paxel.dedup.terminal.TerminalProgress;
@@ -91,10 +93,15 @@ public class UpdateReposProcess {
             return load.mapError(f -> DedupError.of(paxel.dedup.domain.model.errors.ErrorType.UPDATE_REPO, repoManager.getRepoDir() + ": load failed", f.exception()));
         }
         Map<Path, RepoFile> remainingPaths = repoManager.stream().filter(r -> !r.missing()).collect(Collectors.toMap(r -> Paths.get(repoManager.getRepo().absolutePath(), r.relativePath()), Function.identity(), (old, update) -> update));
+
         StatisticPrinter progressPrinter = new StatisticPrinter();
+        UpdateObserver observer;
         if (eventBus != null) {
-            progressPrinter.setEventBus(eventBus);
+            observer = new WebUpdateObserver(repoManager.getRepo().name(), repoManager.getRepo().absolutePath(), eventBus);
+        } else {
+            observer = new TerminalUpdateObserver(repoManager.getRepo().name(), repoManager.getRepo().absolutePath(), progressPrinter);
         }
+
         TerminalProgress terminalProgress = prepProgress(progressPrinter);
         PrintStream originalErr = System.err;
         if (progress) {
@@ -114,15 +121,13 @@ public class UpdateReposProcess {
             }));
         }
         try (Sha1Hasher sha1Hasher = new Sha1Hasher(new HexFormatter(), Executors.newFixedThreadPool(threads))) {
-            progressPrinter.set(repoManager.getRepo().name(), repoManager.getRepo().absolutePath());
-            progressPrinter.setProgress("...stand by... collecting info");
             Statistics statistics = new Statistics(repoManager.getRepo().absolutePath());
 
-            UpdateProgressPrinter observer = new UpdateProgressPrinter(remainingPaths, progressPrinter, repoManager, statistics, sha1Hasher, refreshFingerprints);
-            new ResilientFileWalker(observer, fileSystem).walk(root);
+            UpdateProgressPrinter progressPrinterObserver = new UpdateProgressPrinter(remainingPaths, observer, repoManager, statistics, sha1Hasher, refreshFingerprints);
+            new ResilientFileWalker(progressPrinterObserver, fileSystem).walk(root);
 
-            if (observer.getErrors() > 0 && observer.getAllDirs() <= 1 && observer.getFiles() == 0) {
-                Throwable first = observer.getFirstError();
+            if (progressPrinterObserver.getErrors() > 0 && progressPrinterObserver.getAllDirs() <= 1 && progressPrinterObserver.getFiles() == 0) {
+                Throwable first = progressPrinterObserver.getFirstError();
                 Exception ex = first instanceof Exception ? (Exception) first : new Exception(first);
                 return Result.err(DedupError.of(paxel.dedup.domain.model.errors.ErrorType.UPDATE_REPO, root + ": Repository walk failed: " + first.getMessage(), ex));
             }

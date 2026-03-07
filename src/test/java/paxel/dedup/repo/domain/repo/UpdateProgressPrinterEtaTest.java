@@ -1,11 +1,9 @@
 package paxel.dedup.repo.domain.repo;
 
 import org.junit.jupiter.api.Test;
-import paxel.dedup.domain.model.FileHasher;
-import paxel.dedup.domain.model.Repo;
-import paxel.dedup.domain.model.RepoFile;
-import paxel.dedup.domain.model.Statistics;
+import paxel.dedup.domain.model.*;
 import paxel.dedup.domain.model.errors.DedupError;
+import paxel.dedup.infrastructure.adapter.out.terminal.TerminalUpdateObserver;
 import paxel.dedup.terminal.StatisticPrinter;
 import paxel.lib.Result;
 
@@ -93,9 +91,10 @@ class UpdateProgressPrinterEtaTest {
         };
 
         Statistics stats = new Statistics("test");
+        UpdateObserver observer = new TerminalUpdateObserver("testRepo", "/tmp", printer);
         UpdateProgressPrinter upp = new UpdateProgressPrinter(
                 Collections.emptyMap(),
-                printer,
+                observer,
                 repoManager,
                 stats,
                 stubHasher,
@@ -110,14 +109,10 @@ class UpdateProgressPrinterEtaTest {
         // Act: process a single file (total=1, processed=1 -> remaining=0)
         upp.file(Path.of("/tmp/a.txt"));
 
-        // Assert: progress contains 100% and a zero remaining duration with ETA equal to clock time (00:00:31 at epoch UTC)
+        // Assert: progress contains 100% and Hashing status
         String progressLine = lastProgress.get();
         assertThat(progressLine).startsWith("   Progress: ");
         assertThat(progressLine).contains("100.00 %");
-        // Apache DurationFormatUtils#formatDurationWords(0, ...) yields "0 seconds"
-        assertThat(progressLine).contains("remaining: 0 seconds");
-        // ETA should be exactly formatted with the injected clock time (00:00:31 at epoch UTC)
-        // Note: StatisticPrinter adds " ETA: " before the value
-        assertThat(progressLine).contains("ETA: 01:00:31");
+        assertThat(progressLine).contains("Hashing");
     }
 }

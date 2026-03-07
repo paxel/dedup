@@ -10,6 +10,7 @@ import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.dedup.infrastructure.adapter.out.serialization.JacksonMapperLineCodec;
+import paxel.dedup.infrastructure.adapter.out.terminal.TerminalUpdateObserver;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.terminal.StatisticPrinter;
 import paxel.lib.Result;
@@ -128,7 +129,7 @@ class UpdateProgressPrinterTest {
             public void close() { /* nothing */ }
         };
 
-        UpdateProgressPrinter upp = new UpdateProgressPrinter(remaining, sp, repoManager, stats, hasher, false);
+        UpdateProgressPrinter upp = new UpdateProgressPrinter(remaining, new TerminalUpdateObserver("r1", dataDir.toString(), sp), repoManager, stats, hasher, false);
 
         // Act: simulate traversal
         upp.addDir(dataDir);
