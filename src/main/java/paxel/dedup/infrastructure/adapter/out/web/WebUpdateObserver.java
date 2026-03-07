@@ -14,6 +14,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 @RequiredArgsConstructor
@@ -25,10 +26,21 @@ public class WebUpdateObserver implements UpdateObserver {
     private final Instant startTime = Instant.now();
     private final AtomicLong lastPercentUpdate = new AtomicLong(0);
 
+    private final AtomicLong filesDiscovered = new AtomicLong(0);
+    private final AtomicLong directoriesDiscovered = new AtomicLong(0);
+    private final AtomicLong filesTotal = new AtomicLong(0);
+    private final AtomicLong directoriesTotal = new AtomicLong(0);
+    private final AtomicLong filesProcessed = new AtomicLong(0);
+    private final AtomicLong deletedProcessed = new AtomicLong(0);
+    private final AtomicLong deletedTotal = new AtomicLong(0);
+    private final AtomicBoolean scanFinished = new AtomicBoolean(false);
+
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     @Override
     public void onDiscovery(Path path, long totalFiles, long totalDirs) {
+        this.filesDiscovered.set(totalFiles);
+        this.directoriesDiscovered.set(totalDirs);
         publish(ProgressUpdate.builder()
                 .repo(repoName)
                 .path(absolutePath)
@@ -42,10 +54,15 @@ public class WebUpdateObserver implements UpdateObserver {
 
     @Override
     public void onScanFinished(long totalFiles, long totalDirs) {
+        this.scanFinished.set(true);
+        this.filesTotal.set(totalFiles);
+        this.directoriesTotal.set(totalDirs);
         publish(ProgressUpdate.builder()
                 .repo(repoName)
                 .path(absolutePath)
                 .scanningActive(false)
+                .filesDiscovered(filesDiscovered.get())
+                .directoriesDiscovered(directoriesDiscovered.get())
                 .filesTotal(totalFiles)
                 .directoriesTotal(totalDirs)
                 .status("Scan finished. Starting processing...")
@@ -65,10 +82,17 @@ public class WebUpdateObserver implements UpdateObserver {
 
     @Override
     public void onDeleted(Path path, long processed, long total) {
+        this.deletedProcessed.set(processed);
+        this.deletedTotal.set(total);
         publish(ProgressUpdate.builder()
                 .repo(repoName)
                 .path(absolutePath)
                 .currentFile(path.getFileName().toString())
+                .filesDiscovered(filesDiscovered.get())
+                .directoriesDiscovered(directoriesDiscovered.get())
+                .filesTotal(filesTotal.get())
+                .directoriesTotal(directoriesTotal.get())
+                .filesProcessed(filesProcessed.get())
                 .deletedProcessed(processed)
                 .deletedTotal(total)
                 .status("Deleting")
@@ -91,6 +115,8 @@ public class WebUpdateObserver implements UpdateObserver {
     }
 
     private void updateProgress(Path path, long processed, long total, String status) {
+        this.filesProcessed.set(processed);
+        this.filesTotal.set(total);
         Instant now = Instant.now();
         Duration elapsed = Duration.between(startTime, now);
 
@@ -98,12 +124,14 @@ public class WebUpdateObserver implements UpdateObserver {
                 .repo(repoName)
                 .path(absolutePath)
                 .currentFile(path.getFileName().toString())
+                .filesDiscovered(filesDiscovered.get())
+                .directoriesDiscovered(directoriesDiscovered.get())
                 .filesProcessed(processed)
                 .filesTotal(total)
                 .status(status)
                 .duration(formatDuration(elapsed));
 
-        if (total > 0) {
+        if (total > 0 && scanFinished.get()) {
             double percent = (double) processed / total * 100;
 
             // Limit percent update to once per second

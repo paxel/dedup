@@ -458,22 +458,36 @@ function App() {
             }
             
             const newPayload = { ...data.payload };
+            
+            // Verhindere, dass Werte auf undefined oder null zurückgesetzt werden, wenn sie im Payload fehlen
+            Object.keys(current).forEach(key => {
+                if (newPayload[key] === undefined || newPayload[key] === null) {
+                    newPayload[key] = (current as any)[key];
+                }
+            });
+
             // Guard gegen Rücksprünge (außer in der Scan-Phase)
             if (!newPayload.scanningActive) {
                 if (current.filesTotal && newPayload.filesTotal && newPayload.filesTotal < current.filesTotal) {
-                    delete newPayload.filesTotal;
+                    newPayload.filesTotal = current.filesTotal;
                 }
                 if (current.filesProcessed && newPayload.filesProcessed && newPayload.filesProcessed < current.filesProcessed) {
-                    delete newPayload.filesProcessed;
+                    newPayload.filesProcessed = current.filesProcessed;
                 }
                 if (current.progressPercent && newPayload.progressPercent && newPayload.progressPercent < current.progressPercent) {
-                    delete newPayload.progressPercent;
+                    newPayload.progressPercent = current.progressPercent;
+                }
+                if (current.filesDiscovered && newPayload.filesDiscovered && newPayload.filesDiscovered < current.filesDiscovered) {
+                    newPayload.filesDiscovered = current.filesDiscovered;
+                }
+                if (current.directoriesDiscovered && newPayload.directoriesDiscovered && newPayload.directoriesDiscovered < current.directoriesDiscovered) {
+                    newPayload.directoriesDiscovered = current.directoriesDiscovered;
                 }
             }
 
             return {
               ...prev,
-              [repoName]: { ...current, ...newPayload }
+              [repoName]: newPayload
             };
           });
         } else if (data.type === 'finished') {

@@ -18,6 +18,7 @@ public class TerminalUpdateObserver implements UpdateObserver {
     private long filesTotal = 0;
     private long directoriesTotal = 0;
     private long filesProcessed = 0;
+    private boolean scanFinished = false;
 
     @Override
     public void onDiscovery(Path path, long totalFiles, long totalDirs) {
@@ -39,6 +40,7 @@ public class TerminalUpdateObserver implements UpdateObserver {
 
     @Override
     public void onScanFinished(long totalFiles, long totalDirs) {
+        this.scanFinished = true;
         this.filesTotal = totalFiles;
         this.directoriesTotal = totalDirs;
         progressPrinter.update(ProgressUpdate.builder()
@@ -97,7 +99,7 @@ public class TerminalUpdateObserver implements UpdateObserver {
                 .directoriesProcessed(directoriesTotal)
                 .directoriesTotal(directoriesTotal)
                 .status(status)
-                .progressPercent(total > 0 ? (double) processed / total * 100 : 0)
+                .progressPercent(total > 0 && scanFinished ? (double) processed / total * 100 : 0)
                 .build());
     }
 }
