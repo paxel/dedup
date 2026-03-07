@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { Database, Activity, RefreshCw, Trash2, Plus, Folder, X, Search, FileText, ChevronRight, AlertTriangle, Bell, Trash, Copy, Move, Zap } from 'lucide-react'
+import { Database, Activity, RefreshCw, Trash2, Plus, Folder, X, Search, FileText, ChevronRight, AlertTriangle, Bell, Trash, Copy, Move, Zap, Check } from 'lucide-react'
 
 interface RepoStats {
   fileCount: number;
@@ -63,7 +63,8 @@ interface ErrorEvent {
 function App() {
   const [events, setEvents] = useState<any[]>([])
   const [connected, setConnected] = useState(false)
-  const [activeProgress, setActiveProgress] = useState<ProgressUpdate | null>(null)
+  const [activeProcesses, setActiveProcesses] = useState<Record<string, ProgressUpdate>>({})
+  const isAnyProcessRunning = Object.values(activeProcesses).length > 0;
   const [showAddModal, setShowAddModal] = useState(false)
   const [showErrorModal, setShowErrorModal] = useState(false)
   const [errors, setErrors] = useState<ErrorEvent[]>([])
@@ -439,38 +440,59 @@ function App() {
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data)
         if (data.type === 'progress') {
-          setActiveProgress((prev: ProgressUpdate | null) => {
-            // If we switch to a different repo, reset state
-            if (!prev || (data.payload.repo && data.payload.repo !== prev.repo)) {
+          const repoName = data.payload.repo || 'default';
+          setActiveProcesses((prev) => {
+            const current = prev[repoName];
+            
+            if (!current) {
               return {
-                ...data.payload,
-                scanningActive: data.payload.scanningActive ?? true,
-                filesDiscovered: data.payload.filesDiscovered ?? 0,
-                directoriesDiscovered: data.payload.directoriesDiscovered ?? 0
+                ...prev,
+                [repoName]: {
+                  ...data.payload,
+                  scanningActive: data.payload.scanningActive ?? true,
+                  filesDiscovered: data.payload.filesDiscovered ?? 0,
+                  directoriesDiscovered: data.payload.directoriesDiscovered ?? 0
+                }
               };
             }
             
-            // If current update has filesProcessed/filesTotal, and they are less than previous values, ignore them
-            // unless we are in scanning phase or it's a completely new event
             const newPayload = { ...data.payload };
-            if (prev.filesTotal && newPayload.filesTotal && newPayload.filesTotal < prev.filesTotal && !newPayload.scanningActive) {
-                delete newPayload.filesTotal;
-            }
-            if (prev.filesProcessed && newPayload.filesProcessed && newPayload.filesProcessed < prev.filesProcessed && !newPayload.scanningActive) {
-                delete newPayload.filesProcessed;
-            }
-            if (prev.progressPercent && newPayload.progressPercent && newPayload.progressPercent < prev.progressPercent && !newPayload.scanningActive) {
-                delete newPayload.progressPercent;
+            // Guard gegen Rücksprünge (außer in der Scan-Phase)
+            if (!newPayload.scanningActive) {
+                if (current.filesTotal && newPayload.filesTotal && newPayload.filesTotal < current.filesTotal) {
+                    delete newPayload.filesTotal;
+                }
+                if (current.filesProcessed && newPayload.filesProcessed && newPayload.filesProcessed < current.filesProcessed) {
+                    delete newPayload.filesProcessed;
+                }
+                if (current.progressPercent && newPayload.progressPercent && newPayload.progressPercent < current.progressPercent) {
+                    delete newPayload.progressPercent;
+                }
             }
 
-            // Merge updates
-            return { ...prev, ...newPayload };
+            return {
+              ...prev,
+              [repoName]: { ...current, ...newPayload }
+            };
           });
         } else if (data.type === 'finished') {
-          setActiveProgress(null)
+          const repoName = data.payload?.repo || 'default';
+          // Wir lassen den Prozess noch kurz stehen, damit der Benutzer das "Finished" sieht
+          setTimeout(() => {
+              setActiveProcesses((prev) => {
+                const next = { ...prev };
+                delete next[repoName];
+                return next;
+              });
+          }, 2000);
           queryClient.invalidateQueries({ queryKey: ['repos'] })
         } else if (data.type === 'error') {
-          setActiveProgress(null)
+          const repoName = data.payload?.repo || 'default';
+          setActiveProcesses((prev) => {
+            const next = { ...prev };
+            delete next[repoName];
+            return next;
+          });
           const newError: ErrorEvent = {
             id: Math.random().toString(36).substring(2, 9),
             timestamp: Date.now(),
@@ -609,23 +631,27 @@ function App() {
                 </span>
               )}
             </button>
-            {activeProgress && (
-              <div className="bg-blue-500/10 border border-blue-500/20 px-4 py-2 rounded-xl flex flex-col items-end min-w-[220px]">
-                <div className="flex items-center gap-2 mb-1">
+            {Object.values(activeProcesses).map((proc) => (
+              <div key={proc.repo} className="bg-blue-500/10 border border-blue-500/20 px-4 py-2 rounded-xl flex flex-col items-end min-w-[220px] mb-2 last:mb-0">
+                <div className="flex items-center gap-2 mb-1 w-full justify-between">
                   <span className="text-[10px] uppercase font-bold text-blue-400 tracking-widest leading-none truncate max-w-[120px]">
-                    Updating {activeProgress.repo}
+                    {proc.repo}
                   </span>
                   <RefreshCw className="w-3 h-3 text-blue-500 animate-spin shrink-0" />
                 </div>
                 
-                <div className="h-4 flex items-center">
-                  {activeProgress.scanningActive && (
+                <div className="h-4 flex items-center w-full justify-end">
+                  {proc.scanningActive ? (
                     <div className="flex items-center gap-2 animate-pulse">
                       <Search className="w-3 h-3 text-emerald-400 shrink-0" />
                       <span className="text-[10px] font-bold text-emerald-400 whitespace-nowrap">
-                        Scanning: {activeProgress.filesDiscovered || 0}
+                        Scanning: {proc.filesDiscovered || 0}
                       </span>
                     </div>
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">
+                      Processing...
+                    </span>
                   )}
                 </div>
 
@@ -633,13 +659,13 @@ function App() {
                   <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
                     <div 
                       className="h-full bg-blue-500 transition-all duration-300 ease-linear" 
-                      style={{ width: `${activeProgress.progressPercent || 0}%` }}
+                      style={{ width: `${proc.progressPercent || 0}%` }}
                     ></div>
                   </div>
-                  <span className="text-[10px] font-black text-blue-100 min-w-[35px] text-right">{Math.round(activeProgress.progressPercent || 0)}%</span>
+                  <span className="text-[10px] font-black text-blue-100 min-w-[35px] text-right">{Math.round(proc.progressPercent || 0)}%</span>
                 </div>
               </div>
-            )}
+            ))}
             <button 
               onClick={() => {
                 setSelectedRepo(null)
@@ -660,81 +686,108 @@ function App() {
           </div>
         </header>
 
-        {activeProgress && (
-          <div className="fixed bottom-0 left-0 right-0 z-40 p-4 md:p-6 animate-in slide-in-from-bottom-full duration-500">
-            <div className="max-w-[1600px] mx-auto">
-              <div className="bg-slate-900/90 backdrop-blur-md border border-blue-500/30 rounded-2xl p-4 md:p-6 shadow-2xl shadow-blue-500/20">
-                <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between mb-4">
-                  <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <div className="bg-blue-600/20 p-2 rounded-xl shrink-0">
-                      <RefreshCw className="w-6 h-6 text-blue-500 animate-spin" />
-                    </div>
-                    <div className="min-w-0 flex-1 flex flex-col gap-1">
-                      <h3 className="text-lg font-black text-white flex items-center gap-2 truncate">
-                        Updating <span className="text-blue-500 truncate">{activeProgress.repo}</span>
-                      </h3>
-                      <div className="flex flex-col h-10 justify-center">
-                        <div className="h-4">
-                          {activeProgress.scanningActive ? (
-                            <div className="flex items-center gap-2 text-emerald-400 animate-pulse">
-                              <Search className="w-3 h-3" />
-                              <span className="text-[10px] font-black uppercase tracking-tighter">
-                                Scanning... Found {activeProgress.filesDiscovered || 0} files
-                              </span>
-                            </div>
-                          ) : activeProgress.currentFile ? (
-                            <p className="text-[10px] font-black uppercase text-blue-400 tracking-tighter truncate mb-0.5">
-                              Processing: <span className="text-slate-100 italic">{activeProgress.currentFile}</span>
-                            </p>
-                          ) : null}
+        {Object.values(activeProcesses).length > 0 && (
+          <div className="fixed bottom-0 left-0 right-0 z-40 p-4 md:p-6 space-y-4 max-h-[40vh] overflow-y-auto bg-gradient-to-t from-slate-950/80 to-transparent pointer-events-none">
+            {Object.values(activeProcesses).map((proc) => (
+              <div key={proc.repo} className="max-w-[1600px] mx-auto pointer-events-auto animate-in slide-in-from-bottom-4 duration-300">
+                <div className="bg-slate-900/90 backdrop-blur-md border border-blue-500/30 rounded-2xl p-4 md:p-6 shadow-2xl shadow-blue-500/20">
+                  <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between mb-4">
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="bg-blue-600/20 p-2 rounded-xl shrink-0">
+                        <RefreshCw className="w-6 h-6 text-blue-500 animate-spin" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-lg font-black text-white flex items-center gap-2 truncate mb-1">
+                          Updating <span className="text-blue-500 truncate">{proc.repo}</span>
+                        </h3>
+                        
+                        {/* Stabilized Info Areas */}
+                        <div className="grid grid-cols-2 gap-4 h-12">
+                          {/* Left: Scan Info */}
+                          <div className="border-r border-slate-800/50 pr-4 flex flex-col justify-center">
+                            <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest mb-1 block">Scan Phase</span>
+                            {proc.scanningActive ? (
+                              <div className="flex items-center gap-2 text-emerald-400 animate-pulse">
+                                <Search className="w-3 h-3" />
+                                <span className="text-[10px] font-black uppercase tracking-tighter">
+                                  Found {proc.filesDiscovered || 0} files / {proc.directoriesDiscovered || 0} dirs
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 text-slate-400">
+                                <Check className="w-3 h-3 text-blue-500" />
+                                <span className="text-[10px] font-bold uppercase tracking-tighter">
+                                  Scan Complete
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Right: Process Info */}
+                          <div className="flex flex-col justify-center min-w-0">
+                             <span className="text-[9px] uppercase font-bold text-slate-500 tracking-widest mb-1 block">Processing Phase</span>
+                             <div className="h-4 flex items-center min-w-0">
+                               {!proc.scanningActive && proc.currentFile ? (
+                                 <p className="text-[10px] font-black uppercase text-blue-400 tracking-tighter truncate">
+                                   File: <span className="text-slate-100 italic">{proc.currentFile}</span>
+                                 </p>
+                               ) : !proc.scanningActive ? (
+                                 <p className="text-[10px] font-bold text-slate-500 uppercase italic">Initializing...</p>
+                               ) : (
+                                 <p className="text-[10px] font-bold text-slate-600 uppercase italic">Waiting for scan...</p>
+                               )}
+                             </div>
+                             <p className="text-[10px] text-slate-400 font-medium truncate mt-0.5">{proc.status}</p>
+                          </div>
                         </div>
-                        <p className="text-xs text-slate-400 font-medium truncate h-4">{activeProgress.status}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-6 shrink-0 border-l border-slate-800 pl-6">
+                      <div className="text-right min-w-[80px]">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 block mb-0.5">Progress</span>
+                        <span className="text-xl font-black text-white tracking-tighter">{Math.round(proc.progressPercent || 0)}%</span>
+                      </div>
+                      <div className="text-right border-l border-slate-800 pl-6 min-w-[120px]">
+                        <span className="text-[10px] uppercase font-bold text-slate-500 block mb-0.5">ETA</span>
+                        <span className="text-xl font-black text-blue-400 tracking-tighter">
+                          {proc.scanningActive ? 'Scanning...' : (proc.eta || '--:--:--')}
+                        </span>
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-6 shrink-0">
-                    <div className="text-right min-w-[80px]">
-                      <span className="text-[10px] uppercase font-bold text-slate-500 block mb-0.5">Progress</span>
-                      <span className="text-xl font-black text-white tracking-tighter">{Math.round(activeProgress.progressPercent || 0)}%</span>
-                    </div>
-                    <div className="text-right border-l border-slate-800 pl-6 min-w-[120px]">
-                      <span className="text-[10px] uppercase font-bold text-slate-500 block mb-0.5">ETA</span>
-                      <span className="text-xl font-black text-blue-400 tracking-tighter">
-                        {activeProgress.scanningActive ? 'Scanning...' : (activeProgress.eta || '--:--:--')}
-                      </span>
-                    </div>
-                  </div>
-                </div>
 
-                <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-4">
-                  <div 
-                    className="h-full bg-blue-500 transition-all duration-300 ease-linear shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
-                    style={{ width: `${activeProgress.progressPercent || 0}%` }}
-                  ></div>
-                </div>
+                  <div className="space-y-3">
+                    <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden mb-4 shadow-inner">
+                      <div 
+                        className="h-full bg-blue-500 transition-all duration-300 ease-linear shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
+                        style={{ width: `${proc.progressPercent || 0}%` }}
+                      ></div>
+                    </div>
 
-                <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase font-bold text-slate-500">Duration</span>
-                    <span className="text-xs font-bold text-slate-200">{activeProgress.duration || '0s'}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase font-bold text-slate-500">Files</span>
-                    <span className="text-xs font-bold text-slate-200">{activeProgress.filesProcessed || 0} / {activeProgress.filesTotal || 0}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase font-bold text-slate-500">Dirs</span>
-                    <span className="text-xs font-bold text-slate-200">{activeProgress.directoriesProcessed || 0} / {activeProgress.directoriesTotal || 0}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase font-bold text-slate-500">Errors</span>
-                    <span className={`text-xs font-bold ${activeProgress.errors && activeProgress.errors !== 'none' && activeProgress.errors !== '0' ? 'text-red-400' : 'text-emerald-400'}`}>
-                      {activeProgress.errors || '0'}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-x-8 gap-y-2 px-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] uppercase font-bold text-slate-500">Duration</span>
+                        <span className="text-xs font-bold text-slate-200">{proc.duration || '0s'}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] uppercase font-bold text-slate-500">Files</span>
+                        <span className="text-xs font-bold text-slate-200">{proc.filesProcessed || 0} / {proc.filesTotal || 0}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] uppercase font-bold text-slate-500">Dirs</span>
+                        <span className="text-xs font-bold text-slate-200">{proc.directoriesProcessed || 0} / {proc.directoriesTotal || 0}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] uppercase font-bold text-slate-500">Errors</span>
+                        <span className={`text-xs font-bold ${proc.errors && proc.errors !== 'none' && proc.errors !== '0' ? 'text-red-400' : 'text-emerald-400'}`}>
+                          {proc.errors || '0'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            ))}
           </div>
         )}
 
@@ -754,14 +807,14 @@ function App() {
                     onClick={() => {
                       if (repos) repos.forEach(r => updateMutation.mutate(r.name))
                     }}
-                    disabled={!repos || repos.length === 0 || !!activeProgress}
+                    disabled={!repos || repos.length === 0 || isAnyProcessRunning}
                     className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-slate-700 disabled:opacity-30"
                   >
                     <RefreshCw className="w-4 h-4" />
                     Scan All Repos
                   </button>
                   <button 
-                    disabled={!repos || repos.length === 0 || !!activeProgress}
+                    disabled={!repos || repos.length === 0 || isAnyProcessRunning}
                     className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-slate-700 disabled:opacity-30"
                   >
                     <Search className="w-4 h-4" />
@@ -863,7 +916,7 @@ function App() {
                         <div className="flex items-center gap-3">
                           <button
                             onClick={() => setSelectedRepo(repo.name)}
-                            disabled={!!activeProgress}
+                            disabled={isAnyProcessRunning}
                             className="text-xs font-black uppercase tracking-widest text-blue-500 hover:text-white hover:bg-blue-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             <Search className="w-4 h-4" />
@@ -871,7 +924,7 @@ function App() {
                           </button>
                           <button
                             onClick={() => updateMutation.mutate(repo.name)}
-                            disabled={updateMutation.isPending || !!activeProgress}
+                            disabled={updateMutation.isPending || isAnyProcessRunning}
                             className="text-xs font-black uppercase tracking-widest text-emerald-500 hover:text-white hover:bg-emerald-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             <RefreshCw className={`w-4 h-4 ${updateMutation.isPending ? 'animate-spin' : ''}`} />
@@ -879,7 +932,7 @@ function App() {
                           </button>
                           <button
                             onClick={() => setShowPruneModal(repo.name)}
-                            disabled={!!activeProgress}
+                            disabled={isAnyProcessRunning}
                             className="text-xs font-black uppercase tracking-widest text-amber-500 hover:text-white hover:bg-amber-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
                             title="Remove missing files from index"
                           >
@@ -891,7 +944,7 @@ function App() {
                               setCloneData({ destinationName: `${repo.name}_copy`, path: repo.absolutePath })
                               setShowCloneModal(repo)
                             }}
-                            disabled={!!activeProgress}
+                            disabled={isAnyProcessRunning}
                             className="text-xs font-black uppercase tracking-widest text-cyan-500 hover:text-white hover:bg-cyan-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
                             title="Create a copy of this repository"
                           >
@@ -900,18 +953,18 @@ function App() {
                           </button>
                         </div>
 
-                        <button 
-                          onClick={() => {
-                            if (confirm(`CRITICAL: Are you sure you want to remove ${repo.name}?\n\nThis will remove the repository from Dedup, but will NOT delete your files on disk.`)) {
-                              deleteMutation.mutate(repo.name)
-                            }
-                          }}
-                          disabled={!!activeProgress}
-                          className="p-2 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all ml-auto disabled:opacity-30 disabled:cursor-not-allowed"
-                          title="Remove Repository"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
+                          <button 
+                            onClick={() => {
+                              if (confirm(`CRITICAL: Are you sure you want to remove ${repo.name}?\n\nThis will remove the repository from Dedup, but will NOT delete your files on disk.`)) {
+                                deleteMutation.mutate(repo.name)
+                              }
+                            }}
+                            disabled={isAnyProcessRunning}
+                            className="p-2 text-slate-600 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all ml-auto disabled:opacity-30 disabled:cursor-not-allowed"
+                            title="Remove Repository"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
                       </div>
                     </div>
                   ))}

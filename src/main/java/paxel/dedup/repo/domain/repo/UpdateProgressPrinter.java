@@ -87,7 +87,9 @@ class UpdateProgressPrinter implements FileObserver {
                 .duration(DurationFormatUtils.formatDurationWords(Duration.between(start, clock.instant()).toMillis(), true, true));
 
         if (!scanFinished.get()) {
-            updateBuilder.filesProcessed(0L); // Keep at 0 during scan to avoid progress bar jumping
+            updateBuilder.filesProcessed(currentFiles);
+            updateBuilder.filesTotal(currentFiles);
+            updateBuilder.progressPercent(0.0);
             updateBuilder.status("Scanning... Found " + currentFiles + " files and " + allDirs.get() + " directories");
         } else {
             updateBuilder.filesProcessed(processed);
@@ -119,6 +121,7 @@ class UpdateProgressPrinter implements FileObserver {
                     hash.incrementAndGet();
 
                     ProgressUpdate pu = ProgressUpdate.builder()
+                            .repo(repoManager.getRepo().name())
                             .hashedProcessed(hash.get())
                             .mimeDistribution(Map.of(add.value().mimeType(), v))
                             .build();
@@ -143,7 +146,10 @@ class UpdateProgressPrinter implements FileObserver {
                             .eta(calculateEta(total, done))
                             .progressPercent((double) done / total * 100);
                 } else {
-                    puBuilder.status("Scanning... Found " + total + " files and " + allDirs.get() + " directories");
+                    puBuilder.filesProcessed(total)
+                            .filesTotal(total)
+                            .progressPercent(0.0)
+                            .status("Scanning... Found " + total + " files and " + allDirs.get() + " directories");
                 }
                 progressPrinter.update(puBuilder.build());
             } else {
@@ -213,6 +219,7 @@ class UpdateProgressPrinter implements FileObserver {
     public void addDir(Path f) {
         allDirs.incrementAndGet();
         progressPrinter.update(ProgressUpdate.builder()
+                .repo(repoManager.getRepo().name())
                 .scanningActive(!scanFinished.get())
                 .filesDiscovered(files.get())
                 .directoriesDiscovered(allDirs.get())
@@ -221,6 +228,7 @@ class UpdateProgressPrinter implements FileObserver {
                 .build());
         if (!scanFinished.get()) {
             progressPrinter.update(ProgressUpdate.builder()
+                    .repo(repoManager.getRepo().name())
                     .scanningActive(true)
                     .status("Scanning... Found " + files.get() + " files and " + allDirs.get() + " directories")
                     .build());
@@ -231,6 +239,7 @@ class UpdateProgressPrinter implements FileObserver {
     public void finishedDir(Path f) {
         finishedDirs.incrementAndGet();
         progressPrinter.update(ProgressUpdate.builder()
+                .repo(repoManager.getRepo().name())
                 .scanningActive(!scanFinished.get())
                 .directoriesProcessed(finishedDirs.get())
                 .directoriesTotal(allDirs.get())
@@ -244,6 +253,7 @@ class UpdateProgressPrinter implements FileObserver {
         long done = hash.get() + unchanged.get();
         String durationStr = DurationFormatUtils.formatDurationWords(Duration.between(start, clock.instant()).toMillis(), true, true);
         progressPrinter.update(ProgressUpdate.builder()
+                .repo(repoManager.getRepo().name())
                 .scanningActive(false)
                 .filesProcessed(done)
                 .filesTotal(total)
@@ -256,6 +266,7 @@ class UpdateProgressPrinter implements FileObserver {
     public void fail(Path root, Throwable e) {
         firstError.compareAndSet(null, e);
         progressPrinter.update(ProgressUpdate.builder()
+                .repo(repoManager.getRepo().name())
                 .scanningActive(!scanFinished.get())
                 .errors(errors.incrementAndGet() + " last:" + e.getMessage())
                 .build());
@@ -288,6 +299,7 @@ class UpdateProgressPrinter implements FileObserver {
         }
         long total = files.get();
         progressPrinter.update(ProgressUpdate.builder()
+                .repo(repoManager.getRepo().name())
                 .scanningActive(false)
                 .filesProcessed(total)
                 .filesTotal(total)

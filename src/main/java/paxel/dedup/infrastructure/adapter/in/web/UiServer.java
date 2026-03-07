@@ -24,6 +24,7 @@ public class UiServer {
     private final EventBus eventBus;
     private final paxel.dedup.domain.port.out.FileSystem fileSystem;
     private final InfrastructureConfig infrastructureConfig;
+    private final java.util.concurrent.ExecutorService updateExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
 
     public UiServer(InfrastructureConfig infrastructureConfig) {
         this.infrastructureConfig = infrastructureConfig;
@@ -201,12 +202,12 @@ public class UiServer {
         app.post("/api/repos/{name}/update", ctx -> {
             String name = ctx.pathParam("name");
             log.info("Update requested for repository: {}", name);
-            CompletableFuture.runAsync(() -> {
+            updateExecutor.execute(() -> {
                 try {
                     log.info("Starting background update process for: {}", name);
                     UpdateReposProcess process = new UpdateReposProcess(
                             new CliParameter(),
-                            List.of(name),
+                            java.util.List.of(name),
                             false,
                             2,
                             infrastructureConfig.getDedupConfig(),
@@ -290,6 +291,7 @@ public class UiServer {
     }
 
     public void stop() {
+        updateExecutor.shutdown();
         app.stop();
     }
 }
