@@ -23,6 +23,9 @@ public class VideoFingerprinter {
             StringBuilder sb = new StringBuilder();
             double[] percentages = {0.1, 0.5, 0.9};
             for (double p : percentages) {
+                if (Thread.currentThread().isInterrupted()) {
+                    return null;
+                }
                 grab.seekToSecondPrecise(duration * p);
                 Picture picture = grab.getNativeFrame();
                 if (picture != null) {

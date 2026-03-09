@@ -917,8 +917,8 @@ function App() {
                       <div className="p-4 bg-slate-800/20 border-b border-slate-800 flex justify-between items-center">
                         <div className="flex items-center gap-2">
                           <FileText className="w-4 h-4 text-blue-400" />
-                          <span className="font-mono text-sm font-bold text-blue-100">{group[0].repoFile.hash?.substring(0, 10)}...</span>
-                          <span className="text-[10px] text-slate-500 px-2 py-0.5 bg-slate-800 rounded">{(group[0].repoFile.size / 1024 / 1024).toFixed(2)} MB</span>
+                          <span className="font-mono text-sm font-bold text-blue-100">{group[0]?.repoFile.hash?.substring(0, 10)}...</span>
+                          <span className="text-[10px] text-slate-500 px-2 py-0.5 bg-slate-800 rounded">{((group[0]?.repoFile.size || 0) / 1024 / 1024).toFixed(2)} MB</span>
                         </div>
                         <span className="text-xs text-slate-500">{group.length} occurrences</span>
                       </div>
@@ -1376,8 +1376,8 @@ function App() {
                       <div className="p-4 bg-slate-800/20 border-b border-slate-800 flex justify-between items-center">
                         <div className="flex items-center gap-2">
                           <FileText className="w-4 h-4 text-blue-400" />
-                          <span className="font-mono text-sm font-bold text-blue-100">{group[0].repoFile.hash?.substring(0, 10)}...</span>
-                          <span className="text-[10px] text-slate-500 px-2 py-0.5 bg-slate-800 rounded">{(group[0].repoFile.size / 1024 / 1024).toFixed(2)} MB</span>
+                          <span className="font-mono text-sm font-bold text-blue-100">{group[0]?.repoFile.hash?.substring(0, 10)}...</span>
+                          <span className="text-[10px] text-slate-500 px-2 py-0.5 bg-slate-800 rounded">{((group[0]?.repoFile.size || 0) / 1024 / 1024).toFixed(2)} MB</span>
                         </div>
                         <span className="text-xs text-slate-500">{group.length} occurrences</span>
                       </div>
@@ -1674,7 +1674,9 @@ function App() {
                       onChange={e => {
                         const path = e.target.value
                         setNewRepo(prev => {
-                          const name = prev.name || path.split(/[/\\]/).pop() || ''
+                          const suggestedName = path.split(/[/\\]/).filter(Boolean).pop() || ''
+                          const sanitizedName = suggestedName.replace(/\s+/g, '_')
+                          const name = prev.name || sanitizedName
                           return { ...prev, absolutePath: path, name }
                         })
                       }}
@@ -1684,7 +1686,9 @@ function App() {
                     <button 
                       onClick={() => openBrowser(newRepo.absolutePath, (path) => {
                         setNewRepo((prev) => {
-                          const name = prev.name || path.split(/[/\\]/).pop() || ''
+                          const suggestedName = path.split(/[/\\]/).filter(Boolean).pop() || ''
+                          const sanitizedName = suggestedName.replace(/\s+/g, '_')
+                          const name = prev.name || sanitizedName
                           return { ...prev, absolutePath: path, name }
                         })
                       })}
@@ -1700,10 +1704,17 @@ function App() {
                   <input 
                     type="text" 
                     value={newRepo.name}
-                    onChange={e => setNewRepo({...newRepo, name: e.target.value})}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
-                    placeholder="e.g. My Music"
+                    onChange={e => setNewRepo({...newRepo, name: e.target.value.replace(/\s+/g, '_')})}
+                    className={`w-full bg-slate-950 border rounded-lg px-4 py-2 focus:ring-1 outline-none transition-all ${
+                      repos?.some(r => r.name === newRepo.name) 
+                        ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
+                        : 'border-slate-800 focus:border-blue-500 focus:ring-blue-500'
+                    }`}
+                    placeholder="e.g. My_Music"
                   />
+                  {repos?.some(r => r.name === newRepo.name) && (
+                    <p className="text-xs text-red-500 mt-1">Repository name already exists</p>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -1750,7 +1761,7 @@ function App() {
                         }
                       })
                     }}
-                    disabled={!newRepo.name || !newRepo.absolutePath || createMutation.isPending}
+                    disabled={!newRepo.name || !newRepo.absolutePath || createMutation.isPending || repos?.some(r => r.name === newRepo.name)}
                     className="px-4 py-2 rounded-lg border border-slate-700 hover:bg-slate-800 text-white font-semibold transition-colors text-sm"
                   >
                     Add Another
@@ -1764,7 +1775,7 @@ function App() {
                         }
                       })
                     }}
-                    disabled={!newRepo.name || !newRepo.absolutePath || createMutation.isPending}
+                    disabled={!newRepo.name || !newRepo.absolutePath || createMutation.isPending || repos?.some(r => r.name === newRepo.name)}
                     className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg font-semibold transition-colors text-sm"
                   >
                     Add
@@ -1779,7 +1790,7 @@ function App() {
                         }
                       })
                     }}
-                    disabled={!newRepo.name || !newRepo.absolutePath || createMutation.isPending}
+                    disabled={!newRepo.name || !newRepo.absolutePath || createMutation.isPending || repos?.some(r => r.name === newRepo.name)}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors text-sm"
                   >
                     {createMutation.isPending ? 'Adding...' : 'Add and Scan'}

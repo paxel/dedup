@@ -33,6 +33,9 @@ public class Sha1Hasher implements FileHasher {
             try (InputStream fis = Files.newInputStream(path)) {
                 int bytesRead;
                 while ((bytesRead = fis.read(buffer)) > 0) {
+                    if (Thread.currentThread().isInterrupted()) {
+                        return Result.err(DedupError.of(ErrorType.LOAD, path + ": Hashing interrupted", new InterruptedException()));
+                    }
                     digest.update(buffer, 0, bytesRead);
                 }
             }
