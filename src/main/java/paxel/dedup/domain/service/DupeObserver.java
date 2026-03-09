@@ -11,7 +11,7 @@ public interface DupeObserver {
 
     void onGroupingSimilar(int index, int total, int bitLength, int threshold);
 
-    void onFinished(int groupCount);
+    void onFinished(String repo, int groupCount);
 
     void onGroupsReady(String repo, List<List<DuplicateRepoProcess.RepoRepoFile>> groups);
 
@@ -31,7 +31,7 @@ public interface DupeObserver {
         }
 
         @Override
-        public void onFinished(int groupCount) {
+        public void onFinished(String repo, int groupCount) {
         }
 
         @Override

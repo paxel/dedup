@@ -99,6 +99,7 @@ class UpdateProgressPrinterEtaTest {
                 stats,
                 stubHasher,
                 clock,
+                false,
                 false
         );
 

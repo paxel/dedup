@@ -36,18 +36,19 @@ class UpdateProgressPrinter implements FileObserver {
     private final AtomicBoolean scanFinished = new AtomicBoolean();
     private final Clock clock;
     private final boolean refreshFingerprints;
+    private final boolean verbose;
     private final List<CompletableFuture<?>> futures = Collections.synchronizedList(new ArrayList<>());
     private java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean(false);
 
     public UpdateProgressPrinter(Map<Path, RepoFile> remainingPaths, UpdateObserver observer,
                                  RepoManager repoManager, Statistics statistics, FileHasher fileHasher,
-                                 boolean refreshFingerprints) {
-        this(remainingPaths, observer, repoManager, statistics, fileHasher, Clock.systemUTC(), refreshFingerprints);
+                                 boolean refreshFingerprints, boolean verbose) {
+        this(remainingPaths, observer, repoManager, statistics, fileHasher, Clock.systemUTC(), refreshFingerprints, verbose);
     }
 
     public UpdateProgressPrinter(Map<Path, RepoFile> remainingPaths, UpdateObserver observer,
                                  RepoManager repoManager, Statistics statistics, FileHasher fileHasher,
-                                 Clock clock, boolean refreshFingerprints) {
+                                 Clock clock, boolean refreshFingerprints, boolean verbose) {
         this.remainingPaths = remainingPaths;
         this.observer = observer;
         this.repoManager = repoManager;
@@ -57,6 +58,7 @@ class UpdateProgressPrinter implements FileObserver {
         this.start = clock.instant();
         this.betterPrediction = new BetterPrediction(clock);
         this.refreshFingerprints = refreshFingerprints;
+        this.verbose = verbose;
     }
 
     @Override

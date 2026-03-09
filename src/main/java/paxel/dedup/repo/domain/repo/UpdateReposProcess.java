@@ -1,6 +1,7 @@
 package paxel.dedup.repo.domain.repo;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.*;
 import paxel.dedup.domain.model.errors.DedupError;
@@ -24,6 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 @RequiredArgsConstructor
 public class UpdateReposProcess {
 
@@ -84,11 +86,20 @@ public class UpdateReposProcess {
         }
 
         for (Repo repo : reposToUpdate.value()) {
+            if (cliParameter.isVerbose()) {
+                log.info("Updating repository: {} at {}", repo.name(), repo.absolutePath());
+            }
             Result<Statistics, DedupError> result = updateRepo(RepoManager.forRepo(repo, dedupConfig, fileSystem));
             if (result.hasFailed()) {
+                if (cliParameter.isVerbose()) {
+                    log.error("Update failed for {}: {}", repo.name(), result.error());
+                }
                 updateObserver.onError(Paths.get(repo.absolutePath()), result.error().exception());
                 return result.map(s -> -51, Function.identity());
             } else {
+                if (cliParameter.isVerbose()) {
+                    log.info("Update finished for {}. Stats: {}", repo.name(), result.value());
+                }
                 updateObserver.onFinished(result.value());
             }
         }
@@ -131,7 +142,7 @@ public class UpdateReposProcess {
         try (Sha1Hasher sha1Hasher = new Sha1Hasher(new HexFormatter(), Executors.newFixedThreadPool(threads))) {
             Statistics statistics = new Statistics(repoManager.getRepo().absolutePath());
 
-            UpdateProgressPrinter progressPrinterObserver = new UpdateProgressPrinter(remainingPaths, observer, repoManager, statistics, sha1Hasher, refreshFingerprints);
+            UpdateProgressPrinter progressPrinterObserver = new UpdateProgressPrinter(remainingPaths, observer, repoManager, statistics, sha1Hasher, refreshFingerprints, cliParameter.isVerbose());
             progressPrinterObserver.setCancelled(cancelled);
             currentPrinter = progressPrinterObserver;
             new ResilientFileWalker(progressPrinterObserver, fileSystem, cancelled).walk(root);

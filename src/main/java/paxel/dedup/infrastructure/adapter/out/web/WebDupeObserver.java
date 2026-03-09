@@ -29,8 +29,8 @@ public class WebDupeObserver implements DupeObserver {
     }
 
     @Override
-    public void onFinished(int groupCount) {
-        eventBus.publish("dupe-finished", Map.of("repo", repoName, "groupCount", groupCount));
+    public void onFinished(String repo, int groupCount) {
+        eventBus.publish("dupe-finished", Map.of("repo", repo, "groupCount", groupCount));
     }
 
     @Override

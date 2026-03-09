@@ -18,9 +18,28 @@ interface Repo {
 }
 
 interface RepoFile {
-  relativePath: string;
-  size: number;
-  hash: string;
+  p: string; // relativePath
+  s: number; // size
+  h: string; // hash
+  l: number; // lastModified
+  m?: string; // mimeType
+  f?: string; // fingerprint
+  vh?: string; // videoHash
+  ph?: string; // pdfHash
+  ah?: string; // audioHash
+  is?: { width: number; height: number }; // imageSize
+}
+
+function getRelativePath(rf: RepoFile): string {
+  return rf.p;
+}
+
+function getSize(rf: RepoFile): number {
+  return rf.s;
+}
+
+function getHash(rf: RepoFile): string {
+  return rf.h;
 }
 
 interface RepoRepoFile {
@@ -73,6 +92,262 @@ interface DupeProgress {
   groups?: RepoRepoFile[][];
 }
 
+function formatDate(ts: number): string {
+  if (!ts) return 'Unknown'
+  const d = new Date(ts)
+  return d.toISOString().replace('T', ' ').substring(0, 19)
+}
+
+function formatFileSize(size: number): string {
+  if (!size || size === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(size) / Math.log(k))
+  return parseFloat((size / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
+interface FilePreviewProps {
+  absolutePath: string;
+  mimeType?: string;
+}
+
+function FilePreview({ absolutePath, mimeType }: FilePreviewProps) {
+  const [preview, setPreview] = useState<{ type: string; src?: string; frames?: string[] } | null>(null)
+  const [error, setError] = useState(false)
+  const [visible, setVisible] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); observer.disconnect() } },
+      { rootMargin: '200px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (!visible || !absolutePath) return
+    const mime = mimeType || ''
+    if (mime.startsWith('image/')) {
+      setPreview({ type: 'image', src: `/api/files/preview?path=${encodeURIComponent(absolutePath)}` })
+    } else if (mime.startsWith('video/')) {
+      axios.get(`/api/files/preview?path=${encodeURIComponent(absolutePath)}`)
+        .then(res => setPreview({ type: 'video', frames: res.data.frames }))
+        .catch(() => setError(true))
+    } else if (mime === 'application/pdf') {
+      axios.get(`/api/files/preview?path=${encodeURIComponent(absolutePath)}`)
+        .then(res => setPreview({ type: 'pdf', src: `data:image/jpeg;base64,${res.data.frame}` }))
+        .catch(() => setError(true))
+    } else if (mime.startsWith('audio/')) {
+      setPreview({ type: 'audio', src: `/api/files/preview?path=${encodeURIComponent(absolutePath)}` })
+    } else {
+      setPreview(null)
+    }
+  }, [visible, absolutePath, mimeType])
+
+  const placeholder = <div ref={containerRef} className="h-40 bg-slate-800 rounded flex items-center justify-center"><FileText className="w-10 h-10 text-slate-600" /></div>
+  if (!visible) return placeholder
+  if (error) return <div className="h-40 bg-slate-800 rounded flex items-center justify-center text-slate-500 text-xs">Preview error</div>
+  if (!preview) return placeholder
+
+  if (preview.type === 'image') {
+    return <img src={preview.src} alt="preview" className="h-40 w-full object-contain bg-slate-800 rounded" onError={() => setError(true)} />
+  }
+  if (preview.type === 'video' && preview.frames) {
+    return (
+      <div className="flex gap-0.5 h-24 bg-slate-800 rounded overflow-hidden">
+        {preview.frames.map((f, i) => <img key={i} src={`data:image/jpeg;base64,${f}`} alt="frame" className="flex-1 h-full object-contain" />)}
+      </div>
+    )
+  }
+  if (preview.type === 'pdf') {
+    return <img src={preview.src} alt="pdf" className="h-40 w-full object-contain bg-slate-800 rounded" onError={() => setError(true)} />
+  }
+  if (preview.type === 'audio') {
+    return <div className="p-2 bg-slate-800 rounded"><audio controls className="w-full" src={preview.src} /></div>
+  }
+  return null
+}
+
+interface DuplicateGroupsViewProps {
+  groups: RepoRepoFile[][];
+  formatSize: (bytes: number | undefined) => string;
+}
+
+const GROUPS_PAGE_SIZE = 20
+
+function DuplicateGroupsView({ groups, formatSize }: DuplicateGroupsViewProps) {
+  // kept[groupIndex] = Set of file indices to keep
+  const [kept, setKept] = useState<Record<number, Set<number>>>(() => {
+    const init: Record<number, Set<number>> = {}
+    groups.forEach((_, gi) => { init[gi] = new Set([0]) }) // preselect first file in each group
+    return init
+  })
+  const [deleting, setDeleting] = useState(false)
+  const [deleteResult, setDeleteResult] = useState<{ deleted: number; errors: string[] } | null>(null)
+  const [visibleCount, setVisibleCount] = useState(GROUPS_PAGE_SIZE)
+  const loadMoreRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = loadMoreRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisibleCount(prev => Math.min(prev + GROUPS_PAGE_SIZE, groups.length)) } },
+      { rootMargin: '400px' }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [groups.length, visibleCount])
+
+  const toggleKeep = (gi: number, fi: number) => {
+    setKept(prev => {
+      const next = { ...prev }
+      const s = new Set(prev[gi] || [])
+      if (s.has(fi)) s.delete(fi)
+      else s.add(fi)
+      next[gi] = s
+      return next
+    })
+  }
+
+  const handleDeleteUnselected = async () => {
+    if (!confirm('Are you sure you want to delete all UNSELECTED files? This cannot be undone.')) return
+    const toDelete: { repoName: string; repoPath: string; relativePath: string; size: number }[] = []
+    groups.forEach((group, gi) => {
+      group.forEach((item, fi) => {
+        if (!(kept[gi] || new Set()).has(fi)) {
+          toDelete.push({
+            repoName: item.repo.name,
+            repoPath: item.repo.absolutePath,
+            relativePath: getRelativePath(item.repoFile),
+            size: getSize(item.repoFile),
+          })
+        }
+      })
+    })
+    if (toDelete.length === 0) return
+    setDeleting(true)
+    try {
+      const res = await axios.post('/api/files/delete', toDelete)
+      setDeleteResult(res.data)
+    } catch (e: any) {
+      setDeleteResult({ deleted: 0, errors: [e.message || 'Delete failed'] })
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const totalUnselected = groups.reduce((acc, group, gi) => {
+    return acc + group.filter((_, fi) => !(kept[gi] || new Set()).has(fi)).length
+  }, 0)
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center mb-4">
+        <p className="text-sm text-slate-400">
+          Found {groups.length} duplicate group{groups.length !== 1 ? 's' : ''}.
+          Select the files you want to <strong className="text-white">KEEP</strong>. Unselected files will be deleted.
+        </p>
+      </div>
+
+      <div className="space-y-8">
+        {groups.slice(0, visibleCount).map((group, gi) => (
+          <div key={gi} className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden">
+            <div className="px-5 py-3 bg-slate-800/40 border-b border-slate-800 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <Copy className="w-4 h-4 text-blue-400" />
+                <span className="font-bold text-slate-200">Group {gi + 1}</span>
+                <span className="text-[10px] text-slate-500 bg-slate-800 px-2 py-0.5 rounded">
+                  {group[0]?.repoFile ? getHash(group[0].repoFile).substring(0, 12) : ''}...
+                </span>
+                <span className="text-[10px] text-slate-500 bg-slate-800 px-2 py-0.5 rounded">
+                  {group[0]?.repoFile ? formatSize(getSize(group[0].repoFile)) : ''}
+                </span>
+              </div>
+              <span className="text-xs text-slate-500">{group.length} files</span>
+            </div>
+            <div className="flex overflow-x-auto gap-4 p-4">
+              {group.map((item, fi) => {
+                const isKept = (kept[gi] || new Set()).has(fi)
+                const rf = item.repoFile
+                const absPath = item.repo.absolutePath + '/' + getRelativePath(rf)
+                return (
+                  <div
+                    key={fi}
+                    className={`flex-shrink-0 w-64 border rounded-xl p-3 flex flex-col transition-all cursor-pointer ${
+                      isKept
+                        ? 'border-emerald-500/60 bg-emerald-500/5'
+                        : 'border-slate-700 bg-slate-950/50 opacity-60'
+                    }`}
+                    onClick={() => toggleKeep(gi, fi)}
+                  >
+                    <FilePreview absolutePath={absPath} mimeType={rf?.m} />
+                    <div className="mt-2 text-xs space-y-1 flex-grow">
+                      <p className="font-medium text-slate-200 truncate" title={getRelativePath(rf)}>{getRelativePath(rf)}</p>
+                      <p className="text-slate-500"><strong>Repo:</strong> {item.repo.name}</p>
+                      <p className="text-slate-500"><strong>Size:</strong> {formatFileSize(getSize(rf))}</p>
+                      {rf?.is && <p className="text-slate-500"><strong>Image:</strong> {rf.is.width}×{rf.is.height}</p>}
+                      <p className="text-slate-500"><strong>Modified:</strong> {formatDate(rf?.l)}</p>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-slate-800 flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={isKept}
+                        onChange={() => toggleKeep(gi, fi)}
+                        onClick={e => e.stopPropagation()}
+                        className="accent-emerald-500 w-4 h-4"
+                      />
+                      <span className={`text-xs font-bold ${isKept ? 'text-emerald-400' : 'text-slate-500'}`}>
+                        {isKept ? 'Keep' : 'Will delete'}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {visibleCount < groups.length && (
+        <div ref={loadMoreRef} className="flex justify-center py-4">
+          <button
+            onClick={() => setVisibleCount(prev => Math.min(prev + GROUPS_PAGE_SIZE, groups.length))}
+            className="text-sm text-blue-400 hover:text-blue-300 px-4 py-2 border border-slate-700 rounded-lg"
+          >
+            Show more ({visibleCount} of {groups.length} groups)
+          </button>
+        </div>
+      )}
+
+      {deleteResult && (
+        <div className={`p-4 rounded-xl border ${deleteResult.errors.length > 0 ? 'bg-amber-500/10 border-amber-500/30' : 'bg-emerald-500/10 border-emerald-500/30'}`}>
+          <p className="font-bold text-white">Deleted {deleteResult.deleted} file{deleteResult.deleted !== 1 ? 's' : ''}.</p>
+          {deleteResult.errors.length > 0 && (
+            <ul className="mt-2 text-xs text-amber-300 space-y-1">
+              {deleteResult.errors.map((e, i) => <li key={i}>• {e}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <div className="sticky bottom-0 bg-slate-950/95 backdrop-blur border-t border-slate-800 p-4 -mx-4 flex justify-center">
+        <button
+          onClick={handleDeleteUnselected}
+          disabled={deleting || totalUnselected === 0}
+          className="bg-red-600 hover:bg-red-500 disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold py-3 px-10 rounded-2xl text-sm uppercase tracking-widest transition-all shadow-lg shadow-red-900/30 flex items-center gap-2"
+        >
+          {deleting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+          Delete {totalUnselected} Unselected File{totalUnselected !== 1 ? 's' : ''}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function App() {
   const [events, setEvents] = useState<any[]>([])
   const [connected, setConnected] = useState(false)
@@ -109,6 +384,29 @@ function App() {
     indices: 10,
     codec: 'MESSAGEPACK'
   })
+  
+  const isValidRepoName = (name: string) => {
+    if (!name || name.trim() === '') return false;
+    // Match backend: letters, digits or underscores
+    return /^[a-zA-Z0-9_]+$/.test(name);
+  };
+
+  const isRepoNameUnique = (name: string) => {
+    return !repos?.some(r => r.name.toLowerCase() === name.toLowerCase());
+  };
+
+  const [appConfig, setAppConfig] = useState<{ verbose: boolean }>({ verbose: false })
+  const appConfigRef = useRef(appConfig)
+
+  useEffect(() => {
+    appConfigRef.current = appConfig
+  }, [appConfig])
+
+  useEffect(() => {
+    axios.get('/api/config')
+      .then(res => setAppConfig(res.data))
+      .catch(err => console.error('Failed to load config', err))
+  }, [])
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
@@ -532,6 +830,9 @@ function App() {
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data)
+        if (appConfigRef.current.verbose) {
+          console.debug('[WS EVENT]', data.type, data.payload || data);
+        }
         if (data.type === 'dupe-start' || data.type === 'dupe-processing-repo' || data.type === 'dupe-grouping-hamming' || data.type === 'dupe-finished') {
           const repoName = data.payload.repo || 'batch';
           setActiveDupeProcesses(prev => ({ ...prev, [repoName]: data.payload }));
@@ -652,8 +953,8 @@ function App() {
     }
   }, [queryClient])
 
-  const formatSize = (bytes: number) => {
-    if (bytes === 0) return '0 B'
+  const formatSize = (bytes: number | undefined) => {
+    if (!bytes || bytes === 0) return '0 B'
     const k = 1024
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
@@ -910,36 +1211,7 @@ function App() {
                   <p className="text-slate-500 max-w-md">No duplicate file hashes were detected across the selected repositories.</p>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  <p className="text-sm text-slate-400 mb-4">Found {globalDupes?.length} duplicate groups</p>
-                  {globalDupes?.map((group, i) => (
-                    <div key={i} className="bg-slate-950/50 border border-slate-800 rounded-xl overflow-hidden">
-                      <div className="p-4 bg-slate-800/20 border-b border-slate-800 flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-blue-400" />
-                          <span className="font-mono text-sm font-bold text-blue-100">{group[0]?.repoFile.hash?.substring(0, 10)}...</span>
-                          <span className="text-[10px] text-slate-500 px-2 py-0.5 bg-slate-800 rounded">{((group[0]?.repoFile.size || 0) / 1024 / 1024).toFixed(2)} MB</span>
-                        </div>
-                        <span className="text-xs text-slate-500">{group.length} occurrences</span>
-                      </div>
-                      <div className="divide-y divide-slate-800/50">
-                        {group.map((item, j) => (
-                          <div key={j} className="p-4 flex justify-between items-center hover:bg-slate-800/20 transition-colors">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 bg-slate-900 rounded border border-slate-800">
-                                <FileText className="w-5 h-5 text-slate-400" />
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium text-slate-200">{item.repoFile.relativePath}</p>
-                                <p className="text-[10px] text-slate-500 font-mono">{item.repo.name} — {item.repo.absolutePath}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <DuplicateGroupsView groups={globalDupes!} formatSize={formatSize} />
               )}
             </div>
           </section>
@@ -1369,40 +1641,7 @@ function App() {
                   <p className="text-slate-500 max-w-md">Your repository looks clean. No duplicate file hashes were detected.</p>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  <p className="text-sm text-slate-400 mb-4">Found {(dupeResults[selectedRepo!] || []).length} duplicate groups</p>
-                  {(dupeResults[selectedRepo!] || []).map((group, i) => (
-                    <div key={i} className="bg-slate-950/50 border border-slate-800 rounded-xl overflow-hidden">
-                      <div className="p-4 bg-slate-800/20 border-b border-slate-800 flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-blue-400" />
-                          <span className="font-mono text-sm font-bold text-blue-100">{group[0]?.repoFile.hash?.substring(0, 10)}...</span>
-                          <span className="text-[10px] text-slate-500 px-2 py-0.5 bg-slate-800 rounded">{((group[0]?.repoFile.size || 0) / 1024 / 1024).toFixed(2)} MB</span>
-                        </div>
-                        <span className="text-xs text-slate-500">{group.length} occurrences</span>
-                      </div>
-                      <div className="divide-y divide-slate-800/50">
-                        {group.map((item, j) => (
-                          <div key={j} className="p-4 flex justify-between items-center hover:bg-slate-800/20 transition-colors">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 bg-slate-900 rounded border border-slate-800">
-                                  <FileText className="w-5 h-5 text-slate-400" />
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium text-slate-200">{item.repoFile.relativePath}</p>
-                                <p className="text-[10px] text-slate-500 font-mono">{item.repo.absolutePath}</p>
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <button className="text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:text-white px-2 py-1 rounded transition-colors">Open</button>
-                              <button className="text-[10px] font-bold uppercase tracking-wider text-red-500 hover:bg-red-500/10 px-2 py-1 rounded transition-colors">Delete</button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <DuplicateGroupsView groups={dupeResults[selectedRepo!] || []} formatSize={formatSize} />
               )}
             </div>
           </section>
@@ -1704,15 +1943,18 @@ function App() {
                   <input 
                     type="text" 
                     value={newRepo.name}
-                    onChange={e => setNewRepo({...newRepo, name: e.target.value.replace(/\s+/g, '_')})}
+                    onChange={e => setNewRepo({...newRepo, name: e.target.value})}
                     className={`w-full bg-slate-950 border rounded-lg px-4 py-2 focus:ring-1 outline-none transition-all ${
-                      repos?.some(r => r.name === newRepo.name) 
+                      !isValidRepoName(newRepo.name) || !isRepoNameUnique(newRepo.name)
                         ? 'border-red-500 focus:border-red-500 focus:ring-red-500' 
                         : 'border-slate-800 focus:border-blue-500 focus:ring-blue-500'
                     }`}
                     placeholder="e.g. My_Music"
                   />
-                  {repos?.some(r => r.name === newRepo.name) && (
+                  {newRepo.name && !isValidRepoName(newRepo.name) && (
+                    <p className="text-xs text-red-500 mt-1">Invalid name: only letters, digits and underscores allowed</p>
+                  )}
+                  {newRepo.name && isValidRepoName(newRepo.name) && !isRepoNameUnique(newRepo.name) && (
                     <p className="text-xs text-red-500 mt-1">Repository name already exists</p>
                   )}
                 </div>
@@ -1761,7 +2003,7 @@ function App() {
                         }
                       })
                     }}
-                    disabled={!newRepo.name || !newRepo.absolutePath || createMutation.isPending || repos?.some(r => r.name === newRepo.name)}
+                    disabled={!isValidRepoName(newRepo.name) || !isRepoNameUnique(newRepo.name) || !newRepo.absolutePath || createMutation.isPending}
                     className="px-4 py-2 rounded-lg border border-slate-700 hover:bg-slate-800 text-white font-semibold transition-colors text-sm"
                   >
                     Add Another
@@ -1775,7 +2017,7 @@ function App() {
                         }
                       })
                     }}
-                    disabled={!newRepo.name || !newRepo.absolutePath || createMutation.isPending || repos?.some(r => r.name === newRepo.name)}
+                    disabled={!isValidRepoName(newRepo.name) || !isRepoNameUnique(newRepo.name) || !newRepo.absolutePath || createMutation.isPending}
                     className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg font-semibold transition-colors text-sm"
                   >
                     Add
@@ -1790,7 +2032,7 @@ function App() {
                         }
                       })
                     }}
-                    disabled={!newRepo.name || !newRepo.absolutePath || createMutation.isPending || repos?.some(r => r.name === newRepo.name)}
+                    disabled={!isValidRepoName(newRepo.name) || !isRepoNameUnique(newRepo.name) || !newRepo.absolutePath || createMutation.isPending}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors text-sm"
                   >
                     {createMutation.isPending ? 'Adding...' : 'Add and Scan'}

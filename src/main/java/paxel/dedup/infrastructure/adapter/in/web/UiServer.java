@@ -54,6 +54,10 @@ public class UiServer {
     }
 
     private void setupRoutes() {
+        app.get("/api/config", ctx -> {
+            ctx.json(Map.of("verbose", infrastructureConfig.getCliParameter().isVerbose()));
+        });
+
         app.get("/api/repos", ctx -> ctx.json(repoService.getRepos().value()));
 
         app.post("/api/repos", ctx -> {
@@ -104,6 +108,85 @@ public class UiServer {
                 log.error("Error browsing directory: {}", finalRoot, e);
                 ctx.status(500).json(Map.of("message", "Error browsing directory: " + e.getMessage()));
             }
+        });
+
+        app.get("/api/files/preview", ctx -> {
+            String pathStr = ctx.queryParam("path");
+            if (pathStr == null || pathStr.isBlank()) {
+                ctx.status(400).json(Map.of("message", "Path is required"));
+                return;
+            }
+            Path path = Paths.get(pathStr);
+            if (!fileSystem.exists(path)) {
+                ctx.status(404).json(Map.of("message", "File not found"));
+                return;
+            }
+
+            String mimeType = java.nio.file.Files.probeContentType(path);
+            if (mimeType == null) {
+                mimeType = "application/octet-stream";
+            }
+
+            if (mimeType.startsWith("image/")) {
+                ctx.contentType(mimeType);
+                try (var is = fileSystem.newInputStream(path)) {
+                    ctx.result(is.readAllBytes());
+                }
+            } else if (mimeType.startsWith("video/")) {
+                var generator = new paxel.dedup.repo.domain.repo.VideoFilmstripGenerator(fileSystem);
+                List<String> frames = generator.generateBase64Filmstrip(path);
+                ctx.json(Map.of("type", "video", "frames", frames));
+            } else if ("application/pdf".equals(mimeType)) {
+                var generator = new paxel.dedup.repo.domain.repo.PdfThumbnailGenerator(fileSystem);
+                String frame = generator.generateBase64Thumbnail(path);
+                ctx.json(Map.of("type", "pdf", "frame", frame));
+            } else {
+                ctx.status(415).json(Map.of("message", "Unsupported preview type: " + mimeType));
+            }
+        });
+
+        app.post("/api/files/delete", ctx -> {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> items = ctx.bodyAsClass(List.class);
+            int deletedCount = 0;
+            List<String> errors = new java.util.ArrayList<>();
+            for (Map<String, Object> item : items) {
+                String repoName = (String) item.get("repoName");
+                String repoPath = (String) item.get("repoPath");
+                String relativePath = (String) item.get("relativePath");
+                long size = item.get("size") instanceof Number n ? n.longValue() : 0L;
+                if (repoName == null || repoPath == null || relativePath == null) {
+                    errors.add("Missing fields in delete request item");
+                    continue;
+                }
+                Path absolutePath = Paths.get(repoPath, relativePath);
+                if (!fileSystem.exists(absolutePath)) {
+                    errors.add("File not found: " + absolutePath);
+                    continue;
+                }
+                try {
+                    fileSystem.delete(absolutePath);
+                    log.info("Deleted: {}", absolutePath);
+                    // Update repo index to mark file as missing
+                    var repoResult = infrastructureConfig.getDedupConfig().getRepo(repoName);
+                    if (repoResult.isSuccess()) {
+                        var rm = paxel.dedup.repo.domain.repo.RepoManager.forRepo(repoResult.value(), infrastructureConfig.getDedupConfig(), fileSystem);
+                        var loadResult = rm.load();
+                        if (loadResult.isSuccess()) {
+                            var existing = rm.getByPath(relativePath);
+                            if (existing != null) {
+                                rm.addRepoFile(existing.withMissing(true));
+                            }
+                            rm.close();
+                        }
+                    }
+                    deletedCount++;
+                } catch (Exception e) {
+                    log.error("Failed to delete {}: {}", absolutePath, e.getMessage());
+                    errors.add("Failed to delete " + absolutePath + ": " + e.getMessage());
+                }
+            }
+            ctx.json(Map.of("deleted", deletedCount, "errors", errors));
         });
 
         app.delete("/api/repos/{name}", ctx -> {

@@ -129,7 +129,7 @@ class UpdateProgressPrinterTest {
             public void close() { /* nothing */ }
         };
 
-        UpdateProgressPrinter upp = new UpdateProgressPrinter(remaining, new TerminalUpdateObserver("r1", dataDir.toString(), sp), repoManager, stats, hasher, false);
+        UpdateProgressPrinter upp = new UpdateProgressPrinter(remaining, new TerminalUpdateObserver("r1", dataDir.toString(), sp), repoManager, stats, hasher, false, false);
 
         // Act: simulate traversal
         upp.addDir(dataDir);

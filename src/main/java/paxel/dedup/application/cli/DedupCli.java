@@ -19,6 +19,7 @@ public class DedupCli {
 
         InfrastructureConfig infrastructureConfig = new InfrastructureConfig();
         CliParameter cliParameter = new CliParameter();
+        infrastructureConfig.setCliParameter(cliParameter);
 
         CommandLine commandLine = new CommandLine(cliParameter)
                 .addSubcommand(new DiffCommand(infrastructureConfig))

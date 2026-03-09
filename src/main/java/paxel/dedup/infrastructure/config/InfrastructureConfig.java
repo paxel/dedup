@@ -2,6 +2,7 @@ package paxel.dedup.infrastructure.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
+import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.domain.service.EventBus;
 import paxel.dedup.domain.service.RepoService;
@@ -18,6 +19,8 @@ public class InfrastructureConfig {
     private final RepoService repoService;
     @Getter
     private final EventBus eventBus;
+    @Getter
+    private CliParameter cliParameter;
 
     public InfrastructureConfig() {
         this.fileSystem = new NioFileSystemAdapter();
@@ -25,6 +28,10 @@ public class InfrastructureConfig {
         this.dedupConfig = DedupConfigFactory.create(this.fileSystem).value();
         this.repoService = new RepoService(this.dedupConfig, this.fileSystem);
         this.eventBus = new EventBus();
+    }
+
+    public void setCliParameter(CliParameter cliParameter) {
+        this.cliParameter = cliParameter;
     }
 
     // You can add more factory methods here if you want to provide fully wired processes

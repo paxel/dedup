@@ -1,5 +1,6 @@
 package paxel.dedup.repo.domain.repo;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.extern.slf4j.Slf4j;
 import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Dimension;
@@ -107,6 +108,9 @@ public class DuplicateRepoProcess {
     }
 
     public List<List<RepoRepoFile>> findGroups() {
+        if (cliParameter.isVerbose()) {
+            log.info("Finding groups for repos: {} (all: {}, threshold: {})", names, all, threshold);
+        }
         dupeObserver.onStart(all, names);
         Result<List<Repo>, DedupError> reposToProcess;
         if (all) {
@@ -117,20 +121,33 @@ public class DuplicateRepoProcess {
                 Result<Repo, DedupError> repoResult = dedupConfig.getRepo(name);
                 if (repoResult.isSuccess()) {
                     repos.add(repoResult.value());
+                } else if (cliParameter.isVerbose()) {
+                    log.warn("Failed to load repo: {} - {}", name, repoResult.error());
                 }
             }
             reposToProcess = Result.ok(repos);
         }
 
-        if (reposToProcess.hasFailed()) return List.of();
+        if (reposToProcess.hasFailed()) {
+            if (cliParameter.isVerbose()) {
+                log.error("Failed to get repos to process: {}", reposToProcess.error());
+            }
+            return List.of();
+        }
         List<List<RepoRepoFile>> groups;
         if (threshold != null && threshold > 0) {
+            if (cliParameter.isVerbose()) log.info("Using similarity search with threshold {}", threshold);
             groups = findSimilar(reposToProcess.value());
         } else {
+            if (cliParameter.isVerbose()) log.info("Using exact hash search");
             groups = findExact(reposToProcess.value());
         }
-        dupeObserver.onGroupsReady(names.size() > 1 || all ? "batch" : (names.isEmpty() ? "all" : names.get(0)), groups);
-        dupeObserver.onFinished(groups.size());
+        String reportedName = names.size() > 1 || all ? "batch" : (names.isEmpty() ? "all" : names.get(0));
+        if (cliParameter.isVerbose()) {
+            log.info("Groups found: {}. Reporting as: {}", groups.size(), reportedName);
+        }
+        dupeObserver.onGroupsReady(reportedName, groups);
+        dupeObserver.onFinished(reportedName, groups.size());
         return groups;
     }
 
@@ -697,7 +714,6 @@ public class DuplicateRepoProcess {
     record UniqueHash(String hash, long size) {
     }
 
-    public record RepoRepoFile(Repo repo, RepoFile file) {
-
+    public record RepoRepoFile(Repo repo, @JsonProperty("repoFile") RepoFile file) {
     }
 }
