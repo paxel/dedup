@@ -897,10 +897,13 @@ function App() {
             throttleTimerRef.current = setTimeout(() => {
               throttleTimerRef.current = null;
               const snapshot = { ...pendingProgressRef.current };
+              // Only update repos that are still in activeProcesses (don't resurrect finished ones)
               setActiveProcesses((prev) => {
                 const next = { ...prev };
                 Object.entries(snapshot).forEach(([repo, update]) => {
-                  next[repo] = update;
+                  if (next[repo]) {
+                    next[repo] = update;
+                  }
                 });
                 return next;
               });
@@ -909,6 +912,11 @@ function App() {
         } else if (data.type === 'finished') {
           const repoName = data.payload?.repo || 'default';
           delete pendingProgressRef.current[repoName];
+          // Cancel pending throttle timer if no more active repos in pending
+          if (Object.keys(pendingProgressRef.current).length === 0 && throttleTimerRef.current) {
+            clearTimeout(throttleTimerRef.current);
+            throttleTimerRef.current = null;
+          }
           // Clean up immediately — no delay needed
           setActiveProcesses((prev) => {
             const next = { ...prev };
@@ -919,6 +927,10 @@ function App() {
         } else if (data.type === 'error') {
           const repoName = data.payload?.repo || 'default';
           delete pendingProgressRef.current[repoName];
+          if (Object.keys(pendingProgressRef.current).length === 0 && throttleTimerRef.current) {
+            clearTimeout(throttleTimerRef.current);
+            throttleTimerRef.current = null;
+          }
           setActiveProcesses((prev) => {
             const next = { ...prev };
             delete next[repoName];

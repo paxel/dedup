@@ -146,7 +146,13 @@ public class UpdateReposProcess {
             progressPrinterObserver.setCancelled(cancelled);
             currentPrinter = progressPrinterObserver;
             new ResilientFileWalker(progressPrinterObserver, fileSystem, cancelled).walk(root);
+            progressPrinterObserver.close();
             currentPrinter = null;
+
+            if (cancelled.get()) {
+                log.info("Update cancelled for: {}", repoManager.getRepo().name());
+                return Result.err(DedupError.of(paxel.dedup.domain.model.errors.ErrorType.UPDATE_REPO, root + ": Update cancelled by user."));
+            }
 
             if (progressPrinterObserver.getErrors() > 0 && progressPrinterObserver.getAllDirs() <= 1 && progressPrinterObserver.getFiles() == 0) {
                 Throwable first = progressPrinterObserver.getFirstError();

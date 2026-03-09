@@ -182,6 +182,10 @@ public class RepoManager {
             if (hashResult.hasFailed())
                 return hashResult.mapError(l -> DedupError.of(ErrorType.WRITE, absolutePath + ": hashing failed", l.exception()));
 
+            if (Thread.currentThread().isInterrupted()) {
+                return Result.<RepoFile, DedupError>err(DedupError.of(ErrorType.LOAD, absolutePath + ": cancelled", new InterruptedException()));
+            }
+
             String mimeType = mimetypeProvider.get(absolutePath).getValueOr(null);
             String fingerprint = null;
             String videoHash = null;
@@ -189,7 +193,7 @@ public class RepoManager {
             String audioHash = null;
             Dimension imageSize = null;
             Map<String, String> attributes = Map.of();
-            if (mimeType != null) {
+            if (mimeType != null && !Thread.currentThread().isInterrupted()) {
                 try {
                     if (mimeType.startsWith("image/")) {
                         ImageFingerprinter.FingerprintResult fr = new ImageFingerprinter().calculate(absolutePath);
@@ -197,13 +201,19 @@ public class RepoManager {
                         imageSize = fr.imageSize();
                     } else if (mimeType.startsWith("video/")) {
                         attributes = new MetadataExtractor(fileSystem).extract(absolutePath);
-                        videoHash = new VideoFingerprinter().calculateTemporalHash(absolutePath);
+                        if (!Thread.currentThread().isInterrupted()) {
+                            videoHash = new VideoFingerprinter().calculateTemporalHash(absolutePath);
+                        }
                     } else if (mimeType.equals("application/pdf")) {
                         attributes = new MetadataExtractor(fileSystem).extract(absolutePath);
-                        pdfHash = new PdfFingerprinter(fileSystem).calculatePdfHash(absolutePath);
+                        if (!Thread.currentThread().isInterrupted()) {
+                            pdfHash = new PdfFingerprinter(fileSystem).calculatePdfHash(absolutePath);
+                        }
                     } else if (mimeType.startsWith("audio/")) {
                         attributes = new MetadataExtractor(fileSystem).extract(absolutePath);
-                        audioHash = new AudioFingerprinter(fileSystem).calculateAudioHash(absolutePath);
+                        if (!Thread.currentThread().isInterrupted()) {
+                            audioHash = new AudioFingerprinter(fileSystem).calculateAudioHash(absolutePath);
+                        }
                     }
                 } catch (Exception e) {
                     log.warn("Error during metadata/fingerprint extraction for {}: {}", absolutePath, e.getMessage());

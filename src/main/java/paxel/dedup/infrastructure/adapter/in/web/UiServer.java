@@ -319,8 +319,13 @@ public class UiServer {
                         log.info("Starting sequential update for: {}", name);
                         var result = process.update();
                         if (result.hasFailed()) {
-                            log.error("Update failed for {}: {}", name, result.error().describe());
-                            eventBus.publish("error", Map.of("repo", name, "message", result.error().describe()));
+                            String desc = result.error().describe();
+                            if (desc.contains("cancelled")) {
+                                log.info("Update cancelled for: {}", name);
+                            } else {
+                                log.error("Update failed for {}: {}", name, desc);
+                                eventBus.publish("error", Map.of("repo", name, "message", desc));
+                            }
                         } else {
                             log.info("Update completed successfully for: {}", name);
                         }
@@ -361,8 +366,13 @@ public class UiServer {
                     log.info("Starting background update process for: {}", name);
                     var result = process.update();
                     if (result.hasFailed()) {
-                        log.error("Update failed for {}: {}", name, result.error().describe());
-                        eventBus.publish("error", Map.of("repo", name, "message", result.error().describe()));
+                        String desc = result.error().describe();
+                        if (desc.contains("cancelled")) {
+                            log.info("Update cancelled for: {}", name);
+                        } else {
+                            log.error("Update failed for {}: {}", name, desc);
+                            eventBus.publish("error", Map.of("repo", name, "message", desc));
+                        }
                     } else {
                         log.info("Update completed successfully for: {}", name);
                     }

@@ -19,6 +19,7 @@ public class Sha1Hasher implements FileHasher {
 
     private final BinaryFormatter hexStringer;
     private final ExecutorService executorService;
+    private volatile boolean forceShutdown = false;
 
     @Override
     public CompletableFuture<Result<String, DedupError>> hash(Path path) {
@@ -47,11 +48,20 @@ public class Sha1Hasher implements FileHasher {
         }
     }
 
+    public void shutdownNow() {
+        forceShutdown = true;
+        executorService.shutdownNow();
+    }
+
     @SneakyThrows
     @Override
     public void close() {
-        executorService.shutdown();
-        if (!executorService.awaitTermination(1, TimeUnit.HOURS)) {
+        if (forceShutdown) {
+            executorService.shutdownNow();
+        } else {
+            executorService.shutdown();
+        }
+        if (!executorService.awaitTermination(10, TimeUnit.SECONDS)) {
             executorService.shutdownNow();
         }
     }

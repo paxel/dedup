@@ -63,6 +63,9 @@ class UpdateProgressPrinter implements FileObserver {
 
     @Override
     public void file(Path absolutePath) {
+        if (cancelled.get()) {
+            return;
+        }
         remainingPaths.remove(absolutePath);
         long currentFiles = files.incrementAndGet();
         long currentDirs = allDirs.get();
@@ -149,6 +152,10 @@ class UpdateProgressPrinter implements FileObserver {
 
     public void cancelNow() {
         cancelled.set(true);
+        // Shut down the hasher's executor to interrupt running threads
+        if (fileHasher instanceof Sha1Hasher sha1Hasher) {
+            sha1Hasher.shutdownNow();
+        }
         CompletableFuture<?>[] snapshot;
         synchronized (futures) {
             snapshot = futures.toArray(new CompletableFuture[0]);
@@ -187,13 +194,13 @@ class UpdateProgressPrinter implements FileObserver {
             }
         }
 
-        long totalDeleted = remainingPaths.size();
-        long count = 0;
-        for (Path p : remainingPaths.keySet()) {
-            observer.onDeleted(p, ++count, totalDeleted);
+        if (!cancelled.get()) {
+            long totalDeleted = remainingPaths.size();
+            long count = 0;
+            for (Path p : remainingPaths.keySet()) {
+                observer.onDeleted(p, ++count, totalDeleted);
+            }
+            statistics.set("deleted", remainingPaths.size());
         }
-
-        statistics.set("deleted", remainingPaths.size());
-        observer.onFinished(statistics);
     }
 }

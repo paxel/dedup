@@ -110,10 +110,14 @@ public class WebUpdateObserver implements UpdateObserver {
 
     @Override
     public void onError(Path path, Throwable e) {
+        String message = e != null ? e.getMessage() : "Unknown error";
+        if (message == null) {
+            message = e != null ? e.getClass().getSimpleName() : "Unknown error";
+        }
         publish(ProgressUpdate.builder()
                 .repo(repoName)
                 .path(absolutePath)
-                .errors(e.getMessage())
+                .errors(message)
                 .build());
     }
 

@@ -12,7 +12,7 @@ import java.util.Map;
 @With
 @JsonInclude(JsonInclude.Include.NON_EMPTY)
 public record RepoFile(
-        @JsonProperty(value = "h", required = true) String hash,
+        @JsonProperty(value = "h") String hash,
         @JsonProperty(value = "p") String relativePath,
         @JsonProperty(value = "s", defaultValue = "0") Long size,
         @JsonProperty(value = "l") long lastModified,
