@@ -8,11 +8,13 @@ import paxel.dedup.domain.model.RepoFile;
 import paxel.dedup.domain.model.Statistics;
 import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.domain.port.out.FileSystem;
+import paxel.dedup.domain.service.DupeObserver;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.lib.Result;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 public class DuplicateRepoProcess {
@@ -35,6 +37,17 @@ public class DuplicateRepoProcess {
     private final String widthFilter;
     private final String heightFilter;
     private final FileSystem fileSystem;
+    private DupeObserver dupeObserver = DupeObserver.NOOP;
+    private final AtomicBoolean cancelled = new AtomicBoolean(false);
+
+    public DuplicateRepoProcess withObserver(DupeObserver observer) {
+        this.dupeObserver = observer != null ? observer : DupeObserver.NOOP;
+        return this;
+    }
+
+    public void cancel() {
+        this.cancelled.set(true);
+    }
 
     public DuplicateRepoProcess(CliParameter cliParameter, List<String> names, boolean all, DedupConfig dedupConfig, Integer threshold, DupePrintMode printMode, String mdPath, String htmlPath, String movePath, boolean delete, boolean interactive) {
         this(cliParameter, names, all, dedupConfig, threshold, printMode, mdPath, htmlPath, movePath, delete, interactive, null, null, new NioFileSystemAdapter());
@@ -94,6 +107,7 @@ public class DuplicateRepoProcess {
     }
 
     public List<List<RepoRepoFile>> findGroups() {
+        dupeObserver.onStart(all, names);
         Result<List<Repo>, DedupError> reposToProcess;
         if (all) {
             reposToProcess = dedupConfig.getRepos();
@@ -109,11 +123,14 @@ public class DuplicateRepoProcess {
         }
 
         if (reposToProcess.hasFailed()) return List.of();
+        List<List<RepoRepoFile>> groups;
         if (threshold != null && threshold > 0) {
-            return findSimilar(reposToProcess.value());
+            groups = findSimilar(reposToProcess.value());
         } else {
-            return findExact(reposToProcess.value());
+            groups = findExact(reposToProcess.value());
         }
+        dupeObserver.onFinished(groups.size());
+        return groups;
     }
 
     private int dupe(List<Repo> repos) {
@@ -240,7 +257,10 @@ public class DuplicateRepoProcess {
     private List<List<RepoRepoFile>> findExact(List<Repo> repos) {
         Map<UniqueHash, List<RepoRepoFile>> all = new HashMap<>();
 
-        for (Repo repo : repos) {
+        for (int i = 0; i < repos.size(); i++) {
+            if (cancelled.get()) return List.of();
+            Repo repo = repos.get(i);
+            dupeObserver.onProcessingRepo(repo.name(), i, repos.size());
             RepoManager r = RepoManager.forRepo(repo, dedupConfig, fileSystem);
             Result<Statistics, DedupError> load = r.load();
             if (load.hasFailed()) {
@@ -270,7 +290,10 @@ public class DuplicateRepoProcess {
         List<RepoRepoFile> pdfs = new ArrayList<>();
         List<RepoRepoFile> audios = new ArrayList<>();
 
-        for (Repo repo : repos) {
+        for (int i = 0; i < repos.size(); i++) {
+            if (cancelled.get()) return List.of();
+            Repo repo = repos.get(i);
+            dupeObserver.onProcessingRepo(repo.name(), i, repos.size());
             RepoManager r = RepoManager.forRepo(repo, dedupConfig, fileSystem);
             Result<Statistics, DedupError> load = r.load();
             if (load.hasFailed()) {
@@ -328,7 +351,12 @@ public class DuplicateRepoProcess {
         List<List<RepoRepoFile>> groups = new ArrayList<>();
         Set<Integer> handled = new HashSet<>();
         for (int i = 0; i < items.size(); i++) {
+            if (cancelled.get()) return groups;
             if (handled.contains(i)) continue;
+
+            if (i % 100 == 0) {
+                dupeObserver.onGroupingSimilar(i, items.size(), bitLength, threshold);
+            }
 
             List<RepoRepoFile> group = new ArrayList<>();
             group.add(items.get(i));
@@ -633,7 +661,7 @@ public class DuplicateRepoProcess {
     record UniqueHash(String hash, long size) {
     }
 
-    record RepoRepoFile(Repo repo, RepoFile file) {
+    public record RepoRepoFile(Repo repo, RepoFile file) {
 
     }
 }

@@ -1,8 +1,6 @@
 package paxel.dedup.terminal;
 
-import lombok.Setter;
 import paxel.dedup.domain.model.ProgressUpdate;
-import paxel.dedup.domain.service.EventBus;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -14,8 +12,6 @@ import java.util.stream.Collectors;
 public class StatisticPrinter implements ProgressPrinter {
     private final List<Supplier<String>> lines = new ArrayList<>();
     private Runnable action;
-    @Setter
-    private EventBus eventBus;
 
     private String repo = "";
     private String path = "";
@@ -84,9 +80,6 @@ public class StatisticPrinter implements ProgressPrinter {
         if (action != null) {
             action.run();
         }
-        if (eventBus != null) {
-            eventBus.publish("progress", update);
-        }
     }
 
     @Override
@@ -98,9 +91,6 @@ public class StatisticPrinter implements ProgressPrinter {
         this.repo = repo;
         this.path = path;
         notifyListeners();
-        if (eventBus != null) {
-            eventBus.publish("progress", ProgressUpdate.builder().repo(repo).path(path).build());
-        }
     }
 
     @Override
@@ -164,8 +154,5 @@ public class StatisticPrinter implements ProgressPrinter {
     public void finish() {
         this.progress = "100.00 % Finished";
         notifyListeners();
-        if (eventBus != null) {
-            eventBus.publish("finished", Map.of("repo", repo));
-        }
     }
 }

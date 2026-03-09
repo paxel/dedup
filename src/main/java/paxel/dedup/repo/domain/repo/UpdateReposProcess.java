@@ -7,7 +7,6 @@ import paxel.dedup.domain.model.errors.DedupError;
 import paxel.dedup.domain.port.out.FileSystem;
 import paxel.dedup.infrastructure.adapter.out.filesystem.NioFileSystemAdapter;
 import paxel.dedup.infrastructure.adapter.out.terminal.TerminalUpdateObserver;
-import paxel.dedup.infrastructure.adapter.out.web.WebUpdateObserver;
 import paxel.dedup.infrastructure.config.DedupConfig;
 import paxel.dedup.terminal.StatisticPrinter;
 import paxel.dedup.terminal.TerminalProgress;
@@ -36,7 +35,7 @@ public class UpdateReposProcess {
     private final boolean progress;
     private final boolean refreshFingerprints;
     private final FileSystem fileSystem;
-    private paxel.dedup.domain.service.EventBus eventBus;
+    private UpdateObserver updateObserver = UpdateObserver.NOOP;
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
     private volatile UpdateProgressPrinter currentPrinter;
 
@@ -52,8 +51,8 @@ public class UpdateReposProcess {
         this(cliParameter, names, all, threads, dedupConfig, progress, refreshFingerprints, new NioFileSystemAdapter());
     }
 
-    public UpdateReposProcess withEventBus(paxel.dedup.domain.service.EventBus eventBus) {
-        this.eventBus = eventBus;
+    public UpdateReposProcess withObserver(UpdateObserver observer) {
+        this.updateObserver = observer != null ? observer : UpdateObserver.NOOP;
         return this;
     }
 
@@ -106,12 +105,7 @@ public class UpdateReposProcess {
         Map<Path, RepoFile> remainingPaths = repoManager.stream().filter(r -> !r.missing()).collect(Collectors.toMap(r -> Paths.get(repoManager.getRepo().absolutePath(), r.relativePath()), Function.identity(), (old, update) -> update));
 
         StatisticPrinter progressPrinter = new StatisticPrinter();
-        UpdateObserver observer;
-        if (eventBus != null) {
-            observer = new WebUpdateObserver(repoManager.getRepo().name(), repoManager.getRepo().absolutePath(), eventBus);
-        } else {
-            observer = new TerminalUpdateObserver(repoManager.getRepo().name(), repoManager.getRepo().absolutePath(), progressPrinter);
-        }
+        UpdateObserver observer = updateObserver != UpdateObserver.NOOP ? updateObserver : new TerminalUpdateObserver(repoManager.getRepo().name(), repoManager.getRepo().absolutePath(), progressPrinter);
 
         TerminalProgress terminalProgress = prepProgress(progressPrinter);
         PrintStream originalErr = System.err;

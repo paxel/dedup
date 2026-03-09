@@ -7,7 +7,10 @@ import paxel.dedup.application.cli.parameter.CliParameter;
 import paxel.dedup.domain.model.Repo;
 import paxel.dedup.domain.service.EventBus;
 import paxel.dedup.domain.service.RepoService;
+import paxel.dedup.infrastructure.adapter.out.web.WebDupeObserver;
+import paxel.dedup.infrastructure.adapter.out.web.WebUpdateObserver;
 import paxel.dedup.infrastructure.config.InfrastructureConfig;
+import paxel.dedup.repo.domain.repo.DuplicateRepoProcess;
 import paxel.dedup.repo.domain.repo.UpdateReposProcess;
 
 import java.nio.file.Path;
@@ -26,7 +29,9 @@ public class UiServer {
     private final paxel.dedup.domain.port.out.FileSystem fileSystem;
     private final InfrastructureConfig infrastructureConfig;
     private final java.util.concurrent.ExecutorService updateExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private final java.util.concurrent.ExecutorService dupeExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
     private final ConcurrentHashMap<String, UpdateReposProcess> activeUpdates = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, DuplicateRepoProcess> activeDupeProcesses = new ConcurrentHashMap<>();
 
     public UiServer(InfrastructureConfig infrastructureConfig) {
         this.infrastructureConfig = infrastructureConfig;
@@ -223,7 +228,8 @@ public class UiServer {
                             false,
                             false,
                             infrastructureConfig.getFileSystem()
-                    ).withEventBus(eventBus);
+                    );
+                    process.withObserver(new WebUpdateObserver(name, name, eventBus));
                     activeUpdates.put(name, process);
                     eventBus.publish("progress", Map.of("repo", name, "reset", true));
                     try {
@@ -262,7 +268,8 @@ public class UiServer {
                     false, // progress (Terminal/Lanterna)
                     false,  // refreshFingerprints
                     infrastructureConfig.getFileSystem() // Explicitly pass fileSystem
-            ).withEventBus(eventBus);
+            );
+            process.withObserver(new WebUpdateObserver(name, name, eventBus));
             activeUpdates.put(name, process);
             eventBus.publish("progress", Map.of("repo", name, "reset", true));
             updateExecutor.execute(() -> {
@@ -299,29 +306,98 @@ public class UiServer {
 
         app.get("/api/repos/{name}/dupes", ctx -> {
             String name = ctx.pathParam("name");
-            var repoResult = repoService.getRepo(name);
-            if (repoResult.hasFailed()) {
-                ctx.status(404).json(repoResult.error());
+            Integer threshold = ctx.queryParamAsClass("threshold", Integer.class).getOrDefault(0);
+            log.info("Duplicate detection requested for repository: {} with threshold: {}", name, threshold);
+
+            if (activeDupeProcesses.containsKey("batch") || activeDupeProcesses.containsKey(name)) {
+                ctx.status(409).json(Map.of("message", "Duplicate detection already running"));
                 return;
             }
 
-            // Using DuplicateRepoProcess to find dupes
-            // We use threshold 0 (exact) and PRINT mode (quiet since we want the result list)
-            var process = new paxel.dedup.repo.domain.repo.DuplicateRepoProcess(
+            var process = new DuplicateRepoProcess(
                     new CliParameter(),
                     List.of(name),
                     false,
                     infrastructureConfig.getDedupConfig(),
-                    0, // threshold
-                    paxel.dedup.repo.domain.repo.DuplicateRepoProcess.DupePrintMode.QUIET,
-                    null, null, null, false, false
+                    threshold,
+                    DuplicateRepoProcess.DupePrintMode.QUIET,
+                    null, null, null, false, false,
+                    fileSystem
             );
 
-            // This is a bit tricky as dupes() returns a Result<Integer, DedupError>
-            // We need to access the groups it found.
-            // DuplicateRepoProcess doesn't expose the groups directly, it prints them or generates reports.
-            // I might need to refactor DuplicateRepoProcess to return groups.
-            ctx.json(process.findGroups());
+            WebDupeObserver observer = new WebDupeObserver(name, eventBus);
+            process.withObserver(observer);
+
+            activeDupeProcesses.put(name, process);
+            dupeExecutor.execute(() -> {
+                try {
+                    List<List<DuplicateRepoProcess.RepoRepoFile>> groups = process.findGroups();
+                    observer.onGroupsReady(name, groups);
+                } catch (Exception e) {
+                    log.error("Error during duplicate detection for {}", name, e);
+                    observer.onError(name, "Duplicate detection failed: " + e.getMessage());
+                } finally {
+                    activeDupeProcesses.remove(name);
+                }
+            });
+
+            ctx.status(202).json(Map.of("message", "Duplicate detection started for " + name));
+        });
+
+        app.post("/api/repos/dupes", ctx -> {
+            List<String> names = ctx.bodyAsClass(List.class);
+            Integer threshold = ctx.queryParamAsClass("threshold", Integer.class).getOrDefault(0);
+            if (names == null || names.isEmpty()) {
+                ctx.status(400).json(Map.of("message", "No repositories specified"));
+                return;
+            }
+            log.info("Batch duplicate detection requested for repositories: {} with threshold: {}", names, threshold);
+
+            if (activeDupeProcesses.containsKey("batch")) {
+                ctx.status(409).json(Map.of("message", "Batch duplicate detection already running"));
+                return;
+            }
+
+            var process = new DuplicateRepoProcess(
+                    new CliParameter(),
+                    names,
+                    false,
+                    infrastructureConfig.getDedupConfig(),
+                    threshold,
+                    DuplicateRepoProcess.DupePrintMode.QUIET,
+                    null, null, null, false, false,
+                    fileSystem
+            );
+
+            WebDupeObserver observer = new WebDupeObserver("batch", eventBus);
+            process.withObserver(observer);
+
+            activeDupeProcesses.put("batch", process);
+            dupeExecutor.execute(() -> {
+                try {
+                    List<List<DuplicateRepoProcess.RepoRepoFile>> groups = process.findGroups();
+                    observer.onGroupsReady("batch", groups);
+                } catch (Exception e) {
+                    log.error("Error during batch duplicate detection", e);
+                    observer.onError("batch", "Batch duplicate detection failed: " + e.getMessage());
+                } finally {
+                    activeDupeProcesses.remove("batch");
+                }
+            });
+
+            ctx.status(202).json(Map.of("message", "Batch duplicate detection started"));
+        });
+
+        app.post("/api/repos/dupes/cancel", ctx -> {
+            String name = ctx.queryParam("name");
+            String key = name != null ? name : "batch";
+            DuplicateRepoProcess process = activeDupeProcesses.get(key);
+            if (process != null) {
+                process.cancel();
+                ctx.status(202).json(Map.of("message", "Cancel requested for " + key));
+            } else {
+                ctx.status(404).json(Map.of("message", "No active duplicate detection for " + key));
+            }
         });
     }
 

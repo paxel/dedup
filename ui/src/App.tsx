@@ -62,10 +62,22 @@ interface ErrorEvent {
   read: boolean;
 }
 
+interface DupeProgress {
+  type: 'dupe-start' | 'dupe-processing-repo' | 'dupe-grouping-hamming' | 'dupes-finished' | 'dupe-finished';
+  repo?: string;
+  index?: number;
+  total?: number;
+  groupCount?: number;
+  bitLength?: number;
+  similarity?: number;
+  groups?: RepoRepoFile[][];
+}
+
 function App() {
   const [events, setEvents] = useState<any[]>([])
   const [connected, setConnected] = useState(false)
   const [activeProcesses, setActiveProcesses] = useState<Record<string, ProgressUpdate>>({})
+  const [activeDupeProcesses, setActiveDupeProcesses] = useState<Record<string, DupeProgress>>({})
   const isAnyProcessRunning = Object.values(activeProcesses).length > 0;
   const [showAddModal, setShowAddModal] = useState(false)
   const [showErrorModal, setShowErrorModal] = useState(false)
@@ -77,6 +89,12 @@ function App() {
   const [showScanDropdown, setShowScanDropdown] = useState(false)
   const [selectedReposForScan, setSelectedReposForScan] = useState<Set<string>>(new Set())
   const scanDropdownRef = useRef<HTMLDivElement>(null)
+  const [showDupeDropdown, setShowDupeDropdown] = useState(false)
+  const [selectedReposForDupes, setSelectedReposForDupes] = useState<Set<string>>(new Set())
+  const dupeDropdownRef = useRef<HTMLDivElement>(null)
+  const [globalDupes, setGlobalDupes] = useState<RepoRepoFile[][] | null>(null)
+  const [isLoadingGlobalDupes, setIsLoadingGlobalDupes] = useState(false)
+  const [showGlobalDupes, setShowGlobalDupes] = useState(false)
   const [showPruneModal, setShowPruneModal] = useState<string | null>(null)
   const [showRelocateModal, setShowRelocateModal] = useState<Repo | null>(null)
   const [showCloneModal, setShowCloneModal] = useState<Repo | null>(null)
@@ -101,16 +119,44 @@ function App() {
     },
   })
 
-  const { data: dupes, isLoading: isLoadingDupes } = useQuery<RepoRepoFile[][]>({
+  useQuery<RepoRepoFile[][]>({
     queryKey: ['dupes', selectedRepo],
     queryFn: async () => {
       if (!selectedRepo) return []
-      const response = await axios.get(`/api/repos/${selectedRepo}/dupes`)
-      // The API returns groups as RepoRepoFile[]
-      // The backend structure is List<List<RepoRepoFile>>
-      return response.data
+      setIsLoadingDupesManual(true)
+      await axios.get(`/api/repos/${selectedRepo}/dupes`)
+      return [] // We'll get the results via WebSocket
     },
-    enabled: !!selectedRepo,
+    enabled: false, // Manual trigger only
+  })
+
+  const [isLoadingDupesManual, setIsLoadingDupesManual] = useState(false)
+  const [dupeResults, setDupeResults] = useState<Record<string, RepoRepoFile[][]>>({})
+
+  const handleDuplicateClick = (name: string) => {
+    setSelectedRepo(name)
+    setDupeResults(prev => {
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+    setIsLoadingDupesManual(true);
+    axios.get(`/api/repos/${name}/dupes`).catch(error => {
+      setIsLoadingDupesManual(false);
+      const message = error.response?.data?.message || error.message || 'Failed to start duplicate detection';
+      const newError: ErrorEvent = {
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp: Date.now(),
+        message,
+        read: false
+      };
+      setErrors(prev => [newError, ...prev]);
+      setToast({ id: newError.id, message: newError.message });
+    });
+  }
+
+  const cancelDupeMutation = useMutation({
+    mutationFn: (name?: string) => axios.post(`/api/repos/dupes/cancel${name ? `?name=${name}` : ''}`),
   })
 
   const resetNewRepo = () => {
@@ -448,6 +494,9 @@ function App() {
       if (scanDropdownRef.current && !scanDropdownRef.current.contains(e.target as Node)) {
         setShowScanDropdown(false)
       }
+      if (dupeDropdownRef.current && !dupeDropdownRef.current.contains(e.target as Node)) {
+        setShowDupeDropdown(false)
+      }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
@@ -481,6 +530,30 @@ function App() {
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data)
+        if (data.type === 'dupe-start' || data.type === 'dupe-processing-repo' || data.type === 'dupe-grouping-hamming' || data.type === 'dupe-finished') {
+          const repoName = data.payload.repo || 'batch';
+          setActiveDupeProcesses(prev => ({ ...prev, [repoName]: data.payload }));
+          if (data.type === 'dupe-finished') {
+             // dupe-finished from backend doesn't have groups yet, dupes-finished has.
+          }
+          return;
+        }
+        if (data.type === 'dupes-finished') {
+          const repoName = data.payload.repo || 'batch';
+          setDupeResults(prev => ({ ...prev, [repoName]: data.payload.groups }));
+          setActiveDupeProcesses(prev => {
+            const next = { ...prev };
+            delete next[repoName];
+            return next;
+          });
+          if (repoName === 'batch') {
+            setGlobalDupes(data.payload.groups);
+            setIsLoadingGlobalDupes(false);
+          } else if (repoName === selectedRepo) {
+            setIsLoadingDupesManual(false);
+          }
+          return;
+        }
         if (data.type === 'progress' && data.payload?.reset) {
           const repoName = data.payload.repo || 'default';
           // Reset: initialize a fresh scanning state instead of deleting
@@ -699,9 +772,10 @@ function App() {
             <button 
               onClick={() => {
                 setSelectedRepo(null)
+                setShowGlobalDupes(false)
                 queryClient.invalidateQueries({ queryKey: ['repos'] })
               }}
-              className={`px-5 py-2.5 rounded-xl flex items-center gap-2 transition-all font-bold text-sm ${!selectedRepo ? 'bg-slate-800 text-white shadow-lg shadow-blue-500/10 border border-slate-700' : 'text-slate-400 hover:text-white'}`}
+              className={`px-5 py-2.5 rounded-xl flex items-center gap-2 transition-all font-bold text-sm ${!selectedRepo && !showGlobalDupes ? 'bg-slate-800 text-white shadow-lg shadow-blue-500/10 border border-slate-700' : 'text-slate-400 hover:text-white'}`}
             >
               <Activity className="w-4 h-4" />
               Overview
@@ -781,7 +855,93 @@ function App() {
             ))}
           </div>
         )}
-        {!selectedRepo ? (
+        {showGlobalDupes ? (
+          <section className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden">
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setShowGlobalDupes(false)}
+                  className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white"
+                >
+                  <ChevronRight className="w-6 h-6 rotate-180" />
+                </button>
+                <div>
+                  <h2 className="text-2xl font-bold text-blue-400">Global Duplicate Check</h2>
+                  <p className="text-sm text-slate-500">Across {Array.from(selectedReposForDupes).join(', ')}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 min-h-[600px]">
+              {isLoadingGlobalDupes ? (
+                <div className="flex flex-col items-center justify-center h-full py-20 space-y-6">
+                  <RefreshCw className="w-12 h-12 text-blue-500 animate-spin" />
+                  <div className="text-center space-y-2">
+                    <p className="text-slate-200 font-bold text-lg">Scanning for duplicates across repositories...</p>
+                    {activeDupeProcesses['batch'] && (
+                      <div className="text-slate-400 text-sm font-mono max-w-md mx-auto">
+                        {activeDupeProcesses['batch'].type === 'dupe-processing-repo' && (
+                          <span>Processing repo: <span className="text-blue-400">{activeDupeProcesses['batch'].repo}</span> ({activeDupeProcesses['batch'].index! + 1}/{activeDupeProcesses['batch'].total})</span>
+                        )}
+                        {activeDupeProcesses['batch'].type === 'dupe-grouping-hamming' && (
+                          <span>Grouping by similarity ({activeDupeProcesses['batch'].similarity}): {activeDupeProcesses['batch'].index}/{activeDupeProcesses['batch'].total}</span>
+                        )}
+                        {activeDupeProcesses['batch'].type === 'dupe-finished' && (
+                          <span>Found {activeDupeProcesses['batch'].groupCount} groups. Finalizing...</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => cancelDupeMutation.mutate(undefined)}
+                    className="bg-red-600/20 hover:bg-red-600/40 border border-red-500/30 text-red-400 px-6 py-2 rounded-xl font-bold uppercase tracking-widest transition-all"
+                  >
+                    Cancel Check
+                  </button>
+                </div>
+              ) : globalDupes?.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full py-20 space-y-4 text-center">
+                  <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-2">
+                    <Search className="w-8 h-8 text-emerald-500" />
+                  </div>
+                  <h3 className="text-xl font-bold">No Duplicates Found!</h3>
+                  <p className="text-slate-500 max-w-md">No duplicate file hashes were detected across the selected repositories.</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <p className="text-sm text-slate-400 mb-4">Found {globalDupes?.length} duplicate groups</p>
+                  {globalDupes?.map((group, i) => (
+                    <div key={i} className="bg-slate-950/50 border border-slate-800 rounded-xl overflow-hidden">
+                      <div className="p-4 bg-slate-800/20 border-b border-slate-800 flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-blue-400" />
+                          <span className="font-mono text-sm font-bold text-blue-100">{group[0].repoFile.hash.substring(0, 10)}...</span>
+                          <span className="text-[10px] text-slate-500 px-2 py-0.5 bg-slate-800 rounded">{(group[0].repoFile.size / 1024 / 1024).toFixed(2)} MB</span>
+                        </div>
+                        <span className="text-xs text-slate-500">{group.length} occurrences</span>
+                      </div>
+                      <div className="divide-y divide-slate-800/50">
+                        {group.map((item, j) => (
+                          <div key={j} className="p-4 flex justify-between items-center hover:bg-slate-800/20 transition-colors">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-slate-900 rounded border border-slate-800">
+                                <FileText className="w-5 h-5 text-slate-400" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-slate-200">{item.repoFile.relativePath}</p>
+                                <p className="text-[10px] text-slate-500 font-mono">{item.repo.name} — {item.repo.absolutePath}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        ) : !selectedRepo ? (
           <div className="flex flex-col xl:flex-row gap-10">
             {/* Repository List */}
             <section className="flex-1">
@@ -862,13 +1022,83 @@ function App() {
                       </div>
                     )}
                   </div>
-                  <button 
-                    disabled={!repos || repos.length === 0 || isAnyProcessRunning}
-                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-slate-700 disabled:opacity-30"
-                  >
-                    <Search className="w-4 h-4" />
-                    Global Duplicate Check
-                  </button>
+                  <div className="relative" ref={dupeDropdownRef}>
+                    <button
+                      onClick={() => {
+                        if (repos && repos.length > 0) {
+                          setShowDupeDropdown(prev => !prev)
+                          if (selectedReposForDupes.size === 0) {
+                            setSelectedReposForDupes(new Set(repos.map(r => r.name)))
+                          }
+                        }
+                      }}
+                      disabled={!repos || repos.length === 0 || isAnyProcessRunning}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-slate-700 disabled:opacity-30"
+                    >
+                      <Search className="w-4 h-4" />
+                      Global Duplicate Check
+                      <ChevronRight className={`w-3 h-3 transition-transform ${showDupeDropdown ? 'rotate-90' : ''}`} />
+                    </button>
+                    {showDupeDropdown && repos && repos.length > 0 && (
+                      <div className="absolute right-0 top-full mt-2 z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl min-w-[220px] overflow-hidden">
+                        <div className="p-2 border-b border-slate-800">
+                          <button
+                            onClick={() => {
+                              if (selectedReposForDupes.size === repos.length) {
+                                setSelectedReposForDupes(new Set())
+                              } else {
+                                setSelectedReposForDupes(new Set(repos.map(r => r.name)))
+                              }
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
+                          >
+                            {selectedReposForDupes.size === repos.length ? 'Deselect All' : 'Select All'}
+                          </button>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto">
+                          {repos.map(r => (
+                            <label key={r.name} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-800 cursor-pointer transition-all">
+                              <input
+                                type="checkbox"
+                                checked={selectedReposForDupes.has(r.name)}
+                                onChange={() => {
+                                  const next = new Set(selectedReposForDupes)
+                                  if (next.has(r.name)) {
+                                    next.delete(r.name)
+                                  } else {
+                                    next.add(r.name)
+                                  }
+                                  setSelectedReposForDupes(next)
+                                }}
+                                className="accent-blue-500"
+                              />
+                              <span className="text-sm text-slate-300">{r.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <div className="p-2 border-t border-slate-800">
+                          <button
+                            disabled={selectedReposForDupes.size < 1 || isLoadingGlobalDupes}
+                            onClick={() => {
+                              setShowDupeDropdown(false)
+                              setIsLoadingGlobalDupes(true)
+                              setShowGlobalDupes(true)
+                              setSelectedRepo(null)
+                              setGlobalDupes(null)
+                              axios.post('/api/repos/dupes', Array.from(selectedReposForDupes)).catch(e => {
+                                console.error('Global dupe check failed', e)
+                                setIsLoadingGlobalDupes(false)
+                                setGlobalDupes([])
+                              })
+                            }}
+                            className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all"
+                          >
+                            {isLoadingGlobalDupes ? 'Checking...' : `Check ${selectedReposForDupes.size} Repo${selectedReposForDupes.size !== 1 ? 's' : ''}`}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               
@@ -964,7 +1194,7 @@ function App() {
                       <div className="mt-auto px-6 py-4 bg-slate-950/40 border-t border-slate-800/50 flex flex-wrap justify-between items-center gap-4">
                         <div className="flex items-center gap-3">
                           <button
-                            onClick={() => setSelectedRepo(repo.name)}
+                            onClick={() => handleDuplicateClick(repo.name)}
                             disabled={isAnyProcessRunning}
                             className="text-xs font-black uppercase tracking-widest text-blue-500 hover:text-white hover:bg-blue-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
                           >
@@ -1102,12 +1332,33 @@ function App() {
             </div>
             
             <div className="p-6 min-h-[600px]">
-              {isLoadingDupes ? (
-                <div className="flex flex-col items-center justify-center h-full py-20 space-y-4">
-                  <RefreshCw className="w-10 h-10 text-blue-500 animate-spin" />
-                  <p className="text-slate-400">Scanning for duplicates...</p>
+              {isLoadingDupesManual ? (
+                <div className="flex flex-col items-center justify-center h-full py-20 space-y-6">
+                  <RefreshCw className="w-12 h-12 text-blue-500 animate-spin" />
+                  <div className="text-center space-y-2">
+                    <p className="text-slate-200 font-bold text-lg">Scanning for duplicates...</p>
+                    {activeDupeProcesses[selectedRepo!] && (
+                      <div className="text-slate-400 text-sm font-mono max-w-md mx-auto">
+                        {activeDupeProcesses[selectedRepo!].type === 'dupe-processing-repo' && (
+                          <span>Processing repo: <span className="text-blue-400">{activeDupeProcesses[selectedRepo!].repo}</span> ({activeDupeProcesses[selectedRepo!].index! + 1}/{activeDupeProcesses[selectedRepo!].total})</span>
+                        )}
+                        {activeDupeProcesses[selectedRepo!].type === 'dupe-grouping-hamming' && (
+                          <span>Grouping by similarity ({activeDupeProcesses[selectedRepo!].similarity}): {activeDupeProcesses[selectedRepo!].index}/{activeDupeProcesses[selectedRepo!].total}</span>
+                        )}
+                        {activeDupeProcesses[selectedRepo!].type === 'dupe-finished' && (
+                          <span>Found {activeDupeProcesses[selectedRepo!].groupCount} groups. Finalizing...</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => cancelDupeMutation.mutate(selectedRepo!)}
+                    className="bg-red-600/20 hover:bg-red-600/40 border border-red-500/30 text-red-400 px-6 py-2 rounded-xl font-bold uppercase tracking-widest transition-all"
+                  >
+                    Cancel Check
+                  </button>
                 </div>
-              ) : dupes?.length === 0 ? (
+              ) : (dupeResults[selectedRepo!] || []).length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full py-20 space-y-4 text-center">
                   <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-2">
                     <Search className="w-8 h-8 text-emerald-500" />
@@ -1117,8 +1368,8 @@ function App() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  <p className="text-sm text-slate-400 mb-4">Found {dupes?.length} duplicate groups</p>
-                  {dupes?.map((group, i) => (
+                  <p className="text-sm text-slate-400 mb-4">Found {(dupeResults[selectedRepo!] || []).length} duplicate groups</p>
+                  {(dupeResults[selectedRepo!] || []).map((group, i) => (
                     <div key={i} className="bg-slate-950/50 border border-slate-800 rounded-xl overflow-hidden">
                       <div className="p-4 bg-slate-800/20 border-b border-slate-800 flex justify-between items-center">
                         <div className="flex items-center gap-2">
