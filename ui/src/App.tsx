@@ -92,6 +92,7 @@ function App() {
   const [showDupeDropdown, setShowDupeDropdown] = useState(false)
   const [selectedReposForDupes, setSelectedReposForDupes] = useState<Set<string>>(new Set())
   const dupeDropdownRef = useRef<HTMLDivElement>(null)
+  const selectedRepoRef = useRef<string | null>(null)
   const [globalDupes, setGlobalDupes] = useState<RepoRepoFile[][] | null>(null)
   const [isLoadingGlobalDupes, setIsLoadingGlobalDupes] = useState(false)
   const [showGlobalDupes, setShowGlobalDupes] = useState(false)
@@ -135,6 +136,7 @@ function App() {
 
   const handleDuplicateClick = (name: string) => {
     setSelectedRepo(name)
+    selectedRepoRef.current = name
     setDupeResults(prev => {
       const next = { ...prev };
       delete next[name];
@@ -549,7 +551,7 @@ function App() {
           if (repoName === 'batch') {
             setGlobalDupes(data.payload.groups);
             setIsLoadingGlobalDupes(false);
-          } else if (repoName === selectedRepo) {
+          } else if (repoName === selectedRepoRef.current) {
             setIsLoadingDupesManual(false);
           }
           return;

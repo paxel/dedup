@@ -129,6 +129,7 @@ public class DuplicateRepoProcess {
         } else {
             groups = findExact(reposToProcess.value());
         }
+        dupeObserver.onGroupsReady(all ? "batch" : (names.isEmpty() ? "all" : names.get(0)), groups);
         dupeObserver.onFinished(groups.size());
         return groups;
     }

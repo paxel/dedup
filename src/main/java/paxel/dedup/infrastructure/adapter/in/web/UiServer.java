@@ -331,8 +331,7 @@ public class UiServer {
             activeDupeProcesses.put(name, process);
             dupeExecutor.execute(() -> {
                 try {
-                    List<List<DuplicateRepoProcess.RepoRepoFile>> groups = process.findGroups();
-                    observer.onGroupsReady(name, groups);
+                    process.findGroups();
                 } catch (Exception e) {
                     log.error("Error during duplicate detection for {}", name, e);
                     observer.onError(name, "Duplicate detection failed: " + e.getMessage());
@@ -375,8 +374,7 @@ public class UiServer {
             activeDupeProcesses.put("batch", process);
             dupeExecutor.execute(() -> {
                 try {
-                    List<List<DuplicateRepoProcess.RepoRepoFile>> groups = process.findGroups();
-                    observer.onGroupsReady("batch", groups);
+                    process.findGroups();
                 } catch (Exception e) {
                     log.error("Error during batch duplicate detection", e);
                     observer.onError("batch", "Batch duplicate detection failed: " + e.getMessage());
