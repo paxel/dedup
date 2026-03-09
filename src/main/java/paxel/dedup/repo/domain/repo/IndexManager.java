@@ -72,6 +72,8 @@ public class IndexManager {
                 }
 
                 if (s == null) {
+                    log.warn("{}: truncated frame detected, marking index as corrupted", indexFile);
+                    corrupted = true;
                     break;
                 }
 

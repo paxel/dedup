@@ -202,6 +202,45 @@ class IndexManagerTest {
     }
 
     @Test
+    void shouldHandleTruncatedMsgPackFrame() throws IOException {
+        // Arrange: write 2 valid entries in MsgPack format, then truncate the file mid-frame
+        indexFile = tempDir.resolve("truncated.idx.mp");
+        ObjectMapper mpMapper = new ObjectMapper(new org.msgpack.jackson.dataformat.MessagePackFactory());
+        JacksonMapperLineCodec<RepoFile> codec = new JacksonMapperLineCodec<>(mpMapper, RepoFile.class);
+
+        RepoFile file1 = RepoFile.builder().hash("h1").relativePath("p1").size(10L).build();
+        RepoFile file2 = RepoFile.builder().hash("h2").relativePath("p2").size(20L).build();
+
+        // Write both entries properly first
+        Files.createFile(indexFile);
+        IndexManager writer = new IndexManager(indexFile, codec, fileSystem, MsgPackFrameIterator::new, MsgPackFrameWriter::new);
+        writer.add(file1);
+        writer.add(file2);
+        writer.close();
+
+        // Now truncate the file: remove last few bytes so the second frame is incomplete
+        byte[] fullData = Files.readAllBytes(indexFile);
+        byte[] truncated = new byte[fullData.length - 5];
+        System.arraycopy(fullData, 0, truncated, 0, truncated.length);
+        Files.write(indexFile, truncated);
+
+        // Act: load the truncated index
+        IndexManager reader = new IndexManager(indexFile, codec, fileSystem, MsgPackFrameIterator::new, MsgPackFrameWriter::new);
+        Result<Statistics, DedupError> result = reader.load();
+
+        // Assert: should load successfully (not error out)
+        assertThat(result.hasFailed()).isFalse();
+        // Only the first complete entry should survive
+        assertThat(reader.stream().toList())
+                .extracting(RepoFile::relativePath)
+                .containsExactly("p1");
+
+        // Assert: index file should have been repaired (backup created)
+        Path backup = indexFile.resolveSibling(indexFile.getFileName().toString() + ".bak");
+        assertThat(backup).exists();
+    }
+
+    @Test
     void shouldSkipAndRepairWhenHashIsMissing() throws IOException {
         // Arrange: 1 valid, 1 missing hash, 1 valid
         RepoFile file1 = RepoFile.builder().hash("h1").relativePath("p1").size(10L).build();

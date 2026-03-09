@@ -41,7 +41,12 @@ public class MsgPackFrameIterator implements FrameIterator {
         try {
             short i = in.readShort();
             int size = Short.toUnsignedInt(i);
-            return ByteBuffer.wrap(in.readNBytes(size));
+            byte[] data = in.readNBytes(size);
+            if (data.length < size) {
+                eof = true;
+                return null;
+            }
+            return ByteBuffer.wrap(data);
         } catch (IOException e) {
             throw new NoSuchElementException(e);
         }
