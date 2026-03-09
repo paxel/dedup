@@ -241,6 +241,7 @@ public class UiServer {
                         } else {
                             log.info("Update completed successfully for: {}", name);
                         }
+                        eventBus.publish("finished", Map.of("repo", name));
                     } catch (Exception e) {
                         log.error("Critical error during update for {}", name, e);
                         eventBus.publish("error", Map.of("repo", name, "message", e.getMessage()));
@@ -282,6 +283,7 @@ public class UiServer {
                     } else {
                         log.info("Update completed successfully for: {}", name);
                     }
+                    eventBus.publish("finished", Map.of("repo", name));
                 } catch (Exception e) {
                     log.error("Critical error during update for {}", name, e);
                     eventBus.publish("error", Map.of("repo", name, "message", e.getMessage()));

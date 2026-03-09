@@ -86,7 +86,10 @@ public class UpdateReposProcess {
         for (Repo repo : reposToUpdate.value()) {
             Result<Statistics, DedupError> result = updateRepo(RepoManager.forRepo(repo, dedupConfig, fileSystem));
             if (result.hasFailed()) {
+                updateObserver.onError(Paths.get(repo.absolutePath()), result.error().exception());
                 return result.map(s -> -51, Function.identity());
+            } else {
+                updateObserver.onFinished(result.value());
             }
         }
         return Result.ok(0);

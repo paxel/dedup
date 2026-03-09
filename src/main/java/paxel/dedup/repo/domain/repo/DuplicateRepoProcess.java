@@ -129,7 +129,7 @@ public class DuplicateRepoProcess {
         } else {
             groups = findExact(reposToProcess.value());
         }
-        dupeObserver.onGroupsReady(all ? "batch" : (names.isEmpty() ? "all" : names.get(0)), groups);
+        dupeObserver.onGroupsReady(names.size() > 1 || all ? "batch" : (names.isEmpty() ? "all" : names.get(0)), groups);
         dupeObserver.onFinished(groups.size());
         return groups;
     }
@@ -255,8 +255,12 @@ public class DuplicateRepoProcess {
         }
     }
 
+    private String getAbsolutePath(RepoRepoFile rrf) {
+        return java.nio.file.Paths.get(rrf.repo.absolutePath(), rrf.file.relativePath()).toAbsolutePath().toString();
+    }
+
     private List<List<RepoRepoFile>> findExact(List<Repo> repos) {
-        Map<UniqueHash, List<RepoRepoFile>> all = new HashMap<>();
+        Map<UniqueHash, Map<String, RepoRepoFile>> all = new HashMap<>();
 
         for (int i = 0; i < repos.size(); i++) {
             if (cancelled.get()) return List.of();
@@ -271,16 +275,20 @@ public class DuplicateRepoProcess {
                     .filter(repoFile1 -> !repoFile1.missing())
                     .filter(this::matchesDimensionFilters)
                     .forEach(repoFile -> {
+                        RepoRepoFile rrf = new RepoRepoFile(repo, repoFile);
+                        String absPath = getAbsolutePath(rrf);
                         all.computeIfAbsent(new UniqueHash(repoFile.hash(), repoFile.size()),
-                                k -> new ArrayList<>()).add(new RepoRepoFile(repo, repoFile));
+                                k -> new LinkedHashMap<>()).putIfAbsent(absPath, rrf);
+
                         if (repoFile.videoHash() != null && repoFile.videoHash().startsWith("fallback:")) {
                             all.computeIfAbsent(new UniqueHash(repoFile.videoHash(), repoFile.size()),
-                                    k -> new ArrayList<>()).add(new RepoRepoFile(repo, repoFile));
+                                    k -> new LinkedHashMap<>()).putIfAbsent(absPath, rrf);
                         }
                     });
         }
 
         return all.values().stream()
+                .map(pathMap -> (List<RepoRepoFile>) new ArrayList<>(pathMap.values()))
                 .filter(repoRepoFiles -> repoRepoFiles.size() > 1)
                 .toList();
     }
@@ -360,22 +368,35 @@ public class DuplicateRepoProcess {
             }
 
             List<RepoRepoFile> group = new ArrayList<>();
-            group.add(items.get(i));
+            RepoRepoFile first = items.get(i);
+            group.add(first);
+            Set<String> absPaths = new HashSet<>();
+            absPaths.add(getAbsolutePath(first));
 
-            String f1 = getRelevantFingerprint(items.get(i).file, bitLength);
+            String f1 = getRelevantFingerprint(first.file, bitLength);
             java.math.BigInteger b1 = new java.math.BigInteger(f1, 16);
 
             for (int j = i + 1; j < items.size(); j++) {
+                if (cancelled.get()) return groups;
                 if (handled.contains(j)) continue;
 
-                String f2 = getRelevantFingerprint(items.get(j).file, bitLength);
+                RepoRepoFile other = items.get(j);
+                String f2 = getRelevantFingerprint(other.file, bitLength);
+                if (f2 == null) {
+                    handled.add(j);
+                    continue;
+                }
                 java.math.BigInteger b2 = new java.math.BigInteger(f2, 16);
 
                 int distance = hammingDistance(b1, b2);
                 double similarity = (1.0 - (double) distance / bitLength) * 100.0;
 
                 if (similarity >= threshold) {
-                    group.add(items.get(j));
+                    String otherAbsPath = getAbsolutePath(other);
+                    if (!absPaths.contains(otherAbsPath)) {
+                        group.add(other);
+                        absPaths.add(otherAbsPath);
+                    }
                     handled.add(j);
                 }
             }
@@ -399,14 +420,17 @@ public class DuplicateRepoProcess {
     }
 
     private List<List<RepoRepoFile>> groupByExactHash(List<RepoRepoFile> items, java.util.function.Function<RepoFile, String> hashExtractor) {
-        Map<String, List<RepoRepoFile>> map = new HashMap<>();
+        Map<String, Map<String, RepoRepoFile>> map = new HashMap<>();
         for (RepoRepoFile item : items) {
             String hash = hashExtractor.apply(item.file);
             if (hash != null) {
-                map.computeIfAbsent(hash, k -> new ArrayList<>()).add(item);
+                map.computeIfAbsent(hash, k -> new LinkedHashMap<>())
+                        .putIfAbsent(getAbsolutePath(item), item);
             }
         }
-        return map.values().stream().filter(g -> g.size() > 1).toList();
+        return map.values().stream()
+                .map(pathMap -> (List<RepoRepoFile>) new ArrayList<>(pathMap.values()))
+                .filter(g -> g.size() > 1).toList();
     }
 
     private List<List<RepoRepoFile>> groupByAudio(List<RepoRepoFile> audios) {
@@ -416,18 +440,27 @@ public class DuplicateRepoProcess {
             if (handled.contains(i)) continue;
 
             List<RepoRepoFile> group = new ArrayList<>();
-            group.add(audios.get(i));
-            RepoFile r1 = audios.get(i).file;
+            RepoRepoFile first = audios.get(i);
+            group.add(first);
+            Set<String> absPaths = new HashSet<>();
+            absPaths.add(getAbsolutePath(first));
+
+            RepoFile r1 = first.file;
             double d1 = parseDuration(r1.attributes().get("duration"));
 
             for (int j = i + 1; j < audios.size(); j++) {
                 if (handled.contains(j)) continue;
 
-                RepoFile r2 = audios.get(j).file;
+                RepoRepoFile other = audios.get(j);
+                RepoFile r2 = other.file;
                 if (Objects.equals(r1.audioHash(), r2.audioHash())) {
                     double d2 = parseDuration(r2.attributes().get("duration"));
                     if (Math.abs(d1 - d2) <= 2.0) { // 2s tolerance
-                        group.add(audios.get(j));
+                        String otherAbsPath = getAbsolutePath(other);
+                        if (!absPaths.contains(otherAbsPath)) {
+                            group.add(other);
+                            absPaths.add(otherAbsPath);
+                        }
                         handled.add(j);
                     }
                 }

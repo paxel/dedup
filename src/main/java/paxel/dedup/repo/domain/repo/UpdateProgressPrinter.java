@@ -147,19 +147,30 @@ class UpdateProgressPrinter implements FileObserver {
 
     public void cancelNow() {
         cancelled.set(true);
-        futures.forEach(f -> f.cancel(true));
-        futures.clear();
+        synchronized (futures) {
+            futures.forEach(f -> f.cancel(true));
+            futures.clear();
+        }
     }
 
     @Override
     public void close() {
         if (cancelled.get()) {
-            futures.forEach(f -> f.cancel(true));
-            futures.clear();
+            synchronized (futures) {
+                futures.forEach(f -> f.cancel(true));
+                futures.clear();
+            }
         } else {
-            while (!futures.isEmpty()) {
+            while (true) {
+                CompletableFuture<?>[] array;
+                synchronized (futures) {
+                    if (futures.isEmpty()) {
+                        break;
+                    }
+                    array = futures.toArray(new CompletableFuture[0]);
+                }
                 try {
-                    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).get();
+                    CompletableFuture.allOf(array).get();
                 } catch (Exception e) {
                     fail(null, e);
                 }
