@@ -406,6 +406,7 @@ public class UiServer {
             ws.onConnect(ctx -> {
                 log.info("WebSocket connected");
                 ctx.session.setIdleTimeout(java.time.Duration.ofMinutes(15));
+                ctx.session.setMaxTextMessageSize(1024 * 1024 * 10); // 10MB
                 java.util.function.Consumer<EventBus.DedupEvent> listener = event -> {
                     if (ctx.session.isOpen()) {
                         try {

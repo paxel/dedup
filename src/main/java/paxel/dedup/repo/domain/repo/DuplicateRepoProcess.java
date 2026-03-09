@@ -269,7 +269,8 @@ public class DuplicateRepoProcess {
             RepoManager r = RepoManager.forRepo(repo, dedupConfig, fileSystem);
             Result<Statistics, DedupError> load = r.load();
             if (load.hasFailed()) {
-                return null;
+                dupeObserver.onError(repo.name(), "Failed to load repo index: " + load.error().describe());
+                continue;
             }
             r.stream()
                     .filter(repoFile1 -> !repoFile1.missing())
@@ -306,6 +307,7 @@ public class DuplicateRepoProcess {
             RepoManager r = RepoManager.forRepo(repo, dedupConfig, fileSystem);
             Result<Statistics, DedupError> load = r.load();
             if (load.hasFailed()) {
+                dupeObserver.onError(repo.name(), "Failed to load repo index: " + load.error().describe());
                 continue;
             }
             r.stream()

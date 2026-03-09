@@ -917,7 +917,7 @@ function App() {
                       <div className="p-4 bg-slate-800/20 border-b border-slate-800 flex justify-between items-center">
                         <div className="flex items-center gap-2">
                           <FileText className="w-4 h-4 text-blue-400" />
-                          <span className="font-mono text-sm font-bold text-blue-100">{group[0].repoFile.hash.substring(0, 10)}...</span>
+                          <span className="font-mono text-sm font-bold text-blue-100">{group[0].repoFile.hash?.substring(0, 10)}...</span>
                           <span className="text-[10px] text-slate-500 px-2 py-0.5 bg-slate-800 rounded">{(group[0].repoFile.size / 1024 / 1024).toFixed(2)} MB</span>
                         </div>
                         <span className="text-xs text-slate-500">{group.length} occurrences</span>
@@ -1376,7 +1376,7 @@ function App() {
                       <div className="p-4 bg-slate-800/20 border-b border-slate-800 flex justify-between items-center">
                         <div className="flex items-center gap-2">
                           <FileText className="w-4 h-4 text-blue-400" />
-                          <span className="font-mono text-sm font-bold text-blue-100">{group[0].repoFile.hash.substring(0, 10)}...</span>
+                          <span className="font-mono text-sm font-bold text-blue-100">{group[0].repoFile.hash?.substring(0, 10)}...</span>
                           <span className="text-[10px] text-slate-500 px-2 py-0.5 bg-slate-800 rounded">{(group[0].repoFile.size / 1024 / 1024).toFixed(2)} MB</span>
                         </div>
                         <span className="text-xs text-slate-500">{group.length} occurrences</span>
