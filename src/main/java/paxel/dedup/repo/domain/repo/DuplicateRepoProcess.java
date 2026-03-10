@@ -393,7 +393,18 @@ public class DuplicateRepoProcess {
             absPaths.add(getAbsolutePath(first));
 
             String f1 = getRelevantFingerprint(first.file, bitLength);
-            java.math.BigInteger b1 = new java.math.BigInteger(f1, 16);
+            if (f1 == null) {
+                handled.add(i);
+                continue;
+            }
+            java.math.BigInteger b1;
+            try {
+                b1 = new java.math.BigInteger(f1, 16);
+            } catch (Exception e) {
+                log.error("Failed to parse fingerprint '{}' for file {}: {}", f1, first.file.relativePath(), e.getMessage());
+                handled.add(i);
+                continue;
+            }
 
             for (int j = i + 1; j < items.size(); j++) {
                 if (cancelled.get()) return groups;
@@ -405,7 +416,14 @@ public class DuplicateRepoProcess {
                     handled.add(j);
                     continue;
                 }
-                java.math.BigInteger b2 = new java.math.BigInteger(f2, 16);
+                java.math.BigInteger b2;
+                try {
+                    b2 = new java.math.BigInteger(f2, 16);
+                } catch (Exception e) {
+                    log.error("Failed to parse fingerprint '{}' for file {}: {}", f2, other.file.relativePath(), e.getMessage());
+                    handled.add(j);
+                    continue;
+                }
 
                 int distance = hammingDistance(b1, b2);
                 double similarity = (1.0 - (double) distance / bitLength) * 100.0;

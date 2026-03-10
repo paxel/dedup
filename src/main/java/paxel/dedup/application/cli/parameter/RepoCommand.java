@@ -239,7 +239,7 @@ public class RepoCommand {
     public int move(
             @Parameters(description = "Repos", arity = "0..*") List<String> repos,
             @Option(names = {"-a", "--all"}, description = "All repos") boolean all,
-            @Option(names = {"--threshold"}, description = "Threshold for image fingerprint similarity (0-100, default 0 for exact match)") Integer threshold,
+            @Option(names = {"--threshold"}, description = "Threshold for image fingerprint similarity (1-100, default 0 for exact match)") Integer threshold,
             @Option(names = {"--print"}, description = "Print duplicate groups to standard out") boolean print,
             @Option(names = {"--md"}, description = "Generate a Markdown report with thumbnails") String mdPath,
             @Option(names = {"--html"}, description = "Generate an HTML report with thumbnails") String htmlPath,

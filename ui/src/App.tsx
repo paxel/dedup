@@ -431,8 +431,91 @@ function App() {
 
   const [isLoadingDupesManual, setIsLoadingDupesManual] = useState(false)
   const [dupeResults, setDupeResults] = useState<Record<string, RepoRepoFile[][]>>({})
+  const [showSimilarityModal, setShowSimilarityModal] = useState<{repoName: string | null, isGlobal: boolean} | null>(null)
+  const [similarityThreshold, setSimilarityThreshold] = useState(95)
 
-  const handleDuplicateClick = (name: string) => {
+  const SimilarityModal = () => {
+    if (!showSimilarityModal) return null;
+
+    const isGlobal = showSimilarityModal.isGlobal;
+    const repoName = showSimilarityModal.repoName;
+
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+          <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+            <h2 className="text-xl font-black text-white flex items-center gap-2">
+              <Zap className="w-6 h-6 text-indigo-500" />
+              Similarity Search
+            </h2>
+            <button
+              onClick={() => setShowSimilarityModal(null)}
+              className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+          
+          <div className="p-8 space-y-6">
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label className="text-sm font-medium text-slate-400">Threshold (%)</label>
+                <span className="text-xl font-black text-indigo-400">{similarityThreshold}%</span>
+              </div>
+              <input 
+                type="number" 
+                min="1"
+                max="100"
+                value={similarityThreshold}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  if (!isNaN(val)) {
+                    setSimilarityThreshold(Math.min(100, Math.max(1, val)));
+                  }
+                }}
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-lg font-bold text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
+                autoFocus
+              />
+              <p className="text-xs text-slate-500 italic">Enter a value between 1 and 100 for fuzzy matching.</p>
+            </div>
+          </div>
+
+          <div className="p-6 bg-slate-950/50 border-t border-slate-800 flex justify-end gap-3">
+            <button 
+              onClick={() => setShowSimilarityModal(null)}
+              className="px-6 py-2 rounded-xl border border-slate-800 hover:bg-slate-800 transition-colors font-bold text-sm uppercase tracking-widest text-slate-400"
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={() => {
+                const threshold = similarityThreshold;
+                setShowSimilarityModal(null);
+                if (isGlobal) {
+                  setIsLoadingGlobalDupes(true)
+                  setShowGlobalDupes(true)
+                  setSelectedRepo(null)
+                  setGlobalDupes(null)
+                  axios.post(`/api/repos/dupes?threshold=${threshold}`, Array.from(selectedReposForDupes)).catch(e => {
+                    console.error('Global similarity check failed', e)
+                    setIsLoadingGlobalDupes(false)
+                    setGlobalDupes([])
+                  })
+                } else if (repoName) {
+                  handleDuplicateClick(repoName, threshold);
+                }
+              }}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-2 rounded-xl font-black uppercase tracking-widest transition-all text-sm"
+            >
+              Check
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const handleDuplicateClick = (name: string, threshold: number = 0) => {
     setSelectedRepo(name)
     selectedRepoRef.current = name
     setDupeResults(prev => {
@@ -441,7 +524,7 @@ function App() {
       return next;
     });
     setIsLoadingDupesManual(true);
-    axios.get(`/api/repos/${name}/dupes`).catch(error => {
+    axios.get(`/api/repos/${name}/dupes?threshold=${threshold}`).catch(error => {
       setIsLoadingDupesManual(false);
       const message = error.response?.data?.message || error.message || 'Failed to start duplicate detection';
       const newError: ErrorEvent = {
@@ -1181,7 +1264,7 @@ function App() {
                   <ChevronRight className="w-6 h-6 rotate-180" />
                 </button>
                 <div>
-                  <h2 className="text-2xl font-bold text-blue-400">Global Duplicate Check</h2>
+                  <h2 className="text-2xl font-bold text-blue-400">Duplicates</h2>
                   <p className="text-sm text-slate-500">Across {Array.from(selectedReposForDupes).join(', ')}</p>
                 </div>
               </div>
@@ -1252,8 +1335,8 @@ function App() {
                       disabled={!repos || repos.length === 0 || isAnyProcessRunning}
                       className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-slate-700 disabled:opacity-30"
                     >
-                      <RefreshCw className="w-4 h-4" />
-                      Scan Repos
+                      <RefreshCw className="w-4 h-4 text-emerald-500" />
+                      Update
                       <ChevronRight className={`w-3 h-3 transition-transform ${showScanDropdown ? 'rotate-90' : ''}`} />
                     </button>
                     {showScanDropdown && repos && repos.length > 0 && (
@@ -1288,7 +1371,7 @@ function App() {
                                 }}
                                 className="accent-blue-500"
                               />
-                              <span className="text-sm text-slate-200 truncate">{r.name}</span>
+                              <span className="text-sm text-slate-300 truncate">{r.name}</span>
                             </label>
                           ))}
                         </div>
@@ -1299,10 +1382,10 @@ function App() {
                               setShowScanDropdown(false)
                             }}
                             disabled={selectedReposForScan.size === 0}
-                            className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white px-3 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                            className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 text-white px-3 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
                           >
                             <RefreshCw className="w-3 h-3" />
-                            Scan {selectedReposForScan.size} Repo{selectedReposForScan.size !== 1 ? 's' : ''}
+                            Update {selectedReposForScan.size} Repo{selectedReposForScan.size !== 1 ? 's' : ''}
                           </button>
                         </div>
                       </div>
@@ -1322,7 +1405,7 @@ function App() {
                       className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-slate-700 disabled:opacity-30"
                     >
                       <Search className="w-4 h-4" />
-                      Global Duplicate Check
+                      Duplicates
                       <ChevronRight className={`w-3 h-3 transition-transform ${showDupeDropdown ? 'rotate-90' : ''}`} />
                     </button>
                     {showDupeDropdown && repos && repos.length > 0 && (
@@ -1363,28 +1446,42 @@ function App() {
                           ))}
                         </div>
                         <div className="p-2 border-t border-slate-800">
-                          <button
-                            disabled={selectedReposForDupes.size < 1 || isLoadingGlobalDupes}
-                            onClick={() => {
-                              setShowDupeDropdown(false)
-                              setIsLoadingGlobalDupes(true)
-                              setShowGlobalDupes(true)
-                              setSelectedRepo(null)
-                              setGlobalDupes(null)
-                              axios.post('/api/repos/dupes', Array.from(selectedReposForDupes)).catch(e => {
-                                console.error('Global dupe check failed', e)
-                                setIsLoadingGlobalDupes(false)
-                                setGlobalDupes([])
-                              })
-                            }}
-                            className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all"
-                          >
-                            {isLoadingGlobalDupes ? 'Checking...' : `Check ${selectedReposForDupes.size} Repo${selectedReposForDupes.size !== 1 ? 's' : ''}`}
-                          </button>
+                          <div className="flex flex-col gap-2">
+                            <button
+                              disabled={selectedReposForDupes.size < 1 || isLoadingGlobalDupes}
+                              onClick={() => {
+                                setShowDupeDropdown(false)
+                                setIsLoadingGlobalDupes(true)
+                                setShowGlobalDupes(true)
+                                setSelectedRepo(null)
+                                setGlobalDupes(null)
+                                axios.post(`/api/repos/dupes?threshold=0`, Array.from(selectedReposForDupes)).catch(e => {
+                                  console.error('Global dupe check failed', e)
+                                  setIsLoadingGlobalDupes(false)
+                                  setGlobalDupes([])
+                                })
+                              }}
+                              className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                            >
+                              <Search className="w-3 h-3" />
+                              {isLoadingGlobalDupes ? 'Checking...' : `Duplicates`}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}
                   </div>
+                  <button
+                    onClick={() => {
+                      setSimilarityThreshold(95)
+                      setShowSimilarityModal({repoName: null, isGlobal: true})
+                    }}
+                    disabled={!repos || repos.length === 0 || isAnyProcessRunning}
+                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 disabled:opacity-30"
+                  >
+                    <Zap className="w-4 h-4" />
+                    Similarity
+                  </button>
                 </div>
               </div>
               
@@ -1478,19 +1575,30 @@ function App() {
 
                       {/* Bottom Actions Section */}
                       <div className="mt-auto px-6 py-4 bg-slate-950/40 border-t border-slate-800/50 flex flex-wrap justify-between items-center gap-4">
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-3">
                           <button
                             onClick={() => handleDuplicateClick(repo.name)}
                             disabled={isAnyProcessRunning}
-                            className="text-xs font-black uppercase tracking-widest text-blue-500 hover:text-white hover:bg-blue-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="text-xs font-black uppercase tracking-widest text-blue-500 hover:text-white hover:bg-blue-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed border border-blue-500/20"
                           >
                             <Search className="w-4 h-4" />
-                            Explorer
+                            Duplicates
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSimilarityThreshold(95)
+                              setShowSimilarityModal({repoName: repo.name, isGlobal: false})
+                            }}
+                            disabled={isAnyProcessRunning}
+                            className="text-xs font-black uppercase tracking-widest text-indigo-500 hover:text-white hover:bg-indigo-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed border border-indigo-500/20"
+                          >
+                            <Zap className="w-4 h-4" />
+                            Similarity
                           </button>
                           <button
                             onClick={() => updateMutation.mutate(repo.name)}
                             disabled={updateMutation.isPending || isAnyProcessRunning}
-                            className="text-xs font-black uppercase tracking-widest text-emerald-500 hover:text-white hover:bg-emerald-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="text-xs font-black uppercase tracking-widest text-emerald-500 hover:text-white hover:bg-emerald-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed border border-emerald-500/20"
                           >
                             <RefreshCw className={`w-4 h-4 ${updateMutation.isPending ? 'animate-spin' : ''}`} />
                             Update
@@ -1602,7 +1710,7 @@ function App() {
                 </button>
                 <div>
                   <h2 className="text-2xl font-bold text-blue-400">{selectedRepo}</h2>
-                  <p className="text-sm text-slate-500">Duplicate Explorer</p>
+                  <p className="text-sm text-slate-500">Duplicates</p>
                 </div>
               </div>
               <div className="flex gap-4">
@@ -2057,6 +2165,7 @@ function App() {
 
         {/* Error History Modal */}
         <BrowserModal />
+        <SimilarityModal />
 
         {showErrorModal && (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
