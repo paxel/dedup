@@ -1,99 +1,46 @@
-# Project Development Guidelines
+# Project Development & AI Guidelines
 
-This document provides relevant details for future development and debugging of the Dedup project. It extends the initial instruction set from `clanky.md`.
+This document provides essential instructions for building, testing, and developing the Dedup project. It consolidates rules from `clanky.md` and `guidelines.md`.
 
-## 1. Build and Configuration Instructions
+## 1. General Rules
+- **Language**: All code, comments, documentation, and CLI output must be in **English only**. No German.
+- **Modern Java**: Use Java 21+ features and APIs.
+- **Strict Adherence**: Follow instructions explicitly. Ask for confirmation if unsure.
+- **Lombok**: Use `@Data`, `@Getter`, `@Value`, `@Builder`, and `@RequiredArgsConstructor` to minimize boilerplate.
 
-The project is built using **Maven** and targets **Java 21**.
+## 2. Architecture & Design
+- **Hexagonal Architecture (Ports & Adapters)**:
+    - `domain`: Pure core logic and models. No infrastructure dependencies.
+    - `application`: CLI logic, command handling, and use cases.
+    - `infrastructure`: Concrete implementations (FS, Web, Serialization).
+- **Domain-Driven Design (DDD)**: Use `Repo` and `RepoFile` as core entities.
+- **Immutability**: Prefer immutable models (Lombok `@Value`).
+- **Error Handling**: Use `paxel.lib.Result<Success, Error>` instead of exceptions for business logic failures.
+- **No Utility Classes**: Do NOT add cross-cutting utility classes like `StringUtil`. Use private/static methods within the class or co-located helpers.
+- **Avoid Static Methods**: Prefer instance methods. Exceptions: constants, entry points, factories, enums.
+- **No Ternary Operators**: Use explicit `if/else` or co-located helper methods for clarity.
 
-### 1.1 Prerequisites
-- **JDK 21** or later.
-- **Maven 3.8+**.
+## 3. Build & Configuration
+- **Tooling**: Maven 3.8+, JDK 21.
+- **Building**: `mvn clean package` (generates `target/Dedup.jar`).
+- **Maven Sync**: Always click "Sync Maven" in the IDE after `pom.xml` changes.
+- **IDE Configuration**: Enable "Annotation Processing" for Lombok and Picocli.
 
-### 1.2 Building the Project
-To compile the project and build the executable JAR:
-```bash
-mvn clean package
-```
-This generates a standalone JAR with dependencies at `target/Dedup.jar`.
-
-### 1.3 Running the Application
-You can run the CLI directly using `java -jar`:
-```bash
-java -jar target/Dedup.jar --help
-```
-
-### 1.4 IDE Configuration (IntelliJ IDEA)
-- **Lombok**: Ensure the Lombok plugin is installed and "Annotation Processing" is enabled in settings.
-- **Maven Sync**: Whenever `pom.xml` is modified, click "Reload All Maven Projects" (Sync Maven). This is critical for updating dependencies and annotation processors (Picocli codegen, Lombok).
-
-## 2. Testing Information
-
-### 2.1 Test Frameworks
-- **JUnit 5**: Primary test runner.
-- **AssertJ**: Fluent assertions (preferred over JUnit built-in assertions).
-- **Mockito**: Mocking and stubbing, especially for I/O operations.
-- **Awaitility**: For testing asynchronous or eventually consistent behavior.
-
-### 2.2 Running Tests
-Execute all tests:
-```bash
-mvn test
-```
-Execute a specific test class:
-```bash
-mvn test -Dtest=IndexManagerTest
-```
-
-### 2.3 Guidelines for Adding Tests
+## 4. Testing Rules
+- **Frameworks**: JUnit 5 (Runner), AssertJ (Assertions), Mockito (Mocking), Awaitility (Async).
 - **Unit Tests**: Mandatory for every new service or process.
-- **Mocks for I/O**: Do NOT perform real filesystem or network I/O in unit tests. Mock the `FileSystem` or relevant adapters.
-- **AssertJ Assertions**: Use meaningful, specific assertions.
-    - Prefer `containsExactly` or `containsExactlyInAnyOrder` for collections.
-    - Check specific fields of results rather than just `isNotNull()`.
+- **Mocking I/O**: Do NOT perform real filesystem or network I/O in unit tests. Mock `FileSystem` and verify interactions.
+- **Integration Tests**: Use `@TempDir` only for explicit end-to-end integration tests.
+- **Meaningful Assertions**:
+    - Avoid just `isNotNull()`. Check specific fields, file counts, and contents.
+    - Use `containsExactly` or `containsExactlyInAnyOrder` for collections.
 - **Reproducer Tests**: Always include a test that reproduces a bug when fixing it.
-- **TempDir**: Use JUnit 5 `@TempDir` for integration tests that require a real filesystem scratch space.
 
-### 2.4 Test Example
-Here is a template for a standard unit test in this project:
-```java
-package paxel.dedup;
-
-import org.junit.jupiter.api.Test;
-import static org.assertj.core.api.Assertions.assertThat;
-
-class ExampleTest {
-    @Test
-    void shouldFollowProjectStyle() {
-        // Arrange
-        String input = "dedup";
-        // Act
-        String result = input.toUpperCase();
-        // Assert
-        assertThat(result)
-            .as("Demonstrating AssertJ features")
-            .isEqualTo("DEDUP")
-            .hasSize(5);
-    }
-}
-```
-
-## 3. Additional Development Information
-
-### 3.1 Architecture & Design
-- **Hexagonal Architecture**: Keep the `domain` pure. Infrastructure concerns (FS, Serialization) stay in `infrastructure`.
-- **DDD**: Use the defined `Repo` and `RepoFile` entities. Use `paxel.lib.Result` for error handling instead of exceptions for business logic failures.
-- **Immutability**: Use Lombok `@Value` and `@Builder` for domain models.
-
-### 3.2 Code Style
-- **No Deep Nesting**: Use guard clauses and early returns.
-- **No Ternary Operators**: Use explicit `if/else` or colocated helper methods for clarity.
-- **Lombok usage**: Use `@Data`, `@Getter`, `@RequiredArgsConstructor` etc., to keep the code lean.
-- **English Only**: No German comments or naming.
-
-### 3.3 CLI Development
-- Use **Picocli** for all CLI commands.
-- Ensure new commands fit the `repo`, `files`, or `diff` sub-command structure.
+## 5. CLI & Web Development
+- **CLI**: Use **Picocli** for all commands (`repo`, `files`, `diff`).
+- **Web Interface**: Uses **Javalin 6.x** for the backend and **React 19** for the frontend.
+- **Events**: Use the `EventBus` to stream progress updates via WebSockets.
+- **Throttling**: WebSocket updates should be throttled to avoid UI flooding (target ~5Hz).
 
 ---
-*Last Updated: 2026-02-23*
+*Last Updated: 2026-03-17*

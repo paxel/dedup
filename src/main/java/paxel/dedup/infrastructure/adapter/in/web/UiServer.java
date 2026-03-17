@@ -500,6 +500,16 @@ public class UiServer {
                 log.info("WebSocket connected");
                 ctx.session.setIdleTimeout(java.time.Duration.ofMinutes(15));
                 ctx.session.setMaxTextMessageSize(1024 * 1024 * 10); // 10MB
+
+                // Replay last events
+                eventBus.getLastEvents().forEach(event -> {
+                    try {
+                        ctx.send(infrastructureConfig.getObjectMapper().writeValueAsString(event));
+                    } catch (Exception e) {
+                        log.error("Error replaying event via WebSocket", e);
+                    }
+                });
+
                 java.util.function.Consumer<EventBus.DedupEvent> listener = event -> {
                     if (ctx.session.isOpen()) {
                         try {

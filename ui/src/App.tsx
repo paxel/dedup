@@ -364,9 +364,14 @@ function App() {
   const [showScanDropdown, setShowScanDropdown] = useState(false)
   const [selectedReposForScan, setSelectedReposForScan] = useState<Set<string>>(new Set())
   const scanDropdownRef = useRef<HTMLDivElement>(null)
+  
   const [showDupeDropdown, setShowDupeDropdown] = useState(false)
   const [selectedReposForDupes, setSelectedReposForDupes] = useState<Set<string>>(new Set())
   const dupeDropdownRef = useRef<HTMLDivElement>(null)
+
+  const [showSimilarityDropdown, setShowSimilarityDropdown] = useState(false)
+  const [selectedReposForSimilarity, setSelectedReposForSimilarity] = useState<Set<string>>(new Set())
+  const similarityDropdownRef = useRef<HTMLDivElement>(null)
   const selectedRepoRef = useRef<string | null>(null)
   const [globalDupes, setGlobalDupes] = useState<RepoRepoFile[][] | null>(null)
   const [isLoadingGlobalDupes, setIsLoadingGlobalDupes] = useState(false)
@@ -496,7 +501,8 @@ function App() {
                   setShowGlobalDupes(true)
                   setSelectedRepo(null)
                   setGlobalDupes(null)
-                  axios.post(`/api/repos/dupes?threshold=${threshold}`, Array.from(selectedReposForDupes)).catch(e => {
+                  const reposToUse = repoName ? [repoName] : Array.from(selectedReposForSimilarity);
+                  axios.post(`/api/repos/dupes?threshold=${threshold}`, reposToUse).catch(e => {
                     console.error('Global similarity check failed', e)
                     setIsLoadingGlobalDupes(false)
                     setGlobalDupes([])
@@ -880,6 +886,9 @@ function App() {
       if (dupeDropdownRef.current && !dupeDropdownRef.current.contains(e.target as Node)) {
         setShowDupeDropdown(false)
       }
+      if (similarityDropdownRef.current && !similarityDropdownRef.current.contains(e.target as Node)) {
+        setShowSimilarityDropdown(false)
+      }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
@@ -975,6 +984,15 @@ function App() {
             merged.progressPercent = Math.min((processed / total) * 100, 100);
           }
           pendingProgressRef.current[repoName] = merged;
+
+          // Ensure it's in activeProcesses (important for replay)
+          setActiveProcesses((prev) => {
+            if (!prev[repoName]) {
+              return { ...prev, [repoName]: merged };
+            }
+            return prev;
+          });
+
           // Throttle UI updates to 1Hz
           if (!throttleTimerRef.current) {
             throttleTimerRef.current = setTimeout(() => {
@@ -1169,6 +1187,7 @@ function App() {
             ))}
             <button 
               onClick={() => {
+                if (isLoadingGlobalDupes) cancelDupeMutation.mutate(undefined)
                 setSelectedRepo(null)
                 setShowGlobalDupes(false)
                 queryClient.invalidateQueries({ queryKey: ['repos'] })
@@ -1258,7 +1277,10 @@ function App() {
             <div className="p-6 border-b border-slate-800 flex justify-between items-center">
               <div className="flex items-center gap-4">
                 <button
-                  onClick={() => setShowGlobalDupes(false)}
+                  onClick={() => {
+                    if (isLoadingGlobalDupes) cancelDupeMutation.mutate(undefined)
+                    setShowGlobalDupes(false)
+                  }}
                   className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white"
                 >
                   <ChevronRight className="w-6 h-6 rotate-180" />
@@ -1464,24 +1486,84 @@ function App() {
                               className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2"
                             >
                               <Search className="w-3 h-3" />
-                              {isLoadingGlobalDupes ? 'Checking...' : `Duplicates`}
+                              {isLoadingGlobalDupes ? 'Checking...' : `Duplicates ${selectedReposForDupes.size} Repo${selectedReposForDupes.size !== 1 ? 's' : ''}`}
                             </button>
                           </div>
                         </div>
                       </div>
                     )}
                   </div>
-                  <button
-                    onClick={() => {
-                      setSimilarityThreshold(95)
-                      setShowSimilarityModal({repoName: null, isGlobal: true})
-                    }}
-                    disabled={!repos || repos.length === 0 || isAnyProcessRunning}
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 disabled:opacity-30"
-                  >
-                    <Zap className="w-4 h-4" />
-                    Similarity
-                  </button>
+                  <div className="relative" ref={similarityDropdownRef}>
+                    <button
+                      onClick={() => {
+                        if (repos && repos.length > 0) {
+                          setShowSimilarityDropdown(prev => !prev)
+                          if (selectedReposForSimilarity.size === 0) {
+                            setSelectedReposForSimilarity(new Set(repos.map(r => r.name)))
+                          }
+                        }
+                      }}
+                      disabled={!repos || repos.length === 0 || isAnyProcessRunning}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-slate-700 disabled:opacity-30"
+                    >
+                      <Zap className="w-4 h-4 text-indigo-500" />
+                      Similarity
+                      <ChevronRight className={`w-3 h-3 transition-transform ${showSimilarityDropdown ? 'rotate-90' : ''}`} />
+                    </button>
+                    {showSimilarityDropdown && repos && repos.length > 0 && (
+                      <div className="absolute right-0 top-full mt-2 z-50 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl min-w-[220px] overflow-hidden">
+                        <div className="p-2 border-b border-slate-800">
+                          <button
+                            onClick={() => {
+                              if (selectedReposForSimilarity.size === repos.length) {
+                                setSelectedReposForSimilarity(new Set())
+                              } else {
+                                setSelectedReposForSimilarity(new Set(repos.map(r => r.name)))
+                              }
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
+                          >
+                            {selectedReposForSimilarity.size === repos.length ? 'Deselect All' : 'Select All'}
+                          </button>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto">
+                          {repos.map(r => (
+                            <label key={r.name} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-800 cursor-pointer transition-all">
+                              <input
+                                type="checkbox"
+                                checked={selectedReposForSimilarity.has(r.name)}
+                                onChange={() => {
+                                  const next = new Set(selectedReposForSimilarity)
+                                  if (next.has(r.name)) {
+                                    next.delete(r.name)
+                                  } else {
+                                    next.add(r.name)
+                                  }
+                                  setSelectedReposForSimilarity(next)
+                                }}
+                                className="accent-indigo-500"
+                              />
+                              <span className="text-sm text-slate-300">{r.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <div className="p-2 border-t border-slate-800">
+                          <button
+                            disabled={selectedReposForSimilarity.size < 1}
+                            onClick={() => {
+                              setShowSimilarityDropdown(false)
+                              setSimilarityThreshold(95)
+                              setShowSimilarityModal({repoName: null, isGlobal: true})
+                            }}
+                            className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                          >
+                            <Zap className="w-3 h-3" />
+                            Similarity {selectedReposForSimilarity.size} Repo{selectedReposForSimilarity.size !== 1 ? 's' : ''}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               
@@ -1703,7 +1785,10 @@ function App() {
             <div className="p-6 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
               <div className="flex items-center gap-4">
                 <button 
-                  onClick={() => setSelectedRepo(null)}
+                  onClick={() => {
+                    if (isLoadingDupesManual) cancelDupeMutation.mutate(selectedRepo!)
+                    setSelectedRepo(null)
+                  }}
                   className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white"
                 >
                   <ChevronRight className="w-6 h-6 rotate-180" />

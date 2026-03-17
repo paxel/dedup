@@ -57,6 +57,43 @@ public class Statistics {
         timer.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> consumer.accept(e.getKey(), e.getValue()));
     }
 
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(name).append(" {");
+        boolean first = true;
+        for (var entry : counter.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            if (!first) sb.append(", ");
+            sb.append(entry.getKey()).append("=").append(entry.getValue().get());
+            first = false;
+        }
+        for (var entry : timer.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+            if (!first) sb.append(", ");
+            sb.append(entry.getKey()).append("=").append(formatDuration(entry.getValue()));
+            first = false;
+        }
+        sb.append("}");
+        return sb.toString();
+    }
+
+    private String formatDuration(Duration d) {
+        long totalSeconds = d.getSeconds();
+        long hours = totalSeconds / 3600;
+        long minutes = (totalSeconds % 3600) / 60;
+        long seconds = totalSeconds % 60;
+        long millis = d.toMillisPart();
+        if (hours > 0) {
+            return String.format("%dh %dm %ds", hours, minutes, seconds);
+        }
+        if (minutes > 0) {
+            return String.format("%dm %ds", minutes, seconds);
+        }
+        if (seconds > 0) {
+            return String.format("%d.%03ds", seconds, millis);
+        }
+        return String.format("%dms", d.toMillis());
+    }
+
     public void add(Statistics value) {
         value.forCounter((key, newCount) -> counter.computeIfAbsent(key, k -> new AtomicLong()).addAndGet(newCount));
         value.forTimer((key, newDuration) -> timer.compute(key, (k, prevDuration) -> {
