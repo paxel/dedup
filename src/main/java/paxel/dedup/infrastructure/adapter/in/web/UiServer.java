@@ -290,12 +290,15 @@ public class UiServer {
         });
 
         app.post("/api/repos/update-batch", ctx -> {
-            List<String> names = ctx.bodyAsClass(List.class);
+            var body = ctx.bodyAsClass(java.util.Map.class);
+            List<String> names = (List<String>) body.get("repos");
             if (names == null || names.isEmpty()) {
                 ctx.status(400).json(Map.of("message", "No repositories specified"));
                 return;
             }
-            log.info("Batch update requested for repositories: {}", names);
+            int threads = body.containsKey("threads") ? ((Number) body.get("threads")).intValue() : 2;
+            boolean refreshFingerprints = body.containsKey("refreshFingerprints") && Boolean.TRUE.equals(body.get("refreshFingerprints"));
+            log.info("Batch update requested for repositories: {} (threads={}, refreshFingerprints={})", names, threads, refreshFingerprints);
             updateExecutor.execute(() -> {
                 for (String name : names) {
                     if (activeUpdates.containsKey(name)) {
@@ -306,10 +309,10 @@ public class UiServer {
                             new CliParameter(),
                             java.util.List.of(name),
                             false,
-                            2,
+                            threads,
                             infrastructureConfig.getDedupConfig(),
                             false,
-                            false,
+                            refreshFingerprints,
                             infrastructureConfig.getFileSystem()
                     );
                     process.withObserver(new WebUpdateObserver(name, name, eventBus));
@@ -343,7 +346,19 @@ public class UiServer {
 
         app.post("/api/repos/{name}/update", ctx -> {
             String name = ctx.pathParam("name");
-            log.info("Update requested for repository: {}", name);
+            int threads = 2;
+            boolean refreshFingerprints = false;
+            String bodyStr = ctx.body();
+            if (bodyStr != null && !bodyStr.isBlank()) {
+                var body = ctx.bodyAsClass(java.util.Map.class);
+                if (body.containsKey("threads")) {
+                    threads = ((Number) body.get("threads")).intValue();
+                }
+                if (body.containsKey("refreshFingerprints")) {
+                    refreshFingerprints = Boolean.TRUE.equals(body.get("refreshFingerprints"));
+                }
+            }
+            log.info("Update requested for repository: {} (threads={}, refreshFingerprints={})", name, threads, refreshFingerprints);
             if (activeUpdates.containsKey(name)) {
                 ctx.status(409).json(java.util.Map.of("message", "Update already running for " + name));
                 return;
@@ -352,11 +367,11 @@ public class UiServer {
                     new CliParameter(),
                     java.util.List.of(name),
                     false,
-                    2,
+                    threads,
                     infrastructureConfig.getDedupConfig(),
-                    false, // progress (Terminal/Lanterna)
-                    false,  // refreshFingerprints
-                    infrastructureConfig.getFileSystem() // Explicitly pass fileSystem
+                    false,
+                    refreshFingerprints,
+                    infrastructureConfig.getFileSystem()
             );
             process.withObserver(new WebUpdateObserver(name, name, eventBus));
             activeUpdates.put(name, process);

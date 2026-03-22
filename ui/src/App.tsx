@@ -20,6 +20,7 @@ import { ErrorModal } from './components/ErrorModal'
 import { LiveActivity } from './components/LiveActivity'
 import { RepoCard } from './components/RepoCard'
 import { ToolbarDropdown } from './components/ToolbarDropdown'
+import { UpdateSettings } from './components/UpdateSettings'
 
 function App() {
   const selectedRepoRef = useRef<string | null>(null)
@@ -163,8 +164,10 @@ function App() {
     }
   })
 
+  const [updateOptions, setUpdateOptions] = useState({ threads: 2, refreshFingerprints: false })
+
   const batchUpdateMutation = useMutation({
-    mutationFn: (names: string[]) => axios.post('/api/repos/update-batch', names),
+    mutationFn: (names: string[]) => axios.post('/api/repos/update-batch', { repos: names, ...updateOptions }),
     onError: (error: any) => {
       const message = error.response?.data?.description || error.message || 'Failed to start update'
       const newError: ErrorEvent = {
@@ -178,7 +181,7 @@ function App() {
     }
   })
   const updateMutation = useMutation({
-    mutationFn: (name: string) => axios.post(`/api/repos/${name}/update`),
+    mutationFn: (name: string) => axios.post(`/api/repos/${name}/update`, updateOptions),
     onMutate: (name: string) => {
       setActiveProcesses(prev => {
         const next = { ...prev }
@@ -530,6 +533,11 @@ function App() {
                 </h2>
                 
                 <div className="flex items-center gap-3">
+                  <UpdateSettings
+                    threads={updateOptions.threads}
+                    refreshFingerprints={updateOptions.refreshFingerprints}
+                    onChange={setUpdateOptions}
+                  />
                   <ToolbarDropdown
                     repos={repos || []}
                     isDisabled={isAnyProcessRunning}
