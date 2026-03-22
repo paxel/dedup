@@ -10,6 +10,7 @@ import paxel.dedup.domain.service.RepoService;
 import paxel.dedup.infrastructure.adapter.out.web.WebDupeObserver;
 import paxel.dedup.infrastructure.adapter.out.web.WebUpdateObserver;
 import paxel.dedup.infrastructure.config.InfrastructureConfig;
+import paxel.dedup.repo.domain.diff.DiffProcess;
 import paxel.dedup.repo.domain.repo.DuplicateRepoProcess;
 import paxel.dedup.repo.domain.repo.UpdateReposProcess;
 
@@ -32,6 +33,8 @@ public class UiServer {
     private final java.util.concurrent.ExecutorService dupeExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
     private final ConcurrentHashMap<String, UpdateReposProcess> activeUpdates = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, DuplicateRepoProcess> activeDupeProcesses = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CompletableFuture<?>> activeDiffFutures = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Thread> activeDiffThreads = new ConcurrentHashMap<>();
 
     public UiServer(InfrastructureConfig infrastructureConfig) {
         this.infrastructureConfig = infrastructureConfig;
@@ -494,6 +497,103 @@ public class UiServer {
             });
 
             ctx.status(202).json(Map.of("message", "Batch duplicate detection started"));
+        });
+
+        app.post("/api/diff/cp", ctx -> {
+            var body = ctx.bodyAsClass(java.util.Map.class);
+            List<String> sourceRepos = (List<String>) body.get("sourceRepos");
+            String referenceRepo = (String) body.get("referenceRepo");
+            String targetDir = (String) body.get("targetDir");
+            String filter = (String) body.get("filter");
+
+            if (sourceRepos == null || sourceRepos.isEmpty()) {
+                ctx.status(400).json(Map.of("message", "No source repositories specified"));
+                return;
+            }
+            if (referenceRepo == null || referenceRepo.isBlank()) {
+                ctx.status(400).json(Map.of("message", "No reference repository specified"));
+                return;
+            }
+            if (targetDir == null || targetDir.isBlank()) {
+                ctx.status(400).json(Map.of("message", "No target directory specified"));
+                return;
+            }
+
+            log.info("Diff copy requested: sources={}, reference={}, target={}, filter={}", sourceRepos, referenceRepo, targetDir, filter);
+
+            String diffKey = "diff-cp-" + System.currentTimeMillis();
+            CompletableFuture<?> future = CompletableFuture.runAsync(() -> {
+                activeDiffThreads.put(diffKey, Thread.currentThread());
+                eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Diff copy starting...", "total", sourceRepos.size(), "completed", 0));
+                int completed = 0;
+                for (String source : sourceRepos) {
+                    if (Thread.currentThread().isInterrupted()) {
+                        eventBus.publish("diff-error", Map.of("key", diffKey, "message", "Diff copy cancelled"));
+                        return;
+                    }
+                    try {
+                        eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Scanning diff for " + source + "...", "total", sourceRepos.size(), "completed", completed));
+                        DiffProcess process = new DiffProcess(
+                                new CliParameter(),
+                                source,
+                                referenceRepo,
+                                infrastructureConfig.getDedupConfig(),
+                                filter,
+                                fileSystem
+                        );
+                        int result = process.copy(targetDir, false, progress ->
+                                eventBus.publish("diff-progress", Map.of(
+                                        "key", diffKey,
+                                        "message", "Copying " + source + ": " + progress.completed() + "/" + progress.total() + " " + progress.currentFile(),
+                                        "total", progress.total(),
+                                        "completed", progress.completed()
+                                ))
+                        );
+                        completed++;
+                        if (result != 0) {
+                            log.error("Diff copy failed for source={} reference={}: exit code {}", source, referenceRepo, result);
+                            eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Failed for " + source + " (exit " + result + ")", "total", sourceRepos.size(), "completed", completed));
+                        } else {
+                            log.info("Diff copy completed for source={} reference={}", source, referenceRepo);
+                        }
+                    } catch (Exception e) {
+                        completed++;
+                        log.error("Diff copy error for source={}", source, e);
+                        eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Error for " + source + ": " + e.getMessage(), "total", sourceRepos.size(), "completed", completed));
+                    }
+                }
+                eventBus.publish("diff-finished", Map.of("key", diffKey, "message", "Diff copy completed", "total", sourceRepos.size(), "completed", completed));
+            });
+            activeDiffFutures.put(diffKey, future);
+            future.whenComplete((v, ex) -> {
+                activeDiffFutures.remove(diffKey);
+                activeDiffThreads.remove(diffKey);
+            });
+
+            ctx.status(202).json(Map.of("message", "Diff copy started for " + sourceRepos.size() + " source(s)", "key", diffKey));
+        });
+
+        app.post("/api/diff/cancel", ctx -> {
+            String key = ctx.queryParam("key");
+            if (key != null) {
+                Thread thread = activeDiffThreads.get(key);
+                if (thread != null) {
+                    thread.interrupt();
+                }
+                activeDiffFutures.remove(key);
+                activeDiffThreads.remove(key);
+                eventBus.publish("diff-finished", Map.of("key", key, "message", "Cancelled"));
+                ctx.status(202).json(Map.of("message", "Cancel requested"));
+                return;
+            }
+            // Cancel all active diff operations
+            activeDiffThreads.forEach((k, t) -> t.interrupt());
+            activeDiffFutures.forEach((k, f) -> {
+                eventBus.publish("diff-finished", Map.of("key", k, "message", "Cancelled"));
+            });
+            activeDiffFutures.clear();
+            activeDiffThreads.clear();
+            ctx.status(202).json(Map.of("message", "All diff operations cancelled"));
         });
 
         app.post("/api/repos/dupes/cancel", ctx -> {

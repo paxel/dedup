@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { Database, Activity, RefreshCw, Plus, Folder, X, Search, ChevronRight, AlertTriangle, Bell, Zap } from 'lucide-react'
+import { Database, Activity, RefreshCw, Plus, Folder, X, Search, ChevronRight, AlertTriangle, Bell, Zap, FileStack } from 'lucide-react'
 
 import { 
   Repo, 
@@ -21,6 +21,7 @@ import { LiveActivity } from './components/LiveActivity'
 import { RepoCard } from './components/RepoCard'
 import { ToolbarDropdown } from './components/ToolbarDropdown'
 import { UpdateSettings } from './components/UpdateSettings'
+import { FileOperationsView } from './components/FileOperationsView'
 
 function App() {
   const selectedRepoRef = useRef<string | null>(null)
@@ -277,6 +278,7 @@ function App() {
     }
   })
 
+  const [showFileOps, setShowFileOps] = useState(false)
   const [showBrowser, setShowBrowser] = useState(false)
   const [browserOnSelect, setBrowserOnSelect] = useState<(path: string) => void>(() => () => {})
   const [browserInitialPath, setBrowserInitialPath] = useState<string | undefined>(undefined)
@@ -379,12 +381,24 @@ function App() {
                 if (isLoadingGlobalDupes) cancelDupeMutation.mutate(undefined)
                 setSelectedRepo(null)
                 setShowGlobalDupes(false)
+                setShowFileOps(false)
                 queryClient.invalidateQueries({ queryKey: ['repos'] })
               }}
-              className={`px-5 py-2.5 rounded-xl flex items-center gap-2 transition-all font-bold text-sm ${!selectedRepo && !showGlobalDupes ? 'bg-slate-800 text-white shadow-lg shadow-blue-500/10 border border-slate-700' : 'text-slate-400 hover:text-white'}`}
+              className={`px-5 py-2.5 rounded-xl flex items-center gap-2 transition-all font-bold text-sm ${!selectedRepo && !showGlobalDupes && !showFileOps ? 'bg-slate-800 text-white shadow-lg shadow-blue-500/10 border border-slate-700' : 'text-slate-400 hover:text-white'}`}
             >
               <Activity className="w-4 h-4" />
               Overview
+            </button>
+            <button 
+              onClick={() => {
+                setShowFileOps(true)
+                setSelectedRepo(null)
+                setShowGlobalDupes(false)
+              }}
+              className={`px-5 py-2.5 rounded-xl flex items-center gap-2 transition-all font-bold text-sm ${showFileOps ? 'bg-slate-800 text-white shadow-lg shadow-orange-500/10 border border-slate-700' : 'text-slate-400 hover:text-white'}`}
+            >
+              <FileStack className="w-4 h-4" />
+              File Ops
             </button>
             <button 
               onClick={() => setShowAddModal(true)}
@@ -461,7 +475,14 @@ function App() {
             ))}
           </div>
         )}
-        {showGlobalDupes ? (
+        {showFileOps ? (
+          <FileOperationsView
+            repos={repos || []}
+            isAnyProcessRunning={isAnyProcessRunning}
+            onBack={() => setShowFileOps(false)}
+            openBrowser={openBrowser}
+          />
+        ) : showGlobalDupes ? (
           <section className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden">
             <div className="p-6 border-b border-slate-800 flex justify-between items-center">
               <div className="flex items-center gap-4">

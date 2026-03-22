@@ -16,6 +16,8 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -62,6 +64,10 @@ public class DiffProcess {
     }
 
     public int copy(String target, boolean move) {
+        return copy(target, move, null);
+    }
+
+    public int copy(String target, boolean move, Consumer<CopyProgress> progressCallback) {
         Result<Repos, Integer> init = init();
         if (init.hasFailed()) {
             return init.error();
@@ -69,45 +75,63 @@ public class DiffProcess {
         RepoManager sourceRepo = init.value().source();
         RepoManager targetRepo = init.value().target();
 
+        // Collect diff files to know total count
+        List<RepoFile> diffFiles = sourceRepo.stream()
+                .filter(repoFile -> !repoFile.missing())
+                .filter(repoFilter)
+                .filter(r -> targetRepo.getByHashAndSize(r.hash(), r.size()).isEmpty())
+                .toList();
+
+        int total = diffFiles.size();
+        AtomicInteger completed = new AtomicInteger(0);
+
+        if (progressCallback != null) {
+            progressCallback.accept(new CopyProgress(total, 0, "Starting..."));
+        }
+
         try {
-            sourceRepo.stream()
-                    .filter(repoFile -> !repoFile.missing())
-                    .filter(repoFilter)
-                    .forEach(r -> {
-                        List<RepoFile> byHash = targetRepo.getByHashAndSize(r.hash(), r.size());
-                        if (byHash.isEmpty()) {
-                            Path targetFile = Paths.get(target).resolve(r.relativePath());
-                            if (!fileSystem.exists(targetFile.getParent())) {
-                                try {
-                                    fileSystem.createDirectories(targetFile.getParent());
-                                } catch (IOException e) {
-                                    throw new TunneledIoException("Could not create " + targetFile.getParent(), e);
-                                }
-                            }
-                            Path sourceFile = Paths.get(sourceRepo.getRepo().absolutePath()).resolve(r.relativePath());
-                            try {
-                                if (move) {
-                                    fileSystem.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
-                                    sourceRepo.addRepoFile(r.withMissing(true));
-                                    if (cliParameter.isVerbose()) {
-                                        log.info("Moved {}", r.relativePath());
-                                    }
-                                } else {
-                                    fileSystem.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
-                                    if (cliParameter.isVerbose()) {
-                                        log.info("Copied {}", r.relativePath());
-                                    }
-                                }
-                            } catch (IOException e) {
-                                throw new TunneledIoException("Could not copy/move " + sourceFile + " to " + targetFile, e);
-                            }
+            for (RepoFile r : diffFiles) {
+                if (Thread.currentThread().isInterrupted()) {
+                    return -200;
+                }
+                Path targetFile = Paths.get(target).resolve(r.relativePath());
+                if (!fileSystem.exists(targetFile.getParent())) {
+                    try {
+                        fileSystem.createDirectories(targetFile.getParent());
+                    } catch (IOException e) {
+                        throw new TunneledIoException("Could not create " + targetFile.getParent(), e);
+                    }
+                }
+                Path sourceFile = Paths.get(sourceRepo.getRepo().absolutePath()).resolve(r.relativePath());
+                try {
+                    if (move) {
+                        fileSystem.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
+                        sourceRepo.addRepoFile(r.withMissing(true));
+                        if (cliParameter.isVerbose()) {
+                            log.info("Moved {}", r.relativePath());
                         }
-                    });
+                    } else {
+                        fileSystem.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                        if (cliParameter.isVerbose()) {
+                            log.info("Copied {}", r.relativePath());
+                        }
+                    }
+                } catch (IOException e) {
+                    throw new TunneledIoException("Could not copy/move " + sourceFile + " to " + targetFile, e);
+                }
+                int done = completed.incrementAndGet();
+                if (progressCallback != null) {
+                    progressCallback.accept(new CopyProgress(total, done, r.relativePath()));
+                }
+            }
         } catch (TunneledIoException e) {
             log.error("{} {}", e.getMessage(), e.getCause().getClass().getSimpleName());
             return -200;
         }
         return 0;
+    }
+
+    public record CopyProgress(int total, int completed, String currentFile) {
     }
 
     public int delete() {
