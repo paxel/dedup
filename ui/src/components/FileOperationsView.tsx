@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import axios from 'axios'
-import { Copy, ChevronRight, FolderOpen, Filter, X, RefreshCw } from 'lucide-react'
+import { Copy, Scissors, ChevronRight, FolderOpen, Filter, X, RefreshCw } from 'lucide-react'
 import { Repo } from '../types'
 
 interface DiffProgress {
@@ -23,6 +23,7 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
   const [sourceRepos, setSourceRepos] = useState<Set<string>>(new Set())
   const [referenceRepo, setReferenceRepo] = useState<string | null>(null)
   const [targetDir, setTargetDir] = useState('')
+  const [command, setCommand] = useState<'copy' | 'move'>('copy')
   const [filter, setFilter] = useState('')
   const [showFilter, setShowFilter] = useState(false)
   const [diffProgress, setDiffProgress] = useState<DiffProgress | null>(null)
@@ -30,7 +31,7 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
 
   const diffCopyMutation = useMutation({
     mutationFn: (params: { sourceRepos: string[]; referenceRepo: string; targetDir: string; filter: string | null }) =>
-      axios.post('/api/diff/cp', params),
+      axios.post(command === 'move' ? '/api/diff/mv' : '/api/diff/cp', params),
     onSuccess: (response) => {
       const key = response.data?.key
       if (key) {
@@ -138,13 +139,29 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
       <div className="px-6 py-4 border-b border-slate-800 flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
           <button
-            className="bg-orange-600/20 border border-orange-500/40 text-orange-400 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2"
+            onClick={() => setCommand('copy')}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 border transition-all ${
+              command === 'copy'
+                ? 'bg-orange-600/20 border-orange-500/40 text-orange-400'
+                : 'border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-600'
+            }`}
             title="Copy files that exist in source but not in reference to the target directory"
           >
             <Copy className="w-4 h-4" />
             Copy Diff To
           </button>
-          {/* Future command buttons go here */}
+          <button
+            onClick={() => setCommand('move')}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 border transition-all ${
+              command === 'move'
+                ? 'bg-orange-600/20 border-orange-500/40 text-orange-400'
+                : 'border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-600'
+            }`}
+            title="Move files that exist in source but not in reference to the target directory (removes from source)"
+          >
+            <Scissors className="w-4 h-4" />
+            Move Diff To
+          </button>
         </div>
 
         <div className="flex-1" />
@@ -277,10 +294,10 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
             onClick={handleExecute}
             disabled={!canExecute}
             className="bg-orange-600 hover:bg-orange-500 disabled:opacity-30 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-lg shadow-orange-600/20"
-            title="Copy files from source repos that are not in the reference repo to the target directory"
+            title={command === 'move' ? 'Move files from source repos that are not in the reference repo to the target directory' : 'Copy files from source repos that are not in the reference repo to the target directory'}
           >
-            <Copy className="w-4 h-4" />
-            Copy Diff ({sourceRepos.size} → {referenceRepo || '?'})
+            {command === 'move' ? <Scissors className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            {command === 'move' ? 'Move' : 'Copy'} Diff ({sourceRepos.size} → {referenceRepo || '?'})
           </button>
         )}
       </div>
