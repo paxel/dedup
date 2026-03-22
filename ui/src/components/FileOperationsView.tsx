@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import axios from 'axios'
-import { Copy, Scissors, ChevronRight, FolderOpen, Filter, X, RefreshCw } from 'lucide-react'
+import { Copy, Scissors, Trash2, ChevronRight, FolderOpen, Filter, X, RefreshCw } from 'lucide-react'
 import { Repo } from '../types'
 
 interface DiffProgress {
@@ -23,15 +23,19 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
   const [sourceRepos, setSourceRepos] = useState<Set<string>>(new Set())
   const [referenceRepo, setReferenceRepo] = useState<string | null>(null)
   const [targetDir, setTargetDir] = useState('')
-  const [command, setCommand] = useState<'copy' | 'move'>('copy')
+  const [command, setCommand] = useState<'copy' | 'move' | 'remove'>('copy')
   const [filter, setFilter] = useState('')
   const [showFilter, setShowFilter] = useState(false)
   const [diffProgress, setDiffProgress] = useState<DiffProgress | null>(null)
   const diffKeyRef = useRef<string | null>(null)
 
   const diffCopyMutation = useMutation({
-    mutationFn: (params: { sourceRepos: string[]; referenceRepo: string; targetDir: string; filter: string | null }) =>
-      axios.post(command === 'move' ? '/api/diff/mv' : '/api/diff/cp', params),
+    mutationFn: (params: { sourceRepos: string[]; referenceRepo?: string; targetDir?: string; filter: string | null }) => {
+      if (command === 'remove') {
+        return axios.post('/api/files/rm', { sourceRepos: params.sourceRepos, filter: params.filter })
+      }
+      return axios.post(command === 'move' ? '/api/diff/mv' : '/api/diff/cp', params)
+    },
     onSuccess: (response) => {
       const key = response.data?.key
       if (key) {
@@ -91,15 +95,21 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
   }, [])
 
   const isRunning = diffProgress !== null && !diffProgress.finished
-  const canExecute = sourceRepos.size > 0 && referenceRepo !== null && targetDir.trim() !== '' && !isAnyProcessRunning && !diffCopyMutation.isPending && !isRunning
+  const needsReference = command !== 'remove'
+  const needsTargetDir = command !== 'remove'
+  const canExecute = sourceRepos.size > 0
+    && (!needsReference || referenceRepo !== null)
+    && (!needsTargetDir || targetDir.trim() !== '')
+    && !isAnyProcessRunning && !diffCopyMutation.isPending && !isRunning
 
   const handleExecute = () => {
-    if (!canExecute || !referenceRepo) return
+    if (!canExecute) return
+    if (needsReference && !referenceRepo) return
     setDiffProgress(null)
     diffCopyMutation.mutate({
       sourceRepos: Array.from(sourceRepos),
-      referenceRepo,
-      targetDir,
+      ...(needsReference ? { referenceRepo: referenceRepo! } : {}),
+      ...(needsTargetDir ? { targetDir } : {}),
       filter: filter.trim() || null,
     })
   }
@@ -162,6 +172,18 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
             <Scissors className="w-4 h-4" />
             Move Diff To
           </button>
+          <button
+            onClick={() => setCommand('remove')}
+            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 border transition-all ${
+              command === 'remove'
+                ? 'bg-red-600/20 border-red-500/40 text-red-400'
+                : 'border-slate-700 text-slate-500 hover:text-slate-300 hover:border-slate-600'
+            }`}
+            title="Delete files matching the filter from the selected source repositories"
+          >
+            <Trash2 className="w-4 h-4" />
+            Remove Files
+          </button>
         </div>
 
         <div className="flex-1" />
@@ -186,7 +208,7 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
       </div>
 
       {/* Two-panel layout */}
-      <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-800">
+      <div className={`grid grid-cols-1 ${needsReference ? 'md:grid-cols-2' : ''} divide-y md:divide-y-0 md:divide-x divide-slate-800`}>
         {/* Source repos (left) - multi-select */}
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
@@ -230,7 +252,7 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
         </div>
 
         {/* Target/reference repo (right) - single-select */}
-        <div className="p-6">
+        {needsReference && <div className="p-6">
           <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">Reference Repo (diff against)</h3>
           <div className="space-y-1 max-h-[400px] overflow-y-auto">
             {repos.map(r => (
@@ -255,12 +277,12 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
               <p className="text-sm text-slate-600 italic py-4 text-center">No repositories available</p>
             )}
           </div>
-        </div>
+        </div>}
       </div>
 
       {/* Action bar */}
       <div className="px-6 py-5 border-t border-slate-800 bg-slate-950/40 flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
+        {needsTargetDir && <div className="flex items-center gap-3 flex-1 min-w-0">
           <span className="text-xs font-black uppercase tracking-widest text-slate-500 shrink-0">Target Dir</span>
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <input
@@ -278,7 +300,9 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
               <FolderOpen className="w-4 h-4" />
             </button>
           </div>
-        </div>
+        </div>}
+
+        {!needsTargetDir && <div className="flex-1" />}
 
         {isRunning ? (
           <button
@@ -294,10 +318,10 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
             onClick={handleExecute}
             disabled={!canExecute}
             className="bg-orange-600 hover:bg-orange-500 disabled:opacity-30 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-lg shadow-orange-600/20"
-            title={command === 'move' ? 'Move files from source repos that are not in the reference repo to the target directory' : 'Copy files from source repos that are not in the reference repo to the target directory'}
+            title={command === 'remove' ? 'Delete files matching the filter from the selected source repositories' : command === 'move' ? 'Move files from source repos that are not in the reference repo to the target directory' : 'Copy files from source repos that are not in the reference repo to the target directory'}
           >
-            {command === 'move' ? <Scissors className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-            {command === 'move' ? 'Move' : 'Copy'} Diff ({sourceRepos.size} → {referenceRepo || '?'})
+            {command === 'remove' ? <Trash2 className="w-4 h-4" /> : command === 'move' ? <Scissors className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            {command === 'remove' ? `Remove Files (${sourceRepos.size} repo${sourceRepos.size !== 1 ? 's' : ''})` : `${command === 'move' ? 'Move' : 'Copy'} Diff (${sourceRepos.size} → ${referenceRepo || '?'})`}
           </button>
         )}
       </div>

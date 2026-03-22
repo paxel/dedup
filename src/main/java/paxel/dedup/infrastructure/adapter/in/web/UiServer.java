@@ -11,6 +11,7 @@ import paxel.dedup.infrastructure.adapter.out.web.WebDupeObserver;
 import paxel.dedup.infrastructure.adapter.out.web.WebUpdateObserver;
 import paxel.dedup.infrastructure.config.InfrastructureConfig;
 import paxel.dedup.repo.domain.diff.DiffProcess;
+import paxel.dedup.repo.domain.files.FilesProcess;
 import paxel.dedup.repo.domain.repo.DuplicateRepoProcess;
 import paxel.dedup.repo.domain.repo.UpdateReposProcess;
 
@@ -645,6 +646,69 @@ public class UiServer {
             });
 
             ctx.status(202).json(Map.of("message", "Diff move started for " + sourceRepos.size() + " source(s)", "key", diffKey));
+        });
+
+        app.post("/api/files/rm", ctx -> {
+            var body = ctx.bodyAsClass(java.util.Map.class);
+            List<String> sourceRepos = (List<String>) body.get("sourceRepos");
+            String filter = (String) body.get("filter");
+
+            if (sourceRepos == null || sourceRepos.isEmpty()) {
+                ctx.status(400).json(Map.of("message", "No source repositories specified"));
+                return;
+            }
+
+            log.info("Files remove requested: sources={}, filter={}", sourceRepos, filter);
+
+            String diffKey = "files-rm-" + System.currentTimeMillis();
+            CompletableFuture<?> future = CompletableFuture.runAsync(() -> {
+                activeDiffThreads.put(diffKey, Thread.currentThread());
+                eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Remove starting...", "total", sourceRepos.size(), "completed", 0));
+                int completed = 0;
+                for (String source : sourceRepos) {
+                    if (Thread.currentThread().isInterrupted()) {
+                        eventBus.publish("diff-error", Map.of("key", diffKey, "message", "Remove cancelled"));
+                        return;
+                    }
+                    try {
+                        eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Scanning files in " + source + "...", "total", sourceRepos.size(), "completed", completed));
+                        FilesProcess process = new FilesProcess(
+                                new CliParameter(),
+                                source,
+                                infrastructureConfig.getDedupConfig(),
+                                filter,
+                                fileSystem
+                        );
+                        int result = process.rm(progress ->
+                                eventBus.publish("diff-progress", Map.of(
+                                        "key", diffKey,
+                                        "message", "Removing " + source + ": " + progress.completed() + "/" + progress.total() + " " + progress.currentFile(),
+                                        "total", progress.total(),
+                                        "completed", progress.completed()
+                                ))
+                        );
+                        completed++;
+                        if (result != 0) {
+                            log.error("Files remove failed for source={}: exit code {}", source, result);
+                            eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Failed for " + source + " (exit " + result + ")", "total", sourceRepos.size(), "completed", completed));
+                        } else {
+                            log.info("Files remove completed for source={}", source);
+                        }
+                    } catch (Exception e) {
+                        completed++;
+                        log.error("Files remove error for source={}", source, e);
+                        eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Error for " + source + ": " + e.getMessage(), "total", sourceRepos.size(), "completed", completed));
+                    }
+                }
+                eventBus.publish("diff-finished", Map.of("key", diffKey, "message", "Remove completed", "total", sourceRepos.size(), "completed", completed));
+            });
+            activeDiffFutures.put(diffKey, future);
+            future.whenComplete((v, ex) -> {
+                activeDiffFutures.remove(diffKey);
+                activeDiffThreads.remove(diffKey);
+            });
+
+            ctx.status(202).json(Map.of("message", "Files remove started for " + sourceRepos.size() + " repo(s)", "key", diffKey));
         });
 
         app.post("/api/diff/cancel", ctx -> {

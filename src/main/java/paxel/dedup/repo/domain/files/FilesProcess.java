@@ -16,7 +16,9 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 @RequiredArgsConstructor
@@ -56,6 +58,10 @@ public class FilesProcess {
     }
 
     public int rm() {
+        return rm(null);
+    }
+
+    public int rm(Consumer<RemoveProgress> progressCallback) {
         Result<RepoManager, Integer> result = openRepo(source);
         if (result.hasFailed()) {
             return result.error();
@@ -63,23 +69,39 @@ public class FilesProcess {
         repoFilter = filterFactory.createFilter(filter);
 
         try {
-            result.value().stream()
+            List<RepoFile> files = result.value().stream()
                     .filter(repoFile -> !repoFile.missing())
                     .filter(repoFilter)
                     .sorted(Comparator.comparing(RepoFile::relativePath))
-                    .forEach(r -> {
-                        try {
-                            fileSystem.delete(Paths.get(result.value().getRepo().absolutePath()).resolve(r.relativePath()));
-                        } catch (IOException e) {
-                            throw new TunneledIoException("Could not delete " + r.relativePath(), e);
-                        }
+                    .toList();
 
-                    });
+            int total = files.size();
+            if (progressCallback != null) {
+                progressCallback.accept(new RemoveProgress(total, 0, "Starting..."));
+            }
+
+            int done = 0;
+            for (RepoFile r : files) {
+                if (Thread.currentThread().isInterrupted()) {
+                    return -1;
+                }
+                fileSystem.delete(Paths.get(result.value().getRepo().absolutePath()).resolve(r.relativePath()));
+                done++;
+                if (progressCallback != null) {
+                    progressCallback.accept(new RemoveProgress(total, done, r.relativePath()));
+                }
+            }
         } catch (TunneledIoException e) {
             log.error("{} {}", e.getMessage(), e.getCause().getClass().getSimpleName());
             return -213;
+        } catch (IOException e) {
+            log.error("Could not delete file: {}", e.getMessage());
+            return -213;
         }
         return 0;
+    }
+
+    public record RemoveProgress(int total, int completed, String currentFile) {
     }
 
     public int copy(String target, boolean move, String appendix) {
