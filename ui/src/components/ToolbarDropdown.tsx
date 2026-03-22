@@ -52,6 +52,7 @@ export const ToolbarDropdown = ({
         }}
         disabled={repos.length === 0 || isDisabled}
         className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 border border-slate-700 disabled:opacity-30"
+        title={`Select repositories and run ${label.toLowerCase()}`}
       >
         {icon}
         {label}
@@ -69,6 +70,7 @@ export const ToolbarDropdown = ({
                 }
               }}
               className="w-full text-left px-3 py-1.5 text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all"
+              title={selectedRepos.size === repos.length ? 'Deselect all repositories' : 'Select all repositories'}
             >
               {selectedRepos.size === repos.length ? 'Deselect All' : 'Select All'}
             </button>

@@ -92,6 +92,7 @@ export const RepoCard = ({
             onClick={() => onDuplicateClick(repo.name)}
             disabled={isAnyProcessRunning}
             className="text-xs font-black uppercase tracking-widest text-blue-500 hover:text-white hover:bg-blue-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed border border-blue-500/20"
+            title="Find duplicate files within this repository"
           >
             <Search className="w-4 h-4" />
             Duplicates
@@ -100,6 +101,7 @@ export const RepoCard = ({
             onClick={() => onSimilarityClick({repoName: repo.name, isGlobal: false})}
             disabled={isAnyProcessRunning}
             className="text-xs font-black uppercase tracking-widest text-indigo-500 hover:text-white hover:bg-indigo-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed border border-indigo-500/20"
+            title="Find similar files using perceptual hashing"
           >
             <Zap className="w-4 h-4" />
             Similarity
@@ -108,6 +110,7 @@ export const RepoCard = ({
             onClick={() => updateMutation.mutate(repo.name)}
             disabled={updateMutation.isPending || isAnyProcessRunning}
             className="text-xs font-black uppercase tracking-widest text-emerald-500 hover:text-white hover:bg-emerald-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed border border-emerald-500/20"
+            title="Scan for new and changed files and update the index"
           >
             <RefreshCw className={`w-4 h-4 ${updateMutation.isPending ? 'animate-spin' : ''}`} />
             Update
@@ -116,7 +119,7 @@ export const RepoCard = ({
             onClick={() => onPruneClick(repo.name)}
             disabled={isAnyProcessRunning}
             className="text-xs font-black uppercase tracking-widest text-amber-500 hover:text-white hover:bg-amber-600/20 px-3 py-1.5 rounded-lg transition-all flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Remove missing files from index"
+            title="Remove files from the index that no longer exist on disk"
           >
             <Zap className="w-4 h-4" />
             Cleanup

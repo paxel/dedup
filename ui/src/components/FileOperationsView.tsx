@@ -123,6 +123,7 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
           <button
             onClick={onBack}
             className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white"
+            title="Back to overview"
           >
             <ChevronRight className="w-6 h-6 rotate-180" />
           </button>
@@ -138,6 +139,7 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
         <div className="flex items-center gap-2">
           <button
             className="bg-orange-600/20 border border-orange-500/40 text-orange-400 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2"
+            title="Copy files that exist in source but not in reference to the target directory"
           >
             <Copy className="w-4 h-4" />
             Copy Diff To
@@ -181,6 +183,7 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
                 }
               }}
               className="text-[10px] font-bold text-slate-500 hover:text-white transition-colors"
+              title={sourceRepos.size === repos.length ? 'Deselect all source repos' : 'Select all repos as source'}
             >
               {sourceRepos.size === repos.length ? 'Deselect All' : 'Select All'}
             </button>
@@ -264,6 +267,7 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
           <button
             onClick={() => cancelDiffMutation.mutate()}
             className="bg-red-600/20 hover:bg-red-600/40 border border-red-500/30 text-red-400 hover:text-red-300 px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2"
+            title="Cancel the running diff copy operation"
           >
             <X className="w-4 h-4" />
             Cancel
@@ -273,6 +277,7 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
             onClick={handleExecute}
             disabled={!canExecute}
             className="bg-orange-600 hover:bg-orange-500 disabled:opacity-30 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all flex items-center gap-2 shadow-lg shadow-orange-600/20"
+            title="Copy files from source repos that are not in the reference repo to the target directory"
           >
             <Copy className="w-4 h-4" />
             Copy Diff ({sourceRepos.size} → {referenceRepo || '?'})

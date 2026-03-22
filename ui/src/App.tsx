@@ -385,6 +385,7 @@ function App() {
                 queryClient.invalidateQueries({ queryKey: ['repos'] })
               }}
               className={`px-5 py-2.5 rounded-xl flex items-center gap-2 transition-all font-bold text-sm ${!selectedRepo && !showGlobalDupes && !showFileOps ? 'bg-slate-800 text-white shadow-lg shadow-blue-500/10 border border-slate-700' : 'text-slate-400 hover:text-white'}`}
+              title="Show all repositories and live activity"
             >
               <Activity className="w-4 h-4" />
               Overview
@@ -396,6 +397,7 @@ function App() {
                 setShowGlobalDupes(false)
               }}
               className={`px-5 py-2.5 rounded-xl flex items-center gap-2 transition-all font-bold text-sm ${showFileOps ? 'bg-slate-800 text-white shadow-lg shadow-orange-500/10 border border-slate-700' : 'text-slate-400 hover:text-white'}`}
+              title="File operations: copy diffs, move, and remove files across repositories"
             >
               <FileStack className="w-4 h-4" />
               File Ops
@@ -403,6 +405,7 @@ function App() {
             <button 
               onClick={() => setShowAddModal(true)}
               className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 transition-all font-bold text-sm shadow-lg shadow-blue-600/20"
+              title="Add a new repository by selecting a directory to index"
             >
               <Plus className="w-5 h-5" />
               Add Repository
@@ -432,6 +435,7 @@ function App() {
                       <button
                         onClick={() => proc.repo && cancelMutation.mutate(proc.repo)}
                         className="bg-red-600/20 hover:bg-red-600/40 border border-red-500/30 text-red-400 hover:text-red-300 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-1.5"
+                        title="Cancel the scanning process"
                       >
                         <X className="w-3.5 h-3.5" />
                         Cancel
@@ -464,6 +468,7 @@ function App() {
                       <button
                         onClick={() => proc.repo && cancelMutation.mutate(proc.repo)}
                         className="bg-red-600/20 hover:bg-red-600/40 border border-red-500/30 text-red-400 hover:text-red-300 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-1.5"
+                        title="Cancel the hashing process"
                       >
                         <X className="w-3.5 h-3.5" />
                         Cancel
@@ -492,6 +497,7 @@ function App() {
                     setShowGlobalDupes(false)
                   }}
                   className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white"
+                  title="Back to overview"
                 >
                   <ChevronRight className="w-6 h-6 rotate-180" />
                 </button>
@@ -525,8 +531,9 @@ function App() {
                   <button
                     onClick={() => cancelDupeMutation.mutate(undefined)}
                     className="bg-red-600/20 hover:bg-red-600/40 border border-red-500/30 text-red-400 px-6 py-2 rounded-xl font-bold uppercase tracking-widest transition-all"
+                    title="Cancel the duplicate check"
                   >
-                    Cancel Check
+                    Cancel
                   </button>
                 </div>
               ) : globalDupes?.length === 0 ? (
@@ -677,6 +684,7 @@ function App() {
                     setSelectedRepo(null)
                   }}
                   className="p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white"
+                  title="Back to overview"
                 >
                   <ChevronRight className="w-6 h-6 rotate-180" />
                 </button>
@@ -720,8 +728,9 @@ function App() {
                   <button
                     onClick={() => cancelDupeMutation.mutate(selectedRepo!)}
                     className="bg-red-600/20 hover:bg-red-600/40 border border-red-500/30 text-red-400 px-6 py-2 rounded-xl font-bold uppercase tracking-widest transition-all"
+                    title="Cancel the duplicate check"
                   >
-                    Cancel Check
+                    Cancel
                   </button>
                 </div>
               ) : (dupeResults[selectedRepo!] || []).length === 0 ? (
