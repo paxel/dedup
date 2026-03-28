@@ -50,7 +50,7 @@ public class DedupCli {
         }
 
         if (cliParameter.isUi()) {
-            new UiServer(infrastructureConfig).start(8080);
+            new UiServer(infrastructureConfig).start(cliParameter.getUiPort());
             return;
         }
 

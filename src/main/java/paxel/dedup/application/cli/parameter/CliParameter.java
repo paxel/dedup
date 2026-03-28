@@ -15,6 +15,9 @@ public class CliParameter {
     @Option(names = "--ui", description = "Launch the Web UI")
     private boolean ui;
 
+    @Option(names = "--port", description = "Port for the Web UI (default: 8080)")
+    private int uiPort = 8080;
+
 
 }
 
