@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import axios from 'axios'
-import { Copy, Scissors, Trash2, ChevronRight, FolderOpen, Filter, X, RefreshCw, ArrowRightLeft } from 'lucide-react'
+import { Copy, Scissors, Trash2, ChevronRight, FolderOpen, Filter, X, RefreshCw, ArrowRightLeft, FileType, Hash, Ruler, Info } from 'lucide-react'
 import { Repo } from '../types'
 
 interface DiffProgress {
@@ -27,8 +27,12 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
   const [targetDir, setTargetDir] = useState('')
   const [targetRepo, setTargetRepo] = useState<string | null>(null)
   const [command, setCommand] = useState<Command>('copy')
-  const [filter, setFilter] = useState('')
   const [showFilter, setShowFilter] = useState(false)
+  const [activeFilterType, setActiveFilterType] = useState<'mime' | 'name' | 'size' | null>(null)
+  const [mimeValue, setMimeValue] = useState('')
+  const [nameValue, setNameValue] = useState('')
+  const [sizeOp, setSizeOp] = useState('>=')
+  const [sizeValue, setSizeValue] = useState('')
   const [diffProgress, setDiffProgress] = useState<DiffProgress | null>(null)
   const [syncCopyNew, setSyncCopyNew] = useState(true)
   const [syncDeleteMissing, setSyncDeleteMissing] = useState(false)
@@ -136,7 +140,7 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
       ...(needsTargetDir ? { targetDir } : {}),
       ...(needsTargetRepo ? { targetRepo: targetRepo! } : {}),
       ...(command === 'sync' ? { copyNew: syncCopyNew, deleteMissing: syncDeleteMissing } : {}),
-      filter: filter.trim() || null,
+      filter: computedFilter || null,
     })
   }
 
@@ -154,6 +158,16 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
       return next
     })
   }
+
+  const computedFilter = (() => {
+    if (!showFilter || activeFilterType === null) return ''
+    switch (activeFilterType) {
+      case 'mime': return mimeValue.trim() ? `mime:${mimeValue.trim()}` : ''
+      case 'name': return nameValue.trim() ? `name:${nameValue.trim()}` : ''
+      case 'size': return sizeValue.trim() ? `size:${sizeOp}${sizeValue.trim()}` : ''
+    }
+    return ''
+  })()
 
   const commandLabel = () => {
     switch (command) {
@@ -265,24 +279,130 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
           )}
         </div>
 
-        {/* Filter toggle */}
-        <div className="flex items-center gap-2 mt-3">
+        {/* Filter section */}
+        <div className="mt-3">
           <button
             onClick={() => setShowFilter(prev => !prev)}
             className={`p-2 rounded-lg transition-all border ${showFilter ? 'bg-slate-700 border-slate-600 text-white' : 'border-slate-700 text-slate-500 hover:text-slate-300'}`}
-            title="Toggle filter"
+            title="Toggle filter panel"
           >
             <Filter className="w-4 h-4" />
           </button>
 
           {showFilter && (
-            <input
-              type="text"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filter pattern (e.g. *.jpg)"
-              className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-orange-500 w-64"
-            />
+            <div className="mt-3 bg-slate-800/60 border border-slate-700 rounded-xl p-4 space-y-3">
+              {/* MIME filter */}
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer w-20 shrink-0" title="Filter by MIME type substring (e.g. 'image', 'video/mp4', 'text/plain')">
+                  <input
+                    type="radio"
+                    name="filterType"
+                    checked={activeFilterType === 'mime'}
+                    onChange={() => setActiveFilterType('mime')}
+                    className="accent-orange-500 w-3.5 h-3.5"
+                  />
+                  <FileType className="w-4 h-4 text-slate-400" />
+                  <span className="text-xs font-bold text-slate-400 uppercase">Mime</span>
+                </label>
+                <input
+                  type="text"
+                  value={mimeValue}
+                  onChange={(e) => { setMimeValue(e.target.value); setActiveFilterType('mime') }}
+                  placeholder="e.g. image, video/mp4, text/plain"
+                  disabled={activeFilterType !== 'mime'}
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-orange-500 disabled:opacity-40"
+                />
+                <div className="shrink-0" title="Matches files whose MIME type contains the given text. Example: 'image' matches image/jpeg, image/png, etc.">
+                  <Info className="w-4 h-4 text-slate-600 hover:text-slate-400 cursor-help" />
+                </div>
+              </div>
+
+              {/* Name filter */}
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer w-20 shrink-0" title="Filter by file path substring (e.g. '.jpg', 'photos/', 'backup')">
+                  <input
+                    type="radio"
+                    name="filterType"
+                    checked={activeFilterType === 'name'}
+                    onChange={() => setActiveFilterType('name')}
+                    className="accent-orange-500 w-3.5 h-3.5"
+                  />
+                  <Hash className="w-4 h-4 text-slate-400" />
+                  <span className="text-xs font-bold text-slate-400 uppercase">Name</span>
+                </label>
+                <input
+                  type="text"
+                  value={nameValue}
+                  onChange={(e) => { setNameValue(e.target.value); setActiveFilterType('name') }}
+                  placeholder="e.g. .jpg, photos/, backup"
+                  disabled={activeFilterType !== 'name'}
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-orange-500 disabled:opacity-40"
+                />
+                <div className="shrink-0" title="Matches files whose relative path contains the given text. Example: '.jpg' matches all JPEG files, 'photos/' matches files in a photos directory.">
+                  <Info className="w-4 h-4 text-slate-600 hover:text-slate-400 cursor-help" />
+                </div>
+              </div>
+
+              {/* Size filter */}
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer w-20 shrink-0" title="Filter by file size in bytes with a comparison operator">
+                  <input
+                    type="radio"
+                    name="filterType"
+                    checked={activeFilterType === 'size'}
+                    onChange={() => setActiveFilterType('size')}
+                    className="accent-orange-500 w-3.5 h-3.5"
+                  />
+                  <Ruler className="w-4 h-4 text-slate-400" />
+                  <span className="text-xs font-bold text-slate-400 uppercase">Size</span>
+                </label>
+                <select
+                  value={sizeOp}
+                  onChange={(e) => { setSizeOp(e.target.value); setActiveFilterType('size') }}
+                  disabled={activeFilterType !== 'size'}
+                  className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-orange-500 disabled:opacity-40 w-16"
+                >
+                  <option value=">=">≥</option>
+                  <option value=">">{'>'}</option>
+                  <option value="<=">≤</option>
+                  <option value="<">{'<'}</option>
+                  <option value="=">=</option>
+                </select>
+                <input
+                  type="number"
+                  value={sizeValue}
+                  onChange={(e) => { setSizeValue(e.target.value); setActiveFilterType('size') }}
+                  placeholder="bytes (e.g. 1048576 = 1MB)"
+                  disabled={activeFilterType !== 'size'}
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-orange-500 disabled:opacity-40"
+                />
+                <div className="shrink-0" title="Matches files by size in bytes. Choose a comparison operator and enter the size value. Example: ≥ 1048576 matches files 1MB or larger.">
+                  <Info className="w-4 h-4 text-slate-600 hover:text-slate-400 cursor-help" />
+                </div>
+              </div>
+
+              {/* No filter option */}
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer w-20 shrink-0" title="Disable filter — all files will be included">
+                  <input
+                    type="radio"
+                    name="filterType"
+                    checked={activeFilterType === null}
+                    onChange={() => setActiveFilterType(null)}
+                    className="accent-slate-500 w-3.5 h-3.5"
+                  />
+                  <X className="w-4 h-4 text-slate-500" />
+                  <span className="text-xs font-bold text-slate-500 uppercase">None</span>
+                </label>
+                <span className="text-xs text-slate-600 italic">No filter — include all files</span>
+              </div>
+
+              {computedFilter && (
+                <div className="pt-2 border-t border-slate-700/50">
+                  <span className="text-[10px] text-slate-600 font-mono">Filter: {computedFilter}</span>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
