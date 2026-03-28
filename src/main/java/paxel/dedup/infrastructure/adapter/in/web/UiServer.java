@@ -711,6 +711,203 @@ public class UiServer {
             ctx.status(202).json(Map.of("message", "Files remove started for " + sourceRepos.size() + " repo(s)", "key", diffKey));
         });
 
+        app.post("/api/files/cp", ctx -> {
+            var body = ctx.bodyAsClass(java.util.Map.class);
+            List<String> sourceRepos = (List<String>) body.get("sourceRepos");
+            String targetRepo = (String) body.get("targetRepo");
+            String filter = (String) body.get("filter");
+
+            if (sourceRepos == null || sourceRepos.isEmpty()) {
+                ctx.status(400).json(Map.of("message", "No source repositories specified"));
+                return;
+            }
+            if (targetRepo == null || targetRepo.isBlank()) {
+                ctx.status(400).json(Map.of("message", "No target repo specified"));
+                return;
+            }
+
+            log.info("Files copy requested: sources={}, target={}, filter={}", sourceRepos, targetRepo, filter);
+
+            String diffKey = "files-cp-" + System.currentTimeMillis();
+            CompletableFuture<?> future = CompletableFuture.runAsync(() -> {
+                activeDiffThreads.put(diffKey, Thread.currentThread());
+                eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Files copy starting...", "total", sourceRepos.size(), "completed", 0));
+                int completed = 0;
+                for (String source : sourceRepos) {
+                    if (Thread.currentThread().isInterrupted()) {
+                        eventBus.publish("diff-error", Map.of("key", diffKey, "message", "Files copy cancelled"));
+                        return;
+                    }
+                    try {
+                        eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Copying files from " + source + "...", "total", sourceRepos.size(), "completed", completed));
+                        FilesProcess process = new FilesProcess(
+                                new CliParameter(),
+                                source,
+                                infrastructureConfig.getDedupConfig(),
+                                filter,
+                                fileSystem
+                        );
+                        int result = process.copy(targetRepo, false, null, progress ->
+                                eventBus.publish("diff-progress", Map.of(
+                                        "key", diffKey,
+                                        "message", "Copying " + source + ": " + progress.completed() + "/" + progress.total() + " " + progress.currentFile(),
+                                        "total", progress.total(),
+                                        "completed", progress.completed()
+                                ))
+                        );
+                        completed++;
+                        if (result != 0) {
+                            log.error("Files copy failed for source={}: exit code {}", source, result);
+                            eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Failed for " + source + " (exit " + result + ")", "total", sourceRepos.size(), "completed", completed));
+                        } else {
+                            log.info("Files copy completed for source={}", source);
+                        }
+                    } catch (Exception e) {
+                        completed++;
+                        log.error("Files copy error for source={}", source, e);
+                        eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Error for " + source + ": " + e.getMessage(), "total", sourceRepos.size(), "completed", completed));
+                    }
+                }
+                eventBus.publish("diff-finished", Map.of("key", diffKey, "message", "Files copy completed", "total", sourceRepos.size(), "completed", completed));
+            });
+            activeDiffFutures.put(diffKey, future);
+            future.whenComplete((v, ex) -> {
+                activeDiffFutures.remove(diffKey);
+                activeDiffThreads.remove(diffKey);
+            });
+
+            ctx.status(202).json(Map.of("message", "Files copy started for " + sourceRepos.size() + " repo(s)", "key", diffKey));
+        });
+
+        app.post("/api/files/mv", ctx -> {
+            var body = ctx.bodyAsClass(java.util.Map.class);
+            List<String> sourceRepos = (List<String>) body.get("sourceRepos");
+            String targetRepo = (String) body.get("targetRepo");
+            String filter = (String) body.get("filter");
+
+            if (sourceRepos == null || sourceRepos.isEmpty()) {
+                ctx.status(400).json(Map.of("message", "No source repositories specified"));
+                return;
+            }
+            if (targetRepo == null || targetRepo.isBlank()) {
+                ctx.status(400).json(Map.of("message", "No target repo specified"));
+                return;
+            }
+
+            log.info("Files move requested: sources={}, target={}, filter={}", sourceRepos, targetRepo, filter);
+
+            String diffKey = "files-mv-" + System.currentTimeMillis();
+            CompletableFuture<?> future = CompletableFuture.runAsync(() -> {
+                activeDiffThreads.put(diffKey, Thread.currentThread());
+                eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Files move starting...", "total", sourceRepos.size(), "completed", 0));
+                int completed = 0;
+                for (String source : sourceRepos) {
+                    if (Thread.currentThread().isInterrupted()) {
+                        eventBus.publish("diff-error", Map.of("key", diffKey, "message", "Files move cancelled"));
+                        return;
+                    }
+                    try {
+                        eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Moving files from " + source + "...", "total", sourceRepos.size(), "completed", completed));
+                        FilesProcess process = new FilesProcess(
+                                new CliParameter(),
+                                source,
+                                infrastructureConfig.getDedupConfig(),
+                                filter,
+                                fileSystem
+                        );
+                        int result = process.copy(targetRepo, true, null, progress ->
+                                eventBus.publish("diff-progress", Map.of(
+                                        "key", diffKey,
+                                        "message", "Moving " + source + ": " + progress.completed() + "/" + progress.total() + " " + progress.currentFile(),
+                                        "total", progress.total(),
+                                        "completed", progress.completed()
+                                ))
+                        );
+                        completed++;
+                        if (result != 0) {
+                            log.error("Files move failed for source={}: exit code {}", source, result);
+                            eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Failed for " + source + " (exit " + result + ")", "total", sourceRepos.size(), "completed", completed));
+                        } else {
+                            log.info("Files move completed for source={}", source);
+                        }
+                    } catch (Exception e) {
+                        completed++;
+                        log.error("Files move error for source={}", source, e);
+                        eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Error for " + source + ": " + e.getMessage(), "total", sourceRepos.size(), "completed", completed));
+                    }
+                }
+                eventBus.publish("diff-finished", Map.of("key", diffKey, "message", "Files move completed", "total", sourceRepos.size(), "completed", completed));
+            });
+            activeDiffFutures.put(diffKey, future);
+            future.whenComplete((v, ex) -> {
+                activeDiffFutures.remove(diffKey);
+                activeDiffThreads.remove(diffKey);
+            });
+
+            ctx.status(202).json(Map.of("message", "Files move started for " + sourceRepos.size() + " repo(s)", "key", diffKey));
+        });
+
+        app.post("/api/diff/sync", ctx -> {
+            var body = ctx.bodyAsClass(java.util.Map.class);
+            String sourceRepo = (String) body.get("sourceRepo");
+            String targetRepo = (String) body.get("targetRepo");
+            Boolean copyNew = body.get("copyNew") != null ? (Boolean) body.get("copyNew") : true;
+            Boolean deleteMissing = body.get("deleteMissing") != null ? (Boolean) body.get("deleteMissing") : false;
+            String filter = (String) body.get("filter");
+
+            if (sourceRepo == null || sourceRepo.isBlank()) {
+                ctx.status(400).json(Map.of("message", "No source repository specified"));
+                return;
+            }
+            if (targetRepo == null || targetRepo.isBlank()) {
+                ctx.status(400).json(Map.of("message", "No target repository specified"));
+                return;
+            }
+
+            log.info("Diff sync requested: source={}, target={}, copyNew={}, deleteMissing={}, filter={}", sourceRepo, targetRepo, copyNew, deleteMissing, filter);
+
+            String diffKey = "diff-sync-" + System.currentTimeMillis();
+            CompletableFuture<?> future = CompletableFuture.runAsync(() -> {
+                activeDiffThreads.put(diffKey, Thread.currentThread());
+                eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Sync starting...", "total", 1, "completed", 0));
+                try {
+                    DiffProcess process = new DiffProcess(
+                            new CliParameter(),
+                            sourceRepo,
+                            targetRepo,
+                            infrastructureConfig.getDedupConfig(),
+                            filter,
+                            fileSystem
+                    );
+                    int result = process.sync(copyNew, deleteMissing, progress ->
+                            eventBus.publish("diff-progress", Map.of(
+                                    "key", diffKey,
+                                    "message", "Syncing: " + progress.completed() + "/" + progress.total() + " " + progress.currentFile(),
+                                    "total", progress.total(),
+                                    "completed", progress.completed()
+                            ))
+                    );
+                    if (result != 0) {
+                        log.error("Diff sync failed: exit code {}", result);
+                        eventBus.publish("diff-error", Map.of("key", diffKey, "message", "Sync failed (exit " + result + ")"));
+                    } else {
+                        log.info("Diff sync completed: source={}, target={}", sourceRepo, targetRepo);
+                        eventBus.publish("diff-finished", Map.of("key", diffKey, "message", "Sync completed", "total", 1, "completed", 1));
+                    }
+                } catch (Exception e) {
+                    log.error("Diff sync error", e);
+                    eventBus.publish("diff-error", Map.of("key", diffKey, "message", "Sync error: " + e.getMessage()));
+                }
+            });
+            activeDiffFutures.put(diffKey, future);
+            future.whenComplete((v, ex) -> {
+                activeDiffFutures.remove(diffKey);
+                activeDiffThreads.remove(diffKey);
+            });
+
+            ctx.status(202).json(Map.of("message", "Sync started", "key", diffKey));
+        });
+
         app.post("/api/diff/cancel", ctx -> {
             String key = ctx.queryParam("key");
             if (key != null) {

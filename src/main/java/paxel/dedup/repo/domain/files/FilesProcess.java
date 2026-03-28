@@ -104,42 +104,64 @@ public class FilesProcess {
     public record RemoveProgress(int total, int completed, String currentFile) {
     }
 
+    public record CopyProgress(int total, int completed, String currentFile) {
+    }
+
     public int copy(String target, boolean move, String appendix) {
+        return copy(target, move, appendix, null);
+    }
+
+    public int copy(String target, boolean move, String appendix, Consumer<CopyProgress> progressCallback) {
         Result<RepoManager, Integer> result = openRepo(source);
         if (result.hasFailed()) {
             return result.error();
         }
         repoFilter = filterFactory.createFilter(filter);
         try {
-            result.value().stream()
+            List<RepoFile> files = result.value().stream()
                     .filter(repoFile -> !repoFile.missing())
                     .filter(repoFilter)
-                    .forEach(r -> {
-                        Path targetFile = replaceSuffix(Paths.get(target).resolve(r.relativePath()), appendix);
-                        if (!fileSystem.exists(targetFile.getParent())) {
-                            try {
-                                fileSystem.createDirectories(targetFile.getParent());
-                            } catch (IOException e) {
-                                throw new TunneledIoException("Could not create " + targetFile.getParent(), e);
-                            }
+                    .toList();
+
+            int total = files.size();
+            if (progressCallback != null) {
+                progressCallback.accept(new CopyProgress(total, 0, "Starting..."));
+            }
+
+            int done = 0;
+            for (RepoFile r : files) {
+                if (Thread.currentThread().isInterrupted()) {
+                    return -1;
+                }
+                Path targetFile = replaceSuffix(Paths.get(target).resolve(r.relativePath()), appendix);
+                if (!fileSystem.exists(targetFile.getParent())) {
+                    try {
+                        fileSystem.createDirectories(targetFile.getParent());
+                    } catch (IOException e) {
+                        throw new TunneledIoException("Could not create " + targetFile.getParent(), e);
+                    }
+                }
+                Path sourceFile = Paths.get(result.value().getRepo().absolutePath()).resolve(r.relativePath());
+                try {
+                    if (move) {
+                        fileSystem.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
+                        if (cliParameter.isVerbose()) {
+                            log.info("Moved {}", r.relativePath());
                         }
-                        Path sourceFile = Paths.get(result.value().getRepo().absolutePath()).resolve(r.relativePath());
-                        try {
-                            if (move) {
-                                fileSystem.move(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
-                                if (cliParameter.isVerbose()) {
-                                    log.info("Moved {}", r.relativePath());
-                                }
-                            } else {
-                                fileSystem.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
-                                if (cliParameter.isVerbose()) {
-                                    log.info("Copied {}", r.relativePath());
-                                }
-                            }
-                        } catch (IOException e) {
-                            throw new TunneledIoException("Could not copy/move " + sourceFile + " to " + targetFile, e);
+                    } else {
+                        fileSystem.copy(sourceFile, targetFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                        if (cliParameter.isVerbose()) {
+                            log.info("Copied {}", r.relativePath());
                         }
-                    });
+                    }
+                } catch (IOException e) {
+                    throw new TunneledIoException("Could not copy/move " + sourceFile + " to " + targetFile, e);
+                }
+                done++;
+                if (progressCallback != null) {
+                    progressCallback.accept(new CopyProgress(total, done, r.relativePath()));
+                }
+            }
         } catch (TunneledIoException e) {
             log.error("{} {}", e.getMessage(), e.getCause().getClass().getSimpleName());
             return -200;

@@ -183,6 +183,13 @@ public class DiffProcess {
      * @return 0 on success, negative error code on init error
      */
     public int sync(boolean copyNew, boolean deleteMissing) {
+        return sync(copyNew, deleteMissing, null);
+    }
+
+    public record SyncProgress(int total, int completed, String currentFile) {
+    }
+
+    public int sync(boolean copyNew, boolean deleteMissing, Consumer<SyncProgress> progressCallback) {
         Result<Repos, Integer> init = init();
         if (init.hasFailed()) {
             return init.error();
@@ -192,9 +199,26 @@ public class DiffProcess {
 
         SyncCounters counters = new SyncCounters();
 
-        sourceRepo.stream()
+        List<RepoFile> entries = sourceRepo.stream()
                 .filter(repoFilter)
-                .forEach(entry -> syncEntry(entry, sourceRepo, targetRepo, copyNew, deleteMissing, counters));
+                .toList();
+
+        int total = entries.size();
+        if (progressCallback != null) {
+            progressCallback.accept(new SyncProgress(total, 0, "Starting..."));
+        }
+
+        int done = 0;
+        for (RepoFile entry : entries) {
+            if (Thread.currentThread().isInterrupted()) {
+                return -1;
+            }
+            syncEntry(entry, sourceRepo, targetRepo, copyNew, deleteMissing, counters);
+            done++;
+            if (progressCallback != null) {
+                progressCallback.accept(new SyncProgress(total, done, entry.relativePath()));
+            }
+        }
 
         log.info(counters.summary());
         return 0;
