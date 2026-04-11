@@ -122,4 +122,49 @@ class RepoManagerAddPathTest {
         assertThat(all).contains("\"s\":6");
         assertThat(all).contains("\"h\":");
     }
+
+    @Test
+    void addPath_skips_zero_size_files() throws Exception {
+        // Arrange
+        Path dataDir = tempDir.resolve("data");
+        Files.createDirectories(dataDir);
+        Path emptyFile = dataDir.resolve("empty.txt");
+        Files.writeString(emptyFile, ""); // 0 bytes
+
+        Path configRoot = tempDir.resolve("config");
+        Files.createDirectories(configRoot.resolve("r3"));
+
+        Repo repo = new Repo("r3", dataDir.toString(), 1);
+        DedupConfig cfg = new StubDedupConfig(configRoot);
+        ObjectMapper mapper = new ObjectMapper();
+        FileSystem fs = new NioFileSystemAdapter();
+        RepoManager repoManager = new RepoManager(repo, cfg, new JacksonMapperLineCodec<>(mapper, RepoFile.class), fs);
+
+        Result<Statistics, DedupError> load = repoManager.load();
+        assertThat(load.hasFailed()).isFalse();
+
+        // Hasher should never be called for zero-size files
+        paxel.dedup.domain.model.FileHasher hasher = new paxel.dedup.domain.model.FileHasher() {
+            @Override
+            public CompletableFuture<Result<String, DedupError>> hash(Path path) {
+                throw new AssertionError("Hasher must not be called for zero-size files");
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+
+        // Act
+        Result<RepoFile, DedupError> addRes = repoManager.addPath(emptyFile, hasher, new MimetypeProvider()).get();
+
+        // Assert: result is ok but null (skipped)
+        assertThat(addRes.hasFailed()).isFalse();
+        assertThat(addRes.value()).isNull();
+
+        // Index file should be empty (no entry written)
+        Path index0 = configRoot.resolve("r3/0.idx");
+        assertThat(index0).exists();
+        assertThat(Files.readString(index0)).isEmpty();
+    }
 }

@@ -55,7 +55,9 @@ public class StatisticPrinter implements ProgressPrinter {
         if (update.getDuration() != null) this.duration = update.getDuration();
         if (update.getErrors() != null) this.errors = update.getErrors();
         if (update.getProgressPercent() != null) {
-            this.progress = "%.2f %% %s".formatted(update.getProgressPercent(), this.progress);
+            String status = update.getStatus() != null ? update.getStatus() : "";
+            String eta = update.getEta() != null ? " ETA: " + update.getEta() : "";
+            this.progress = "%.2f %% %s%s".formatted(update.getProgressPercent(), status, eta);
         }
 
         if (update.getDirectoriesProcessed() != null && update.getDirectoriesTotal() != null) {

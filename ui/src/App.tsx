@@ -41,6 +41,7 @@ function App() {
     errors, setErrors, toast, setToast,
     dupeResults, setDupeResults, isLoadingDupesManual, setIsLoadingDupesManual,
     globalDupes, setGlobalDupes, isLoadingGlobalDupes, setIsLoadingGlobalDupes,
+    dupeMeta,
     cancelMutation, setActiveProcesses
   } = ws
 
@@ -536,7 +537,7 @@ function App() {
                     Cancel
                   </button>
                 </div>
-              ) : globalDupes?.length === 0 ? (
+              ) : (dupeMeta['batch']?.totalGroups ?? 0) === 0 && globalDupes !== null ? (
                 <div className="flex flex-col items-center justify-center h-full py-20 space-y-4 text-center">
                   <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-2">
                     <Search className="w-8 h-8 text-emerald-500" />
@@ -544,9 +545,15 @@ function App() {
                   <h3 className="text-xl font-bold">No Duplicates Found!</h3>
                   <p className="text-slate-500 max-w-md">No duplicate file hashes were detected across the selected repositories.</p>
                 </div>
-              ) : (
-                <DuplicateGroupsView groups={globalDupes!} formatSize={formatSize} />
-              )}
+              ) : globalDupes !== null ? (
+                <DuplicateGroupsView
+                  dupeKey="batch"
+                  totalGroups={dupeMeta['batch']?.totalGroups ?? 0}
+                  totalFiles={dupeMeta['batch']?.totalFiles ?? 0}
+                  formatSize={formatSize}
+                  onDone={() => { setShowGlobalDupes(false); setGlobalDupes(null); }}
+                />
+              ) : null}
             </div>
           </section>
         ) : !selectedRepo ? (
@@ -733,7 +740,7 @@ function App() {
                     Cancel
                   </button>
                 </div>
-              ) : (dupeResults[selectedRepo!] || []).length === 0 ? (
+              ) : (dupeMeta[selectedRepo!]?.totalGroups ?? 0) === 0 && dupeResults[selectedRepo!] !== undefined ? (
                 <div className="flex flex-col items-center justify-center h-full py-20 space-y-4 text-center">
                   <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-2">
                     <Search className="w-8 h-8 text-emerald-500" />
@@ -741,9 +748,15 @@ function App() {
                   <h3 className="text-xl font-bold">No Duplicates Found!</h3>
                   <p className="text-slate-500 max-w-md">Your repository looks clean. No duplicate file hashes were detected.</p>
                 </div>
-              ) : (
-                <DuplicateGroupsView groups={dupeResults[selectedRepo!] || []} formatSize={formatSize} />
-              )}
+              ) : dupeResults[selectedRepo!] !== undefined ? (
+                <DuplicateGroupsView
+                  dupeKey={selectedRepo!}
+                  totalGroups={dupeMeta[selectedRepo!]?.totalGroups ?? 0}
+                  totalFiles={dupeMeta[selectedRepo!]?.totalFiles ?? 0}
+                  formatSize={formatSize}
+                  onDone={() => { setSelectedRepo(null); setDupeResults(prev => { const next = { ...prev }; delete next[selectedRepo!]; return next; }); }}
+                />
+              ) : null}
             </div>
           </section>
         )}

@@ -36,6 +36,7 @@ public class UiServer {
     private final ConcurrentHashMap<String, DuplicateRepoProcess> activeDupeProcesses = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CompletableFuture<?>> activeDiffFutures = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Thread> activeDiffThreads = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, List<List<DuplicateRepoProcess.RepoRepoFile>>> dupeResults = new ConcurrentHashMap<>();
 
     public UiServer(InfrastructureConfig infrastructureConfig) {
         this.infrastructureConfig = infrastructureConfig;
@@ -45,6 +46,7 @@ public class UiServer {
         this.app = Javalin.create(config -> {
             config.jsonMapper(new JavalinJackson(infrastructureConfig.getObjectMapper(), false));
             config.showJavalinBanner = false;
+            config.http.maxRequestSize = 10_000_000L;
             config.staticFiles.add(staticFiles -> {
                 staticFiles.hostedPath = "/";
                 staticFiles.directory = "/static";
@@ -439,7 +441,7 @@ public class UiServer {
                     fileSystem
             );
 
-            WebDupeObserver observer = new WebDupeObserver(name, eventBus);
+            WebDupeObserver observer = new WebDupeObserver(name, eventBus, dupeResults::put);
             process.withObserver(observer);
 
             activeDupeProcesses.put(name, process);
@@ -455,6 +457,33 @@ public class UiServer {
             });
 
             ctx.status(202).json(Map.of("message", "Duplicate detection started for " + name));
+        });
+
+        app.get("/api/repos/{name}/dupes/batch", ctx -> {
+            String batchName = ctx.pathParam("name");
+            int offset = ctx.queryParamAsClass("offset", Integer.class).getOrDefault(0);
+            int limit = ctx.queryParamAsClass("limit", Integer.class).getOrDefault(100);
+            var groups = dupeResults.get(batchName);
+            if (groups == null) {
+                ctx.status(404).json(Map.of("message", "No duplicate results found for " + batchName));
+                return;
+            }
+            int totalGroups = groups.size();
+            int end = Math.min(offset + limit, totalGroups);
+            var batch = offset < totalGroups ? groups.subList(offset, end) : List.of();
+            ctx.json(Map.of(
+                    "totalGroups", totalGroups,
+                    "offset", offset,
+                    "limit", limit,
+                    "hasMore", end < totalGroups,
+                    "groups", batch
+            ));
+        });
+
+        app.delete("/api/repos/{name}/dupes/results", ctx -> {
+            String resultsName = ctx.pathParam("name");
+            dupeResults.remove(resultsName);
+            ctx.status(204);
         });
 
         app.post("/api/repos/dupes", ctx -> {
@@ -482,7 +511,7 @@ public class UiServer {
                     fileSystem
             );
 
-            WebDupeObserver observer = new WebDupeObserver("batch", eventBus);
+            WebDupeObserver observer = new WebDupeObserver("batch", eventBus, dupeResults::put);
             process.withObserver(observer);
 
             activeDupeProcesses.put("batch", process);

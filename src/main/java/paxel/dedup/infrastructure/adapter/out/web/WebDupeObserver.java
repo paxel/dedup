@@ -7,11 +7,13 @@ import paxel.dedup.repo.domain.repo.DuplicateRepoProcess;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 @RequiredArgsConstructor
 public class WebDupeObserver implements DupeObserver {
     private final String repoName;
     private final EventBus eventBus;
+    private final BiConsumer<String, List<List<DuplicateRepoProcess.RepoRepoFile>>> groupsStore;
 
     @Override
     public void onStart(boolean all, List<String> names) {
@@ -35,7 +37,16 @@ public class WebDupeObserver implements DupeObserver {
 
     @Override
     public void onGroupsReady(String repo, List<List<DuplicateRepoProcess.RepoRepoFile>> groups) {
-        eventBus.publish("dupes-finished", Map.of("repo", repo, "groups", groups));
+        // Store groups server-side instead of sending them all via WebSocket
+        groupsStore.accept(repo, groups);
+
+        int totalFiles = groups.stream().mapToInt(List::size).sum();
+        // Send only metadata via WebSocket — the frontend will fetch batches via REST
+        eventBus.publish("dupes-finished", Map.of(
+                "repo", repo,
+                "totalGroups", groups.size(),
+                "totalFiles", totalFiles
+        ));
     }
 
     @Override

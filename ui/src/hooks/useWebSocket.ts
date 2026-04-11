@@ -21,6 +21,8 @@ interface WebSocketState {
   setGlobalDupes: (v: RepoRepoFile[][] | null) => void
   isLoadingGlobalDupes: boolean
   setIsLoadingGlobalDupes: (v: boolean) => void
+  dupeMeta: Record<string, { totalGroups: number; totalFiles: number }>
+  setDupeMeta: React.Dispatch<React.SetStateAction<Record<string, { totalGroups: number; totalFiles: number }>>>
   cancelMutation: any
   setActiveProcesses: React.Dispatch<React.SetStateAction<Record<string, ProgressUpdate>>>
 }
@@ -39,6 +41,7 @@ export function useWebSocket(
   const [isLoadingDupesManual, setIsLoadingDupesManual] = useState(false)
   const [globalDupes, setGlobalDupes] = useState<RepoRepoFile[][] | null>(null)
   const [isLoadingGlobalDupes, setIsLoadingGlobalDupes] = useState(false)
+  const [dupeMeta, setDupeMeta] = useState<Record<string, { totalGroups: number; totalFiles: number }>>({})
 
   const toastTimeoutRef = useRef<any>(null)
   const pendingProgressRef = useRef<Record<string, ProgressUpdate>>({})
@@ -92,16 +95,20 @@ export function useWebSocket(
         }
         if (data.type === 'dupes-finished') {
           const repoName = data.payload.repo || 'batch'
-          setDupeResults(prev => ({ ...prev, [repoName]: data.payload.groups }))
+          const totalGroups = data.payload.totalGroups ?? 0
+          const totalFiles = data.payload.totalFiles ?? 0
+          setDupeMeta(prev => ({ ...prev, [repoName]: { totalGroups, totalFiles } }))
           setActiveDupeProcesses(prev => {
             const next = { ...prev }
             delete next[repoName]
             return next
           })
           if (repoName === 'batch') {
-            setGlobalDupes(data.payload.groups)
+            // Signal that global dupes are ready (empty array as marker, actual data fetched via batch API)
+            setGlobalDupes([])
             setIsLoadingGlobalDupes(false)
           } else if (repoName === selectedRepoRef.current) {
+            setDupeResults(prev => ({ ...prev, [repoName]: [] }))
             setIsLoadingDupesManual(false)
           }
           return
@@ -231,6 +238,8 @@ export function useWebSocket(
     setGlobalDupes,
     isLoadingGlobalDupes,
     setIsLoadingGlobalDupes,
+    dupeMeta,
+    setDupeMeta,
     cancelMutation,
     setActiveProcesses
   }
