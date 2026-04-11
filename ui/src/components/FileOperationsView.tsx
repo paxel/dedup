@@ -41,7 +41,7 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
   const diffCopyMutation = useMutation({
     mutationFn: (params: { sourceRepos: string[]; referenceRepo?: string; targetDir?: string; targetRepo?: string; filter: string | null; copyNew?: boolean; deleteMissing?: boolean }) => {
       if (command === 'remove') {
-        return axios.post('/api/files/rm', { sourceRepos: params.sourceRepos, filter: params.filter })
+        return axios.post('/api/diff/rm', { sourceRepos: params.sourceRepos, referenceRepo: params.referenceRepo, filter: params.filter })
       }
       if (command === 'fileCopy') {
         return axios.post('/api/files/cp', { sourceRepos: params.sourceRepos, targetRepo: params.targetRepo, filter: params.filter })
@@ -119,7 +119,7 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
   }, [])
 
   const isRunning = diffProgress !== null && !diffProgress.finished
-  const needsReference = command === 'copy' || command === 'move'
+  const needsReference = command === 'copy' || command === 'move' || command === 'remove'
   const needsTargetDir = command === 'copy' || command === 'move'
   const needsTargetRepo = command === 'sync' || command === 'fileCopy' || command === 'fileMove'
   const isSingleSource = command === 'sync'
@@ -173,7 +173,7 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
     switch (command) {
       case 'copy': return 'Copy Diff To'
       case 'move': return 'Move Diff To'
-      case 'remove': return 'Remove Files'
+      case 'remove': return 'Remove Duplicates'
       case 'fileCopy': return 'Copy Files To'
       case 'fileMove': return 'Move Files To'
       case 'sync': return 'Sync Repos'
@@ -191,7 +191,7 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
 
   const executeLabel = () => {
     switch (command) {
-      case 'remove': return `Remove Files (${sourceRepos.size} repo${sourceRepos.size !== 1 ? 's' : ''})`
+      case 'remove': return `Remove Duplicates in ${sourceRepos.size === 1 ? Array.from(sourceRepos)[0] : sourceRepos.size + ' repos'}`
       case 'fileCopy': return `Copy Files (${sourceRepos.size} repo${sourceRepos.size !== 1 ? 's' : ''}) → ${targetRepo || '?'}`
       case 'fileMove': return `Move Files (${sourceRepos.size} repo${sourceRepos.size !== 1 ? 's' : ''}) → ${targetRepo || '?'}`
       case 'sync': return `Sync ${sourceRepos.size === 1 ? Array.from(sourceRepos)[0] : '?'} → ${targetRepo || '?'}`
@@ -242,13 +242,13 @@ export const FileOperationsView = ({ repos, isAnyProcessRunning, onBack, openBro
           <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest w-16 shrink-0">Diff</span>
           {commandButton('copy', 'Copy Diff To', <Copy className="w-4 h-4" />, 'Copy files that exist in source but not in reference to the target directory')}
           {commandButton('move', 'Move Diff To', <Scissors className="w-4 h-4" />, 'Move files that exist in source but not in reference to the target directory (removes from source)')}
+          {commandButton('remove', 'Remove Duplicates', <Trash2 className="w-4 h-4" />, 'Delete files in source that already exist in reference', true)}
         </div>
         {/* Files-based commands */}
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest w-16 shrink-0">Files</span>
           {commandButton('fileCopy', 'Copy Files To', <Copy className="w-4 h-4" />, 'Copy all matching files from source repos to the target repo')}
           {commandButton('fileMove', 'Move Files To', <Scissors className="w-4 h-4" />, 'Move all matching files from source repos to the target repo')}
-          {commandButton('remove', 'Remove Files', <Trash2 className="w-4 h-4" />, 'Delete files matching the filter from the selected source repositories', true)}
         </div>
         {/* Sync command */}
         <div className="flex flex-wrap items-center gap-2">

@@ -162,6 +162,9 @@ public class RepoManager {
         }
 
         Long size = sizeResult.value();
+        if (size == 0L) {
+            return CompletableFuture.completedFuture(Result.ok(null));
+        }
         FileTime fileTime = lastModifiedResult.value();
 
         if (oldRepoFile != null) {

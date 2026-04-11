@@ -648,59 +648,58 @@ public class UiServer {
             ctx.status(202).json(Map.of("message", "Diff move started for " + sourceRepos.size() + " source(s)", "key", diffKey));
         });
 
-        app.post("/api/files/rm", ctx -> {
+        app.post("/api/diff/rm", ctx -> {
             var body = ctx.bodyAsClass(java.util.Map.class);
             List<String> sourceRepos = (List<String>) body.get("sourceRepos");
+            String referenceRepo = (String) body.get("referenceRepo");
             String filter = (String) body.get("filter");
 
             if (sourceRepos == null || sourceRepos.isEmpty()) {
                 ctx.status(400).json(Map.of("message", "No source repositories specified"));
                 return;
             }
+            if (referenceRepo == null || referenceRepo.isBlank()) {
+                ctx.status(400).json(Map.of("message", "No reference repository specified"));
+                return;
+            }
 
-            log.info("Files remove requested: sources={}, filter={}", sourceRepos, filter);
+            log.info("Diff remove requested: sources={}, reference={}, filter={}", sourceRepos, referenceRepo, filter);
 
-            String diffKey = "files-rm-" + System.currentTimeMillis();
+            String diffKey = "diff-rm-" + System.currentTimeMillis();
             CompletableFuture<?> future = CompletableFuture.runAsync(() -> {
                 activeDiffThreads.put(diffKey, Thread.currentThread());
-                eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Remove starting...", "total", sourceRepos.size(), "completed", 0));
+                eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Diff remove starting...", "total", sourceRepos.size(), "completed", 0));
                 int completed = 0;
                 for (String source : sourceRepos) {
                     if (Thread.currentThread().isInterrupted()) {
-                        eventBus.publish("diff-error", Map.of("key", diffKey, "message", "Remove cancelled"));
+                        eventBus.publish("diff-error", Map.of("key", diffKey, "message", "Diff remove cancelled"));
                         return;
                     }
                     try {
-                        eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Scanning files in " + source + "...", "total", sourceRepos.size(), "completed", completed));
-                        FilesProcess process = new FilesProcess(
+                        eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Scanning diff for " + source + "...", "total", sourceRepos.size(), "completed", completed));
+                        DiffProcess process = new DiffProcess(
                                 new CliParameter(),
                                 source,
+                                referenceRepo,
                                 infrastructureConfig.getDedupConfig(),
                                 filter,
                                 fileSystem
                         );
-                        int result = process.rm(progress ->
-                                eventBus.publish("diff-progress", Map.of(
-                                        "key", diffKey,
-                                        "message", "Removing " + source + ": " + progress.completed() + "/" + progress.total() + " " + progress.currentFile(),
-                                        "total", progress.total(),
-                                        "completed", progress.completed()
-                                ))
-                        );
+                        int result = process.delete();
                         completed++;
                         if (result != 0) {
-                            log.error("Files remove failed for source={}: exit code {}", source, result);
+                            log.error("Diff remove failed for source={} reference={}: exit code {}", source, referenceRepo, result);
                             eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Failed for " + source + " (exit " + result + ")", "total", sourceRepos.size(), "completed", completed));
                         } else {
-                            log.info("Files remove completed for source={}", source);
+                            log.info("Diff remove completed for source={} reference={}", source, referenceRepo);
                         }
                     } catch (Exception e) {
                         completed++;
-                        log.error("Files remove error for source={}", source, e);
+                        log.error("Diff remove error for source={}", source, e);
                         eventBus.publish("diff-progress", Map.of("key", diffKey, "message", "Error for " + source + ": " + e.getMessage(), "total", sourceRepos.size(), "completed", completed));
                     }
                 }
-                eventBus.publish("diff-finished", Map.of("key", diffKey, "message", "Remove completed", "total", sourceRepos.size(), "completed", completed));
+                eventBus.publish("diff-finished", Map.of("key", diffKey, "message", "Diff remove completed", "total", sourceRepos.size(), "completed", completed));
             });
             activeDiffFutures.put(diffKey, future);
             future.whenComplete((v, ex) -> {
@@ -708,7 +707,7 @@ public class UiServer {
                 activeDiffThreads.remove(diffKey);
             });
 
-            ctx.status(202).json(Map.of("message", "Files remove started for " + sourceRepos.size() + " repo(s)", "key", diffKey));
+            ctx.status(202).json(Map.of("message", "Diff remove started for " + sourceRepos.size() + " source(s)", "key", diffKey));
         });
 
         app.post("/api/files/cp", ctx -> {
