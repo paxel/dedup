@@ -32,18 +32,18 @@ public class WebDupeObserver implements DupeObserver {
 
     @Override
     public void onFinished(String repo, int groupCount) {
-        eventBus.publish("dupe-finished", Map.of("repo", repo, "groupCount", groupCount));
+        eventBus.publish("dupe-finished", Map.of("repo", repoName, "groupCount", groupCount));
     }
 
     @Override
     public void onGroupsReady(String repo, List<List<DuplicateRepoProcess.RepoRepoFile>> groups) {
         // Store groups server-side instead of sending them all via WebSocket
-        groupsStore.accept(repo, groups);
+        groupsStore.accept(repoName, groups);
 
         int totalFiles = groups.stream().mapToInt(List::size).sum();
         // Send only metadata via WebSocket — the frontend will fetch batches via REST
         eventBus.publish("dupes-finished", Map.of(
-                "repo", repo,
+                "repo", repoName,
                 "totalGroups", groups.size(),
                 "totalFiles", totalFiles
         ));

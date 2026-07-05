@@ -8,7 +8,7 @@ Priorities: **P0** = broken feature or data-loss risk. **P1** = large-repo perfo
 
 ## P0 — Broken features
 
-### B1. Global "Duplicates" with exactly ONE repo selected never finishes
+### [DONE] B1. Global "Duplicates" with exactly ONE repo selected never finishes
 - **Files:** `src/main/java/paxel/dedup/repo/domain/repo/DuplicateRepoProcess.java:145`, `src/main/java/paxel/dedup/infrastructure/adapter/out/web/WebDupeObserver.java:34-50`
 - **Problem:** `findGroups()` computes `reportedName = names.size() > 1 || all ? "batch" : names.get(0)`. When the UI starts a batch dupe check (`POST /api/repos/dupes`) with a single repo selected, results are stored and reported under the repo name, but the frontend (`App.tsx`, `useWebSocket.ts` `dupes-finished` handler) waits for key `"batch"`. Spinner runs forever; results unreachable.
 - **Fix:** In `WebDupeObserver.onGroupsReady` and `onFinished`, ignore the `repo` argument for keying and use the injected `repoName` field (it is already `"batch"` for the batch endpoint and the repo name for the single endpoint). Keep the `repo` argument only for logging.
