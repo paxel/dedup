@@ -20,7 +20,7 @@ Priorities: **P0** = broken feature or data-loss risk. **P1** = large-repo perfo
 - **Fix:** Store the selected repo names when the Similarity dropdown action fires (reuse `selectedReposForDupes`). In `onConfirm`, if `isGlobal`, replicate the global Duplicates flow: `setIsLoadingGlobalDupes(true); setShowGlobalDupes(true); axios.post('/api/repos/dupes?threshold=' + threshold, selectedRepos)`. Depends on B1 for the single-selection case.
 - **Accept:** Similarity via toolbar with 1 and with 2+ repos selected both produce a results view.
 
-### B3. Web dupe groups are unsorted → "keep first" / Auto-Delete keeps an arbitrary file
+### [DONE] B3. Web dupe groups are unsorted → "keep first" / Auto-Delete keeps an arbitrary file
 - **File:** `src/main/java/paxel/dedup/repo/domain/repo/DuplicateRepoProcess.java` — `findGroups()` vs `dupe():166-181`
 - **Problem:** The CLI path (`dupe()`) sorts files within each group (image area desc, size desc, oldest first, path). The web path (`findGroups()`) does **not** sort. The UI defaults to keeping index 0 and "Auto-Delete All Remaining" hard-codes keeping index 0 (`DuplicateGroupsView.tsx:163`). So the web UI's default keep-choice is arbitrary — data-loss adjacent.
 - **Fix:** Extract the group-sorting comparator from `dupe()` into a private method and apply it in `findGroups()` before `onGroupsReady`. Additionally sort the groups list itself by wasted bytes descending (group size × file size) so users see the biggest wins first.

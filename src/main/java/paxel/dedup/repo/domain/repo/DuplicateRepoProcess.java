@@ -136,18 +136,37 @@ public class DuplicateRepoProcess {
         }
         List<List<RepoRepoFile>> groups;
         if (threshold != null && threshold > 0) {
-            if (cliParameter.isVerbose()) log.info("Using similarity search with threshold {}", threshold);
+            if (cliParameter.isVerbose()) {
+                log.info("Using similarity search with threshold {}", threshold);
+            }
             groups = findSimilar(reposToProcess.value());
         } else {
-            if (cliParameter.isVerbose()) log.info("Using exact hash search");
+            if (cliParameter.isVerbose()) {
+                log.info("Using exact hash search");
+            }
             groups = findExact(reposToProcess.value());
         }
-        String reportedName = names.size() > 1 || all ? "batch" : (names.isEmpty() ? "all" : names.get(0));
+        int groupCount = 0;
+        if (groups != null) {
+            groups = new ArrayList<>(groups);
+            sortGroups(groups);
+            groupCount = groups.size();
+        }
+        String reportedName;
+        if (names.size() > 1 || all) {
+            reportedName = "batch";
+        } else {
+            if (names.isEmpty()) {
+                reportedName = "all";
+            } else {
+                reportedName = names.get(0);
+            }
+        }
         if (cliParameter.isVerbose()) {
-            log.info("Groups found: {}. Reporting as: {}", groups.size(), reportedName);
+            log.info("Groups found: {}. Reporting as: {}", groupCount, reportedName);
         }
         dupeObserver.onGroupsReady(reportedName, groups);
-        dupeObserver.onFinished(reportedName, groups.size());
+        dupeObserver.onFinished(reportedName, groupCount);
         return groups;
     }
 
@@ -163,22 +182,8 @@ public class DuplicateRepoProcess {
             return -81;
         }
 
-        // Sort files within each group by image area (desc), then file size (desc), then lastModified (asc older first), then path
-        for (List<RepoRepoFile> group : groups) {
-            group.sort((a, b) -> {
-                Dimension isA = a.file.imageSize();
-                Dimension isB = b.file.imageSize();
-                long areaA = isA != null ? isA.area() : -1;
-                long areaB = isB != null ? isB.area() : -1;
-                int byArea = Long.compare(areaB, areaA); // desc
-                if (byArea != 0) return byArea;
-                int bySize = b.file.size().compareTo(a.file.size());
-                if (bySize != 0) return bySize;
-                int byTime = Long.compare(a.file.lastModified(), b.file.lastModified());
-                if (byTime != 0) return byTime;
-                return a.file.relativePath().compareToIgnoreCase(b.file.relativePath());
-            });
-        }
+        groups = new ArrayList<>(groups);
+        sortGroups(groups);
 
         if (printMode == DupePrintMode.PRINT) {
             printGroups(groups);
@@ -205,6 +210,70 @@ public class DuplicateRepoProcess {
         }
 
         return 0;
+    }
+
+    private void sortFilesWithinGroups(List<List<RepoRepoFile>> groups) {
+        for (List<RepoRepoFile> group : groups) {
+            group.sort((a, b) -> {
+                Dimension isA = a.file.imageSize();
+                Dimension isB = b.file.imageSize();
+                long areaA;
+                if (isA != null) {
+                    areaA = isA.area();
+                } else {
+                    areaA = -1;
+                }
+                long areaB;
+                if (isB != null) {
+                    areaB = isB.area();
+                } else {
+                    areaB = -1;
+                }
+                int byArea = Long.compare(areaB, areaA); // desc
+                if (byArea != 0) {
+                    return byArea;
+                }
+                int bySize = b.file.size().compareTo(a.file.size());
+                if (bySize != 0) {
+                    return bySize;
+                }
+                int byTime = Long.compare(a.file.lastModified(), b.file.lastModified());
+                if (byTime != 0) {
+                    return byTime;
+                }
+                return a.file.relativePath().compareToIgnoreCase(b.file.relativePath());
+            });
+        }
+    }
+
+    private long calculateWastedBytes(List<RepoRepoFile> group) {
+        if (group.isEmpty()) {
+            return 0L;
+        }
+        Long sizeObj = group.get(0).file.size();
+        long size;
+        if (sizeObj != null) {
+            size = sizeObj;
+        } else {
+            size = 0L;
+        }
+        return (group.size() - 1) * size;
+    }
+
+    private void sortGroupsByWastedBytes(List<List<RepoRepoFile>> groups) {
+        groups.sort((a, b) -> {
+            long wastedA = calculateWastedBytes(a);
+            long wastedB = calculateWastedBytes(b);
+            return Long.compare(wastedB, wastedA); // descending
+        });
+    }
+
+    private void sortGroups(List<List<RepoRepoFile>> groups) {
+        if (groups == null) {
+            return;
+        }
+        sortFilesWithinGroups(groups);
+        sortGroupsByWastedBytes(groups);
     }
 
     private void deleteOthers(List<List<RepoRepoFile>> groups) {

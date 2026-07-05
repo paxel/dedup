@@ -497,4 +497,73 @@ class DuplicateRepoProcessTest {
         assertThat(htmlContent).contains("<strong>duration:</strong> 00:01:23");
         assertThat(htmlContent).contains("<strong>artist:</strong> Test Artist");
     }
+
+    @Test
+    void shouldSortGroupsAndFilesCorrectly() throws IOException {
+        // Arrange
+        Path repoPath = tempDir.resolve("repo_sort_test");
+        Files.createDirectories(repoPath);
+        Repo repo = new Repo("repo_sort_test", repoPath.toString(), 1);
+        when(dedupConfig.getRepo("repo_sort_test")).thenReturn(Result.ok(repo));
+
+        // Group 1 (wasted bytes = (2 - 1) * 100 = 100): 2 duplicates of size 100
+        RepoFile g1f1 = RepoFile.builder().hash("hash1").relativePath("g1_f1.jpg").size(100L).lastModified(1000L).build();
+        RepoFile g1f2 = RepoFile.builder().hash("hash1").relativePath("g1_f2.jpg").size(100L).lastModified(2000L).build();
+
+        // Group 2 (wasted bytes = (4 - 1) * 500 = 1500): 4 duplicates of size 500
+        // We will construct files to test each ordering criteria:
+        // A: area 100, modified 2000, path "z_img.jpg" -> best area, should be first
+        // B: area -1, modified 1000, path "a_img.jpg" -> older mod time than C/D, should be second
+        // C: area -1, modified 2000, path "b_img.jpg" -> lexicographically before D, should be third
+        // D: area -1, modified 2000, path "c_img.jpg" -> should be fourth
+        RepoFile g2fA = RepoFile.builder().hash("hash2").relativePath("z_img.jpg").size(500L).lastModified(2000L).imageSize(new paxel.dedup.domain.model.Dimension(10, 10)).build();
+        RepoFile g2fB = RepoFile.builder().hash("hash2").relativePath("a_img.jpg").size(500L).lastModified(1000L).build();
+        RepoFile g2fC = RepoFile.builder().hash("hash2").relativePath("b_img.jpg").size(500L).lastModified(2000L).build();
+        RepoFile g2fD = RepoFile.builder().hash("hash2").relativePath("c_img.jpg").size(500L).lastModified(2000L).build();
+
+        RepoManager repoManager = RepoManager.forRepo(repo, dedupConfig, new NioFileSystemAdapter());
+        repoManager.load();
+        repoManager.addRepoFile(g1f1);
+        repoManager.addRepoFile(g1f2);
+        repoManager.addRepoFile(g2fA);
+        repoManager.addRepoFile(g2fB);
+        repoManager.addRepoFile(g2fC);
+        repoManager.addRepoFile(g2fD);
+        repoManager.close();
+
+        DuplicateRepoProcess process = new DuplicateRepoProcess(
+                cliParameter,
+                List.of("repo_sort_test"),
+                false,
+                dedupConfig,
+                null, // exact duplicates
+                DuplicateRepoProcess.DupePrintMode.QUIET,
+                null,
+                null,
+                null,
+                false,
+                false,
+                new NioFileSystemAdapter()
+        );
+
+        // Act
+        List<List<DuplicateRepoProcess.RepoRepoFile>> groups = process.findGroups();
+
+        // Assert
+        assertThat(groups).hasSize(2);
+
+        // First group should be Group 2 (wasted bytes = 1500), second should be Group 1 (wasted bytes = 100)
+        List<DuplicateRepoProcess.RepoRepoFile> firstGroup = groups.get(0);
+        List<DuplicateRepoProcess.RepoRepoFile> secondGroup = groups.get(1);
+
+        assertThat(firstGroup).hasSize(4);
+        assertThat(firstGroup.get(0).file().relativePath()).isEqualTo("z_img.jpg"); // First by area
+        assertThat(firstGroup.get(1).file().relativePath()).isEqualTo("a_img.jpg"); // Second by older modified time
+        assertThat(firstGroup.get(2).file().relativePath()).isEqualTo("b_img.jpg"); // Third by lexicographical path
+        assertThat(firstGroup.get(3).file().relativePath()).isEqualTo("c_img.jpg"); // Fourth by lexicographical path
+
+        assertThat(secondGroup).hasSize(2);
+        assertThat(secondGroup.get(0).file().relativePath()).isEqualTo("g1_f1.jpg"); // Older modified time first
+        assertThat(secondGroup.get(1).file().relativePath()).isEqualTo("g1_f2.jpg");
+    }
 }
